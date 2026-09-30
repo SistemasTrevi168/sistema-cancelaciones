@@ -4,9 +4,8 @@ from sqlalchemy.orm import sessionmaker
 import os
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Reemplaza 'admin123' por la contraseña que le pusiste a PostgreSQL
-# En database.py
-SQLALCHEMY_DATABASE_URL = "postgresql+psycopg://postgres:SHrReilQVtrhgSjEXNDDkbvwOmWZMESa@shinkansen.proxy.rlwy.net:20745/railway"
+# Leer la URL dinámica desde las variables de entorno de Railway
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

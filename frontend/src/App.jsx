@@ -13,7 +13,7 @@ import {
 axios.defaults.withCredentials = true;
 
 const api = axios.create({
-  baseURL: 'https://sistema-cancelaciones-production.up.railway.app/api',
+baseURL: 'https://sistema-cancelaciones-production-3c4b.up.railway.app/api',
   withCredentials: true // <--- CRUCIAL para cookies
 });
 

@@ -18,7 +18,7 @@ from database import get_db, SessionLocal, engine
 import auth
 
 # URL directa a PostgreSQL en Railway
-DATABASE_URL = "postgresql+psycopg://postgres:SHrReilQVtrhgSjEXNDDkbvwOmWZMESa@shinkansen.proxy.rlwy.net:20745/railway"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Crear las tablas en PostgreSQL automáticamente al arrancar
 models.Base.metadata.create_all(bind=engine)

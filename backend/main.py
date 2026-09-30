@@ -374,7 +374,7 @@ def corregir_numeros_compuestos(texto: str) -> str:
 def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "") -> Dict[str, str]:
     """
     Extrae y organiza los datos del inmueble en el orden estricto de 19 puntos,
-    mapeando exactamente el formato de etiquetas del certificado del IFREM.
+    corrigiendo restricciones en Número Exterior, Interior y Observaciones vacías.
     """
     texto_base = f"{str(texto_completo)} {str(texto_inmueble_raw)}"
     
@@ -382,7 +382,7 @@ def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "
         "sector", "super", "uso", "lote", "manzana", "etapa", "condominio", 
         "calle", "exterior", "interior", "colonia", "municipio", "estado", 
         "delegacion", "alcaldia", "cp", "codigo postal", "vivienda", "inmueble",
-        "seccion", "distrito", "observaciones", "tramite", "edificio", "mza", "sm", "ext", "int"
+        "seccion", "distrito", "observaciones", "tramite", "edificio", "mza", "sm", "ext", "int", "no"
     }
     
     def buscar(patrones, default="NO_ENCONTRADO"):
@@ -400,6 +400,7 @@ def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "
     return {
         "1_vivienda": buscar([r'VIVIENDA:\s*([^\n\r]+?)(?=\s+COLONIA:|$)', r'vivienda[:\s]+([^,;\n]+)', r'departamento|casa|lote']),
         "2_uso_de_suelo": buscar([r'USO\s+DE\s+SUELO:\s*([^\n\r]+?)(?=\s+CALLE:|$)', r'uso\s+(?:de\s+)?suelo[:\s]+([^,;\n]+)']),
+        # Corregido para evitar capturar "No" suelto cuando está vacío en el IFREM
         "3_no_interior": buscar([r'No\.\s+INT\.?:\s*([0-9a-zA-Z\-]+)(?=\s+SECTOR:|$)', r'(?:no\.?\s*int\.?|interior)[:\s]*([0-9a-zA-Z\-]+)']),
         "4_lote": buscar([r'LOTE:\s*([0-9a-zA-Z\-]+)(?=\s+VIVIENDA:|$)', r'\blote[:\s]*([0-9a-zA-Z\-]+)']),
         "5_manzana": buscar([r'MANZANA:\s*([0-9a-zA-Z\-]+)', r'(?:manzana|\bmza\.?)[:\s]*([0-9a-zA-Z\-]+)']),
@@ -407,7 +408,8 @@ def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "
         "7_etapa": buscar([r'ETAPA:\s*([^\n\r]*?)(?=\s+SUPER\s+MZA:|$)', r'etapa[:\s]*([0-9a-zA-Z\-]+)']),
         "8_condominio": buscar([r'(?:condominio|conjunto\s+habitacional)[:\s]+([^,;\n]+)']),
         "9_calle": buscar([r'CALLE:\s*([^\n\r]+?)(?=\s+No\.\s+EXT:|$)', r'(?:calle|avenida|blvd\.?)[:\s]+([^,;\n]+)']),
-        "10_no_exterior": buscar([r'No\.\s+EXT\.?:\s*([0-9a-zA-Z\-]+)(?=\s+No\.\s+INT:|$)', r'(?:no\.?\s*ext\.?|exterior|número)[:\s]*([0-9a-zA-Z\-]+)']),
+        # Corregido para atrapar solo valores válidos (excluyendo la etiqueta "No.")
+        "10_no_exterior": buscar([r'No\.\s+EXT\.?:\s*(?!No\.)([0-9a-zA-Z\-]+)(?=\s+No\.\s+INT:|$)', r'(?:no\.?\s*ext\.?|exterior|número)[:\s]*([0-9a-zA-Z\-]+)']),
         "11_denominacion_del_inmueble": buscar([r'DENOMINACIÓN\s+DEL\s+INMUEBLE:\s*([^\n\r]+?)(?=\s+USO\s+DE\s+SUELO:|$)', r'(?:denominaci[oó]n\s+(?:del\s+inmueble)?|edificio)[:\s]+([^,;\n]+)']),
         "12_seccion": buscar([r'SECCION:\s*([^\n\r]*?)(?=\s+ETAPA:|$)', r'secci[oó]n[:\s]*([0-9a-zA-Z\-]+)']),
         "13_colonia": buscar([r'COLONIA:\s*([^\n\r]+?)(?=\s+C\.P\.:|$)', r'(?:colonia|fraccionamiento|pueblo)[:\s]+([^,;\n]+)']),
@@ -415,7 +417,8 @@ def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "
         "15_municipio": buscar([r'MUNICIPIO:\s*([^\n\r]+?)(?=\s+ESTADO:|$)', r'(?:municipio|alcalad[ií]a|delegaci[oó]n)[:\s]+([^,;\n]+)']),
         "16_distrito": buscar([r'distrito[:\s]+([^,;\n]+)']),
         "17_estado": buscar([r'ESTADO:\s*([^\n\r]+?)(?=\s+SUPERFICIE:|$)', r'(?:estado|entidad)[:\s]+([^,;\n]+)']),
-        "18_observaciones": buscar([r'OBSERVACIONES:\s*([^\n\r]+?)(?=\s+TRÁMITE|\s+VOLANTE|$)', r'(?:observaciones|tr[aá]mite)[:\s]+([^.\n]+)']),
+        # Corregido estrictamente para evitar que tome la palabra "TRÁMITE" de la tabla inferior
+        "18_observaciones": buscar([r'OBSERVACIONES:\s*([^\n\r]+?)(?=\s+TRÁMITE|\s+VOLANTE|RUMBOS|$)', r'observaciones[:\s]+([^.\n]+)']),
         "19_codigo_postal": buscar([r'C\.P\.:\s*([0-9]*)(?=\s+MUNICIPIO:|$)', r'(?:c\.?p\.?|c[oó]digo\s+postal)[:\s]*(\d{5})'])
     }
 
@@ -534,7 +537,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
+]
 
 app.include_router(auth.router)
 

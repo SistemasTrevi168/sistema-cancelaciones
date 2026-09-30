@@ -1816,21 +1816,22 @@ const filteredHistorial = (historial || []).filter((item) => {
                 </label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <input
-                    type="text"
-                    value={val || ''}
-                    disabled={!isUnlocked}
-                    onChange={(e) => handleInputChange(key, e.target.value)}
-                    style={{
-                      flex: 1,
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: `1px solid ${theme.border}`,
-                      backgroundColor: isUnlocked ? theme.inputBg : theme.subtleBg,
-                      color: theme.textPrimary,
-                      fontSize: '13px',
-                      opacity: isUnlocked ? 1 : 0.8
-                    }}
-                  />
+                                type="text"
+                                value={val || ''}
+                                disabled={!isUnlocked}
+                                onChange={(e) => handleInputChange(key, e.target.value)}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px 12px',
+                                    borderRadius: '8px',
+                                    border: val === "NO_ENCONTRADO" ? '1px solid #dc3545' : `1px solid ${theme.border}`,
+                                    backgroundColor: val === "NO_ENCONTRADO" ? '#fff8f8' : (isUnlocked ? theme.inputBg : theme.subtleBg),
+                                    color: val === "NO_ENCONTRADO" ? '#dc3545' : theme.textPrimary,
+                                    fontSize: '13px',
+                                    fontWeight: val === "NO_ENCONTRADO" ? '600' : 'normal',
+                                    opacity: isUnlocked ? 1 : 0.8
+                                }}
+                            />
                   <button
                     type="button"
                     onClick={() => handleToggleUnlock(`single_${key}`)}

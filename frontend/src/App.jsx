@@ -1808,6 +1808,7 @@ const filteredHistorial = (historial || []).filter((item) => {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '500px', overflowY: 'auto', paddingRight: '4px' }}>
           {Object.entries(datos).map(([key, val]) => {
+            if (key === 'datos_inmueble') return null;
             const isUnlocked = unlockedFields[`single_${key}`];
             return (
               <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1816,22 +1817,22 @@ const filteredHistorial = (historial || []).filter((item) => {
                 </label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <input
-                                type="text"
-                                value={val || ''}
-                                disabled={!isUnlocked}
-                                onChange={(e) => handleInputChange(key, e.target.value)}
-                                style={{
-                                    flex: 1,
-                                    padding: '10px 12px',
-                                    borderRadius: '8px',
-                                    border: val === "NO_ENCONTRADO" ? '1px solid #dc3545' : `1px solid ${theme.border}`,
-                                    backgroundColor: val === "NO_ENCONTRADO" ? '#fff8f8' : (isUnlocked ? theme.inputBg : theme.subtleBg),
-                                    color: val === "NO_ENCONTRADO" ? '#dc3545' : theme.textPrimary,
-                                    fontSize: '13px',
-                                    fontWeight: val === "NO_ENCONTRADO" ? '600' : 'normal',
-                                    opacity: isUnlocked ? 1 : 0.8
-                                }}
-                            />
+                    type="text"
+                    value={val || ''}
+                    disabled={!isUnlocked}
+                    onChange={(e) => handleInputChange(key, e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: val === "NO_ENCONTRADO" ? '1px solid #dc3545' : `1px solid ${theme.border}`,
+                      backgroundColor: val === "NO_ENCONTRADO" ? '#fff8f8' : (isUnlocked ? theme.inputBg : theme.subtleBg),
+                      color: val === "NO_ENCONTRADO" ? '#dc3545' : theme.textPrimary,
+                      fontSize: '13px',
+                      fontWeight: val === "NO_ENCONTRADO" ? '600' : 'normal',
+                      opacity: isUnlocked ? 1 : 0.8
+                    }}
+                  />
                   <button
                     type="button"
                     onClick={() => handleToggleUnlock(`single_${key}`)}

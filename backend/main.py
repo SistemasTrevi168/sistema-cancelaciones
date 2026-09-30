@@ -314,10 +314,17 @@ def palabras_a_numero(texto: str) -> Optional[int]:
 
 
 def corregir_numeros_compuestos(texto: str) -> str:
-    """Corrige de forma automática la separación de números del 21 al 29 en textos legales."""
+    """Corrige de forma automática la separación de números compuestos (del 16 al 19 y del 21 al 29) de manera global."""
     if not texto:
         return ""
     reemplazos = {
+        # Del 16 al 19
+        r'\bdiez\s+y\s+seis\b': 'dieciséis',
+        r'\bdiez\s+y\s+siete\b': 'diecisiete',
+        r'\bdiez\s+y\s+ocho\b': 'dieciocho',
+        r'\bdiez\s+y\s+nueve\b': 'diecinueve',
+        
+        # Del 21 al 29
         r'\bveinte\s+y\s+uno\b': 'veintiuno',
         r'\bveinte\s+y\s+dos\b': 'veintidós',
         r'\bveinte\s+y\s+tres\b': 'veintitrés',
@@ -327,6 +334,12 @@ def corregir_numeros_compuestos(texto: str) -> str:
         r'\bveinte\s+y\s+siete\b': 'veintisiete',
         r'\bveinte\s+y\s+ocho\b': 'veintiocho',
         r'\bveinte\s+y\s+nueve\b': 'veintinueve',
+        
+        # Variantes en Mayúsculas
+        r'\bDIEZ\s+Y\s+SEIS\b': 'DIECISÉIS',
+        r'\bDIEZ\s+Y\s+SIETE\b': 'DIECISIETE',
+        r'\bDIEZ\s+Y\s+OCHO\b': 'DIECIOCHO',
+        r'\bDIEZ\s+Y\s+NUEVE\b': 'DIECINUEVE',
         r'\bVEINTE\s+Y\s+UNO\b': 'VEINTIUNO',
         r'\bVEINTE\s+Y\s+DOS\b': 'VEINTIDÓS',
         r'\bVEINTE\s+Y\s+TRES\b': 'VEINTITRÉS',
@@ -344,39 +357,48 @@ def corregir_numeros_compuestos(texto: str) -> str:
 
 def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "") -> Dict[str, str]:
     """
-    Extrae y organiza los datos del inmueble en el orden estricto de 19 puntos.
+    Extrae y organiza los datos del inmueble en el orden estricto de 19 puntos,
+    evitando que se capturen etiquetas por error y asignando 'NO_ENCONTRADO' si está vacío.
     """
     texto_base = f"{str(texto_completo)} {str(texto_inmueble_raw)}"
+    
+    etiquetas_prohibidas = {
+        "sector", "super", "uso", "lote", "manzana", "etapa", "condominio", 
+        "calle", "exterior", "interior", "colonia", "municipio", "estado", 
+        "delegacion", "alcaldia", "cp", "codigo postal", "vivienda", "inmueble",
+        "seccion", "distrito", "observaciones", "tramite", "edificio", "mza", "sm", "ext", "int"
+    }
     
     def buscar(patrones, default="NO_ENCONTRADO"):
         for p in patrones:
             match = re.search(p, texto_base, re.IGNORECASE)
             if match:
                 val = match.group(1).strip()
-                if val:
-                    return corregir_numeros_compuestos(val)
+                val_limpio = re.sub(r'^[:\s\-]+|[:\s\-]+$', '', val).strip()
+                if val_limpio and val_limpio.lower() not in etiquetas_prohibidas:
+                    return corregir_numeros_compuestos(val_limpio)
         return default
 
     return {
-        "1_vivienda": buscar([r'vivienda[:\s]*([^,;\n]+)', r'inmueble[:\s]*([^,;\n]+)', r'departamento|casa|lote']),
-        "2_uso_de_suelo": buscar([r'uso\s+de\s+suelo[:\s]*([^,;\n]+)', r'uso\s+suelo[:\s]*([^,;\n]+)']),
-        "3_no_interior": buscar([r'no\.?\s*int\.?[:\s]*([0-9a-zA-Z\-]+)', r'interior[:\s]*([0-9a-zA-Z\-]+)']),
+        "1_vivienda": buscar([r'(?:vivienda|inmueble)[:\s]+([^,;\n]+)', r'departamento|casa|lote']),
+        "2_uso_de_suelo": buscar([r'uso\s+(?:de\s+)?suelo[:\s]+([^,;\n]+)']),
+        "3_no_interior": buscar([r'(?:no\.?\s*int\.?|interior)[:\s]*([0-9a-zA-Z\-]+)']),
         "4_lote": buscar([r'\blote[:\s]*([0-9a-zA-Z\-]+)']),
-        "5_manzana": buscar([r'manzana[:\s]*([0-9a-zA-Z\-]+)', r'\bmza\.?[:\s]*([0-9a-zA-Z\-]+)']),
-        "6_supermanzana": buscar([r'supermanzana[:\s]*([0-9a-zA-Z\-]+)', r'\bsm\.?[:\s]*([0-9a-zA-Z\-]+)']),
+        "5_manzana": buscar([r'(?:manzana|\bmza\.?)[:\s]*([0-9a-zA-Z\-]+)']),
+        "6_supermanzana": buscar([r'(?:supermanzana|\bsm\.?)[:\s]*([0-9a-zA-Z\-]+)']),
         "7_etapa": buscar([r'etapa[:\s]*([0-9a-zA-Z\-]+)']),
-        "8_condominio": buscar([r'condominio[:\s]*([0-9a-zA-Z\-]+)', r'conjunto\s+habitacional[:\s]*([^,;\n]+)']),
-        "9_calle": buscar([r'calle[:\s]*([^,;\n]+)', r'avenida[:\s]*([^,;\n]+)', r'blvd\.?[:\s]*([^,;\n]+)']),
-        "10_no_exterior": buscar([r'no\.?\s*ext\.?[:\s]*([0-9a-zA-Z\-]+)', r'exterior[:\s]*([0-9a-zA-Z\-]+)', r'número[:\s]*([0-9a-zA-Z\-]+)']),
-        "11_denominacion_del_inmueble": buscar([r'denominaci[oó]n\s+(?:del\s+inmueble)?[:\s]*([^,;\n]+)', r'edificio[:\s]*([^,;\n]+)']),
+        "8_condominio": buscar([r'(?:condominio|conjunto\s+habitacional)[:\s]+([^,;\n]+)']),
+        "9_calle": buscar([r'(?:calle|avenida|blvd\.?)[:\s]+([^,;\n]+)']),
+        "10_no_exterior": buscar([r'(?:no\.?\s*ext\.?|exterior|número)[:\s]*([0-9a-zA-Z\-]+)']),
+        "11_denominacion_del_inmueble": buscar([r'(?:denominaci[oó]n\s+(?:del\s+inmueble)?|edificio)[:\s]+([^,;\n]+)']),
         "12_seccion": buscar([r'secci[oó]n[:\s]*([0-9a-zA-Z\-]+)']),
-        "13_colonia": buscar([r'colonia[:\s]*([^,;\n]+)', r'fraccionamiento[:\s]*([^,;\n]+)', r'pueblo[:\s]*([^,;\n]+)']),
-        "14_sector": buscar([r'sector[:\s]*([^,;\n]+)', r'edf\.?[:\s]*([0-9a-zA-Z\-]+)']),
-        "15_municipio": buscar([r'municipio[:\s]*([^,;\n]+)', r'alcalad[ií]a[:\s]*([^,;\n]+)', r'delegaci[oó]n[:\s]*([^,;\n]+)']),
-        "16_distrito": buscar([r'distrito[:\s]*([^,;\n]+)']),
-        "17_estado": buscar([r'estado[:\s]*([^,;\n]+)', r'entidad[:\s]*([^,;\n]+)']),
-        "18_observaciones": buscar([r'observaciones[:\s]*([^.\n]+)', r'tr[aá]mite[:\s]*([^.\n]+)']),
-        "19_codigo_postal": buscar([r'c\.?p\.?[:\s]*(\d{5})', r'c[oó]digo\s+postal[:\s]*(\d{5})'])
+        "13_colonia": buscar([r'(?:colonia|fraccionamiento|pueblo)[:\s]+([^,;\n]+)']),
+        "14_sector": buscar([r'(?:sector|edf\.?)[:\s]*([0-9a-zA-Z\-]+)']),
+        "15_municipio": buscar([r'(?:municipio|alcalad[ií]a|delegaci[oó]n)[:\s]+([^,;\n]+)']),
+        "16_distrito": buscar([r'distrito[:\s]+([^,;\n]+)']),
+        "17_estado": buscar([r'(?:estado|entidad)[:\s]+([^,;\n]+)']),
+        "18_observaciones": buscar([r'(?:observaciones|tr[aá]mite)[:\s]+([^.\n]+)']),
+        "19_codigo_postal": buscar([r'(?:c\.?p\.?|c[oó]digo\s+postal)[:\s]*(\d{5})'])
     }
 
 
@@ -394,7 +416,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     
     fecha = corregir_numeros_compuestos(str(datos_origen.get("fecha_liquidacion") or datos_origen.get("fecha") or ""))
     
-    # Folio Real: Extraer número (ya sea de dígitos o palabras) y formatear como "[número]" (CONVERSIÓN)
+    # Folio Real: Extraer número y formatear como "[número]" (CONVERSIÓN)
     folio_raw = str(datos_origen.get("folio_real") or datos_origen.get("antecedente") or "").strip()
     num_folio = palabras_a_numero(folio_raw)
     if num_folio is not None:
@@ -413,7 +435,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
 
     fecha_exp = corregir_numeros_compuestos(str(datos_origen.get("fecha_expedicion") or ""))
     
-    # Crédito a Salario: Mantener valor original tal cual viene en documento sin conversiones automáticas a letras
+    # Crédito a Salario: Mantener valor original sin conversiones automáticas a letras
     credito_salario = datos_origen.get("credito_a_salario") or datos_origen.get("crédito_a_salario") or ""
     credito_salario_str = str(credito_salario).strip()
     if not credito_salario_str or credito_salario_str.lower() in ["none", "null", "n/a", "", "no_encontrado"]:

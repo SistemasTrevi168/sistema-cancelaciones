@@ -115,6 +115,41 @@ def resolver_ruta_plantilla(nombre_o_clave: Optional[str]) -> str:
     return os.path.join(TEMPLATES_DIR, "plantilla_manera2.docx")
 
 
+# --- NUEVAS FUNCIONES DE CONVERSIÓN (ROMANOS Y DÍGITOS > 2) ---
+
+def convertir_romanos_a_texto(texto: str) -> str:
+    """Convierte números romanos (ej. IV) a su representación descriptiva (ej. cuatro romano)."""
+    if not texto:
+        return ""
+    romanos = {
+        'I': 'uno romano', 'II': 'dos romano', 'III': 'tres romano',
+        'IV': 'cuatro romano', 'V': 'cinco romano', 'VI': 'seis romano',
+        'VII': 'siete romano', 'VIII': 'ocho romano', 'IX': 'nueve romano',
+        'X': 'diez romano', 'XI': 'once romano', 'XII': 'doce romano',
+        'XIII': 'trece romano', 'XIV': 'catorce romano', 'XV': 'quince romano'
+    }
+    def replace_romano(match):
+        r = match.group(0).upper()
+        return romanos.get(r, r)
+    
+    patron_romanos = r'\b(M{0,3})(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})\b'
+    # Evitar vacíos o letras sueltas que no sean romanos válidos
+    resultado = re.sub(patron_romanos, replace_romano, str(texto))
+    return resultado
+
+
+def ajustar_digitos_segun_longitud(texto: str) -> str:
+    """Si hay números de más de dos dígitos, los extrae en formato de cantidad o letra."""
+    if not texto:
+        return ""
+    def procesar_num(match):
+        num_str = match.group(0)
+        if len(num_str) > 2:
+            return f"{num_str} (cantidad extendida)"
+        return num_str
+    return re.sub(r'\d+', procesar_num, str(texto))
+
+
 def numero_a_letras(monto: Any) -> str:
     """Convierte un valor numérico o texto a su representación formal en letras en MXN con centavos explícitos."""
     if not monto:
@@ -267,7 +302,7 @@ def numero_folio_a_letras(monto: Any) -> str:
 
 
 def palabras_a_numero(texto: str) -> Optional[int]:
-    """Convierte un texto con números en palabras (ej. 'treinta y siete mil quinientos nueve') a un entero."""
+    """Convierte un texto con números en palabras a un entero."""
     if not texto:
         return None
     texto_str = str(texto).lower().strip()
@@ -314,17 +349,14 @@ def palabras_a_numero(texto: str) -> Optional[int]:
 
 
 def corregir_numeros_compuestos(texto: str) -> str:
-    """Corrige de forma automática la separación de números compuestos (del 16 al 19 y del 21 al 29) de manera global."""
+    """Corrige de forma automática la separación de números compuestos."""
     if not texto:
         return ""
     reemplazos = {
-        # Del 16 al 19
         r'\bdiez\s+y\s+seis\b': 'dieciséis',
         r'\bdiez\s+y\s+siete\b': 'diecisiete',
         r'\bdiez\s+y\s+ocho\b': 'dieciocho',
         r'\bdiez\s+y\s+nueve\b': 'diecinueve',
-        
-        # Del 21 al 29
         r'\bveinte\s+y\s+uno\b': 'veintiuno',
         r'\bveinte\s+y\s+dos\b': 'veintidós',
         r'\bveinte\s+y\s+tres\b': 'veintitrés',
@@ -334,21 +366,6 @@ def corregir_numeros_compuestos(texto: str) -> str:
         r'\bveinte\s+y\s+siete\b': 'veintisiete',
         r'\bveinte\s+y\s+ocho\b': 'veintiocho',
         r'\bveinte\s+y\s+nueve\b': 'veintinueve',
-        
-        # Variantes en Mayúsculas
-        r'\bDIEZ\s+Y\s+SEIS\b': 'DIECISÉIS',
-        r'\bDIEZ\s+Y\s+SIETE\b': 'DIECISIETE',
-        r'\bDIEZ\s+Y\s+OCHO\b': 'DIECIOCHO',
-        r'\bDIEZ\s+Y\s+NUEVE\b': 'DIECINUEVE',
-        r'\bVEINTE\s+Y\s+UNO\b': 'VEINTIUNO',
-        r'\bVEINTE\s+Y\s+DOS\b': 'VEINTIDÓS',
-        r'\bVEINTE\s+Y\s+TRES\b': 'VEINTITRÉS',
-        r'\bVEINTE\s+Y\s+CUATRO\b': 'VEINTICUATRO',
-        r'\bVEINTE\s+Y\s+CINCO\b': 'VEINTICINCO',
-        r'\bVEINTE\s+Y\s+SEIS\b': 'VEINTISÉIS',
-        r'\bVEINTE\s+Y\s+SIETE\b': 'VEINTISIETE',
-        r'\bVEINTE\s+Y\s+OCHO\b': 'VEINTIOCHO',
-        r'\bVEINTE\s+Y\s+NUEVE\b': 'VEINTINUEVE',
     }
     for patron, reemplazo in reemplazos.items():
         texto = re.sub(patron, reemplazo, str(texto), flags=re.IGNORECASE)
@@ -356,10 +373,7 @@ def corregir_numeros_compuestos(texto: str) -> str:
 
 
 def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "") -> Dict[str, str]:
-    """
-    Extrae y organiza los datos del inmueble en el orden estricto de 19 puntos,
-    evitando que se capturen etiquetas por error y asignando 'NO_ENCONTRADO' si está vacío.
-    """
+    """Extrae y organiza los datos del inmueble en el orden estricto de 19 puntos."""
     texto_base = f"{str(texto_completo)} {str(texto_inmueble_raw)}"
     
     etiquetas_prohibidas = {
@@ -376,7 +390,10 @@ def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "
                 val = match.group(1).strip()
                 val_limpio = re.sub(r'^[:\s\-]+|[:\s\-]+$', '', val).strip()
                 if val_limpio and val_limpio.lower() not in etiquetas_prohibidas:
-                    return corregir_numeros_compuestos(val_limpio)
+                    # Aplicar conversiones a la extracción del inmueble
+                    val_romano = convertir_romanos_a_texto(val_limpio)
+                    val_ajustado = ajustar_digitos_segun_longitud(val_romano)
+                    return corregir_numeros_compuestos(val_ajustado)
         return default
 
     return {
@@ -403,10 +420,7 @@ def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "
 
 
 def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallback: str = "") -> Dict[str, Any]:
-    """
-    Filtra y devuelve los campos requeridos para la plantilla de Word,
-    aplicando conversión de folio real a número y letras, y manteniendo salario sin conversiones automáticas.
-    """
+    """Filtra y devuelve los campos requeridos aplicando conversiones de romanos y dígitos."""
     acreditado = corregir_numeros_compuestos(str(datos_origen.get("nombre_acreditado") or datos_origen.get("acreditado") or datos_origen.get("cliente") or ""))
     monto = datos_origen.get("monto_credito") or datos_origen.get("monto") or ""
     num_credito = datos_origen.get("numero_credito") or num_credito_fallback or ""
@@ -416,14 +430,17 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     
     fecha = corregir_numeros_compuestos(str(datos_origen.get("fecha_liquidacion") or datos_origen.get("fecha") or ""))
     
-    # Folio Real: Extraer número y formatear como "[número]" (CONVERSIÓN)
+    # Folio Real: Mapeo exacto, conversión de romanos y formato de números de más de dos dígitos
     folio_raw = str(datos_origen.get("folio_real") or datos_origen.get("antecedente") or "").strip()
-    num_folio = palabras_a_numero(folio_raw)
+    folio_con_romanos = convertir_romanos_a_texto(folio_raw)
+    num_folio = palabras_a_numero(folio_con_romanos)
+    
     if num_folio is not None:
         folio_letras = corregir_numeros_compuestos(numero_folio_a_letras(num_folio))
         folio = f'"{num_folio}" ({folio_letras})'
     else:
-        folio = corregir_numeros_compuestos(folio_raw) if folio_raw and folio_raw.lower() not in ["none", "null", "n/a", ""] else "NO_ENCONTRADO"
+        folio_ajustado = ajustar_digitos_segun_longitud(folio_con_romanos)
+        folio = corregir_numeros_compuestos(folio_ajustado) if folio_ajustado and folio_ajustado.lower() not in ["none", "null", "n/a", ""] else "NO_ENCONTRADO"
     
     inmueble_raw = datos_origen.get("datos_inmueble") or datos_origen.get("inmueble") or ""
     texto_raw = datos_origen.get("texto_raw") or ""
@@ -431,11 +448,12 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     
     inmueble_str = ", ".join([f"{k.split('_', 1)[1].replace('_', ' ').title()}: {v}" for k, v in puntos_inmueble.items() if v != "NO_ENCONTRADO"])
     if not inmueble_str:
-        inmueble_str = corregir_numeros_compuestos(str(inmueble_raw))
+        inmueble_procesado = convertir_romanos_a_texto(str(inmueble_raw))
+        inmueble_procesado = ajustar_digitos_segun_longitud(inmueble_procesado)
+        inmueble_str = corregir_numeros_compuestos(inmueble_procesado)
 
     fecha_exp = corregir_numeros_compuestos(str(datos_origen.get("fecha_expedicion") or ""))
     
-    # Crédito a Salario: Mantener valor original sin conversiones automáticas a letras
     credito_salario = datos_origen.get("credito_a_salario") or datos_origen.get("crédito_a_salario") or ""
     credito_salario_str = str(credito_salario).strip()
     if not credito_salario_str or credito_salario_str.lower() in ["none", "null", "n/a", "", "no_encontrado"]:
@@ -526,7 +544,6 @@ def home():
     return {"status": "OK", "mensaje": "Servidor backend conectado"}
 
 
-# --- GESTIÓN DE PLANTILLAS ---
 @app.get("/api/plantillas")
 def obtener_lista_plantillas():
     if not os.path.exists(TEMPLATES_DIR):
@@ -540,7 +557,6 @@ def obtener_lista_plantillas():
     return {"plantillas": sorted(archivos)}
 
 
-# --- HISTORIAL ADAPTADO ---
 @app.get("/api/expedientes")
 def obtener_historial(
     usuario: Optional[str] = Query(None),
@@ -587,7 +603,6 @@ def obtener_historial(
     return resultado
 
 
-# --- PROCESAMIENTO INDIVIDUAL ---
 @app.post("/api/expedientes/procesar")
 async def procesar_documento(
     files: List[UploadFile] = File(...),
@@ -849,8 +864,6 @@ def generar_word(
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
-
-# --- ENDPOINTS DE ADMINISTRACIÓN ---
 
 @app.get("/api/admin/usuarios")
 def obtener_usuarios(db: Session = Depends(get_db)):

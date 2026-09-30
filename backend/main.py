@@ -115,7 +115,7 @@ def resolver_ruta_plantilla(nombre_o_clave: Optional[str]) -> str:
     return os.path.join(TEMPLATES_DIR, "plantilla_manera2.docx")
 
 
-# --- NUEVAS FUNCIONES DE CONVERSIÓN (ROMANOS Y DÍGITOS > 2) ---
+# --- FUNCIONES DE CONVERSIÓN Y EXTRACCIÓN ---
 
 def convertir_romanos_a_texto(texto: str) -> str:
     """Convierte números romanos (ej. IV) a su representación descriptiva (ej. cuatro romano)."""
@@ -133,7 +133,6 @@ def convertir_romanos_a_texto(texto: str) -> str:
         return romanos.get(r, r)
     
     patron_romanos = r'\b(M{0,3})(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})\b'
-    # Evitar vacíos o letras sueltas que no sean romanos válidos
     resultado = re.sub(patron_romanos, replace_romano, str(texto))
     return resultado
 
@@ -373,7 +372,10 @@ def corregir_numeros_compuestos(texto: str) -> str:
 
 
 def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "") -> Dict[str, str]:
-    """Extrae y organiza los datos del inmueble en el orden estricto de 19 puntos."""
+    """
+    Extrae y organiza los datos del inmueble en el orden estricto de 19 puntos,
+    mapeando exactamente el formato de etiquetas del certificado del IFREM.
+    """
     texto_base = f"{str(texto_completo)} {str(texto_inmueble_raw)}"
     
     etiquetas_prohibidas = {
@@ -390,32 +392,31 @@ def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "
                 val = match.group(1).strip()
                 val_limpio = re.sub(r'^[:\s\-]+|[:\s\-]+$', '', val).strip()
                 if val_limpio and val_limpio.lower() not in etiquetas_prohibidas:
-                    # Aplicar conversiones a la extracción del inmueble
                     val_romano = convertir_romanos_a_texto(val_limpio)
                     val_ajustado = ajustar_digitos_segun_longitud(val_romano)
                     return corregir_numeros_compuestos(val_ajustado)
         return default
 
     return {
-        "1_vivienda": buscar([r'(?:vivienda|inmueble)[:\s]+([^,;\n]+)', r'departamento|casa|lote']),
-        "2_uso_de_suelo": buscar([r'uso\s+(?:de\s+)?suelo[:\s]+([^,;\n]+)']),
-        "3_no_interior": buscar([r'(?:no\.?\s*int\.?|interior)[:\s]*([0-9a-zA-Z\-]+)']),
-        "4_lote": buscar([r'\blote[:\s]*([0-9a-zA-Z\-]+)']),
-        "5_manzana": buscar([r'(?:manzana|\bmza\.?)[:\s]*([0-9a-zA-Z\-]+)']),
-        "6_supermanzana": buscar([r'(?:supermanzana|\bsm\.?)[:\s]*([0-9a-zA-Z\-]+)']),
-        "7_etapa": buscar([r'etapa[:\s]*([0-9a-zA-Z\-]+)']),
+        "1_vivienda": buscar([r'VIVIENDA:\s*([^\n\r]+?)(?=\s+COLONIA:|$)', r'vivienda[:\s]+([^,;\n]+)', r'departamento|casa|lote']),
+        "2_uso_de_suelo": buscar([r'USO\s+DE\s+SUELO:\s*([^\n\r]+?)(?=\s+CALLE:|$)', r'uso\s+(?:de\s+)?suelo[:\s]+([^,;\n]+)']),
+        "3_no_interior": buscar([r'No\.\s+INT\.?:\s*([0-9a-zA-Z\-]+)(?=\s+SECTOR:|$)', r'(?:no\.?\s*int\.?|interior)[:\s]*([0-9a-zA-Z\-]+)']),
+        "4_lote": buscar([r'LOTE:\s*([0-9a-zA-Z\-]+)(?=\s+VIVIENDA:|$)', r'\blote[:\s]*([0-9a-zA-Z\-]+)']),
+        "5_manzana": buscar([r'MANZANA:\s*([0-9a-zA-Z\-]+)', r'(?:manzana|\bmza\.?)[:\s]*([0-9a-zA-Z\-]+)']),
+        "6_supermanzana": buscar([r'SUPER\s+MZA:\s*([^\n\r]*?)(?=\s+MANZANA:|$)', r'(?:supermanzana|\bsm\.?)[:\s]*([0-9a-zA-Z\-]+)']),
+        "7_etapa": buscar([r'ETAPA:\s*([^\n\r]*?)(?=\s+SUPER\s+MZA:|$)', r'etapa[:\s]*([0-9a-zA-Z\-]+)']),
         "8_condominio": buscar([r'(?:condominio|conjunto\s+habitacional)[:\s]+([^,;\n]+)']),
-        "9_calle": buscar([r'(?:calle|avenida|blvd\.?)[:\s]+([^,;\n]+)']),
-        "10_no_exterior": buscar([r'(?:no\.?\s*ext\.?|exterior|número)[:\s]*([0-9a-zA-Z\-]+)']),
-        "11_denominacion_del_inmueble": buscar([r'(?:denominaci[oó]n\s+(?:del\s+inmueble)?|edificio)[:\s]+([^,;\n]+)']),
-        "12_seccion": buscar([r'secci[oó]n[:\s]*([0-9a-zA-Z\-]+)']),
-        "13_colonia": buscar([r'(?:colonia|fraccionamiento|pueblo)[:\s]+([^,;\n]+)']),
-        "14_sector": buscar([r'(?:sector|edf\.?)[:\s]*([0-9a-zA-Z\-]+)']),
-        "15_municipio": buscar([r'(?:municipio|alcalad[ií]a|delegaci[oó]n)[:\s]+([^,;\n]+)']),
+        "9_calle": buscar([r'CALLE:\s*([^\n\r]+?)(?=\s+No\.\s+EXT:|$)', r'(?:calle|avenida|blvd\.?)[:\s]+([^,;\n]+)']),
+        "10_no_exterior": buscar([r'No\.\s+EXT\.?:\s*([0-9a-zA-Z\-]+)(?=\s+No\.\s+INT:|$)', r'(?:no\.?\s*ext\.?|exterior|número)[:\s]*([0-9a-zA-Z\-]+)']),
+        "11_denominacion_del_inmueble": buscar([r'DENOMINACIÓN\s+DEL\s+INMUEBLE:\s*([^\n\r]+?)(?=\s+USO\s+DE\s+SUELO:|$)', r'(?:denominaci[oó]n\s+(?:del\s+inmueble)?|edificio)[:\s]+([^,;\n]+)']),
+        "12_seccion": buscar([r'SECCION:\s*([^\n\r]*?)(?=\s+ETAPA:|$)', r'secci[oó]n[:\s]*([0-9a-zA-Z\-]+)']),
+        "13_colonia": buscar([r'COLONIA:\s*([^\n\r]+?)(?=\s+C\.P\.:|$)', r'(?:colonia|fraccionamiento|pueblo)[:\s]+([^,;\n]+)']),
+        "14_sector": buscar([r'SECTOR:\s*([A-Za-z0-9\s]+?)(?=\s+SECCION:|$)', r'(?:sector|edf\.?)[:\s]*([0-9a-zA-Z\-]+)']),
+        "15_municipio": buscar([r'MUNICIPIO:\s*([^\n\r]+?)(?=\s+ESTADO:|$)', r'(?:municipio|alcalad[ií]a|delegaci[oó]n)[:\s]+([^,;\n]+)']),
         "16_distrito": buscar([r'distrito[:\s]+([^,;\n]+)']),
-        "17_estado": buscar([r'(?:estado|entidad)[:\s]+([^,;\n]+)']),
-        "18_observaciones": buscar([r'(?:observaciones|tr[aá]mite)[:\s]+([^.\n]+)']),
-        "19_codigo_postal": buscar([r'(?:c\.?p\.?|c[oó]digo\s+postal)[:\s]*(\d{5})'])
+        "17_estado": buscar([r'ESTADO:\s*([^\n\r]+?)(?=\s+SUPERFICIE:|$)', r'(?:estado|entidad)[:\s]+([^,;\n]+)']),
+        "18_observaciones": buscar([r'OBSERVACIONES:\s*([^\n\r]+?)(?=\s+TRÁMITE|\s+VOLANTE|$)', r'(?:observaciones|tr[aá]mite)[:\s]+([^.\n]+)']),
+        "19_codigo_postal": buscar([r'C\.P\.:\s*([0-9]*)(?=\s+MUNICIPIO:|$)', r'(?:c\.?p\.?|c[oó]digo\s+postal)[:\s]*(\d{5})'])
     }
 
 
@@ -430,7 +431,6 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     
     fecha = corregir_numeros_compuestos(str(datos_origen.get("fecha_liquidacion") or datos_origen.get("fecha") or ""))
     
-    # Folio Real: Mapeo exacto, conversión de romanos y formato de números de más de dos dígitos
     folio_raw = str(datos_origen.get("folio_real") or datos_origen.get("antecedente") or "").strip()
     folio_con_romanos = convertir_romanos_a_texto(folio_raw)
     num_folio = palabras_a_numero(folio_con_romanos)

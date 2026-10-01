@@ -136,8 +136,6 @@ def convertir_romanos_a_texto(texto: str) -> str:
     resultado = re.sub(patron_romanos, replace_romano, str(texto))
     return resultado
 
-    
-
 
 def ajustar_digitos_segun_longitud(texto: str) -> str:
     """Si hay números de más de dos dígitos, los extrae en formato de cantidad o letra."""
@@ -424,71 +422,6 @@ def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "
         "19_codigo_postal": buscar([r'C\.P\.:\s*([0-9]*)(?=\s+MUNICIPIO:|$)', r'(?:c\.?p\.?|c[oó]digo\s+postal)[:\s]*(\d{5})'])
     }
 
-def construir_prosa_inmueble(puntos: Dict[str, str]) -> str:
-        """Construye una redacción legal en prosa fluida para el documento Word a partir de los puntos extraídos."""
-        vivienda = puntos.get("1_vivienda", "NO_ENCONTRADO")
-        lote = puntos.get("4_lote", "NO_ENCONTRADO")
-        manzana = puntos.get("5_manzana", "NO_ENCONTRADO")
-        denominacion = puntos.get("11_denominacion_del_inmueble", "NO_ENCONTRADO")
-        sector = puntos.get("14_sector", "NO_ENCONTRADO")
-        colonia = puntos.get("13_colonia", "NO_ENCONTRADO")
-        municipio = puntos.get("15_municipio", "NO_ENCONTRADO")
-        estado = puntos.get("17_estado", "NO_ENCONTRADO")
-        
-        elementos = []
-        
-        if vivienda and vivienda != "NO_ENCONTRADO":
-            v_upper = vivienda.upper()
-            if "DEPARTAMENTO" in v_upper or "CASA" in v_upper or "VIVIENDA" in v_upper:
-                if not v_upper.startswith("EL ") and not v_upper.startswith("LA "):
-                    elementos.append(f"EL INMUEBLE {vivienda}")
-                else:
-                    elementos.append(vivienda)
-            else:
-                elementos.append(f"EL DEPARTAMENTO HABITACIONAL MARCADO CON EL NÚMERO {vivienda}")
-                
-        if lote and lote != "NO_ENCONTRADO":
-            elementos.append(f"CONSTRUIDO SOBRE EL LOTE {lote}")
-            
-        if manzana and manzana != "NO_ENCONTRADO":
-            elementos.append(f"DE LA MANZANA {manzana}")
-            
-        if denominacion and denominacion != "NO_ENCONTRADO":
-            d_upper = denominacion.upper()
-            if "RÉGIMEN" in d_upper or "REGIMEN" in d_upper:
-                elementos.append(f"DEL {denominacion}")
-            else:
-                elementos.append(f"DEL RÉGIMEN DE PROPIEDAD EN CONDOMINIO {denominacion}")
-                
-        if sector and sector != "NO_ENCONTRADO":
-            s_upper = sector.upper()
-            if "EDIFICIO" in s_upper or "EDF" in s_upper:
-                elementos.append(f"SECTOR {sector}")
-            else:
-                elementos.append(f"SECTOR EDIFICIO {sector}")
-                
-        if colonia and colonia != "NO_ENCONTRADO":
-            elementos.append(f"UBICADO EN {colonia}")
-            
-        if municipio and municipio != "NO_ENCONTRADO":
-            m_upper = municipio.upper()
-            if "MUNICIPIO" in m_upper:
-                elementos.append(f"EN EL {municipio}")
-            else:
-                elementos.append(f"EN EL MUNICIPIO DE {municipio}")
-                
-        if estado and estado != "NO_ENCONTRADO":
-            e_upper = estado.upper()
-            if "ESTADO" in e_upper:
-                elementos.append(estado)
-            else:
-                elementos.append(f"ESTADO DE {estado}")
-                
-        if not elementos:
-            return "NO_ENCONTRADO"
-            
-        return ", ".join(elementos)
-
 
 def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallback: str = "") -> Dict[str, Any]:
     """Filtra y devuelve los campos requeridos aplicando conversiones de romanos y dígitos."""
@@ -516,7 +449,11 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     texto_raw = datos_origen.get("texto_raw") or ""
     puntos_inmueble = procesar_19_puntos_inmueble(str(inmueble_raw), str(texto_raw))
     
-    inmueble_str = construir_prosa_inmueble(puntos_inmueble)
+    inmueble_str = ", ".join([f"{k.split('_', 1)[1].replace('_', ' ').title()}: {v}" for k, v in puntos_inmueble.items() if v != "NO_ENCONTRADO"])
+    if not inmueble_str:
+        inmueble_procesado = convertir_romanos_a_texto(str(inmueble_raw))
+        inmueble_procesado = ajustar_digitos_segun_longitud(inmueble_procesado)
+        inmueble_str = corregir_numeros_compuestos(inmueble_procesado)
 
     fecha_exp = corregir_numeros_compuestos(str(datos_origen.get("fecha_expedicion") or ""))
     

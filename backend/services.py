@@ -768,10 +768,7 @@ def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
         for run in parrafo.runs:
             if key in run.text:
                 run.text = run.text.replace(key, val_str)
-                # Blindaje contra herencia de estilos no deseados de la plantilla Word
                 run.font.underline = False
-                run.font.bold = False
-                run.font.italic = False
                 run.font.highlight_color = None
 
 

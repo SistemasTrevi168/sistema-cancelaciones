@@ -371,12 +371,13 @@ def corregir_numeros_compuestos(texto: str) -> str:
     return texto
 
 
-def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "") -> Dict[str, str]:
+def procesar_19_puntos_inmueble(texto_completo: str = "") -> Dict[str, str]:
     """
     Extrae y organiza los datos del inmueble en el orden estricto de 19 puntos,
     corrigiendo restricciones en Número Exterior, Interior y Observaciones vacías.
     """
-    texto_base = f"{str(texto_completo)} {str(texto_inmueble_raw)}"
+    # Usar estrictamente el texto completo del PDF, ignorando inmueble_raw para evitar bucles
+    texto_base = str(texto_completo)
     
     etiquetas_prohibidas = {
         "sector", "super", "uso", "lote", "manzana", "etapa", "condominio", 

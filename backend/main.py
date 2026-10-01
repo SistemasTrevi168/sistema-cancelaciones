@@ -448,13 +448,18 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     
     inmueble_raw = datos_origen.get("datos_inmueble") or datos_origen.get("inmueble") or ""
     texto_raw = datos_origen.get("texto_raw") or ""
-    puntos_inmueble = procesar_19_puntos_inmueble(str(inmueble_raw), str(texto_raw))
     
-    inmueble_str = ", ".join([f"{k.split('_', 1)[1].replace('_', ' ').title()}: {v}" for k, v in puntos_inmueble.items() if v != "NO_ENCONTRADO"])
-    if not inmueble_str:
-        inmueble_procesado = convertir_romanos_a_texto(str(inmueble_raw))
-        inmueble_procesado = ajustar_digitos_segun_longitud(inmueble_procesado)
-        inmueble_str = corregir_numeros_compuestos(inmueble_procesado)
+    # 🛡️ BLINDAJE ANTIRRECURRENCIA: Si el inmueble ya fue procesado y tiene etiquetas, NO volver a parsearlo
+    if inmueble_raw and ("Vivienda:" in str(inmueble_raw) or "Uso De Suelo:" in str(inmueble_raw)):
+        inmueble_str = str(inmueble_raw)
+        puntos_inmueble = {}
+    else:
+        puntos_inmueble = procesar_19_puntos_inmueble(str(inmueble_raw), str(texto_raw))
+        inmueble_str = ", ".join([f"{k.split('_', 1)[1].replace('_', ' ').title()}: {v}" for k, v in puntos_inmueble.items() if v != "NO_ENCONTRADO"])
+        if not inmueble_str:
+            inmueble_procesado = convertir_romanos_a_texto(str(inmueble_raw))
+            inmueble_procesado = ajustar_digitos_segun_longitud(inmueble_procesado)
+            inmueble_str = corregir_numeros_compuestos(inmueble_procesado)
 
     fecha_exp = corregir_numeros_compuestos(str(datos_origen.get("fecha_expedicion") or ""))
     
@@ -492,7 +497,6 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     }
     resultado.update(puntos_inmueble)
     return resultado
-
 
 @app.on_event("startup")
 def crear_usuario_admin_defecto():

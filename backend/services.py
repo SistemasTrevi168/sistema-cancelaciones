@@ -324,14 +324,15 @@ def armar_ubicacion_inmueble(texto_completo):
                     return val_limpio
         return ""
 
+    # Delimitamos estrictamente para que no crucen saltos de línea ni consuman etiquetas vecinas
     vivienda = extraer_val([r'(?:Vivienda)[:\s#]*([A-Z0-9\-]+)', r'departamento\s*([0-9A-Z\-]+)'])
     lote = extraer_val([r'(?:Lote)[:\s#]*([A-Z0-9\-]+)'])
     manzana = extraer_val([r'(?:Manzana|Mz\.)[:\s#]*([A-Z0-9\-]+)'])
-    condominio = extraer_val([r'(?:Condominio)[:\s#]*([A-Z0-9\-\s]+?)(?=\s*(?:CALLE|NO\.|COL|SECTOR|$))'])
+    condominio = extraer_val([r'(?:Condominio)[:\s#]*([A-Z0-9\- ]+?)(?=\s*(?:CALLE|NO\.|COL|SECTOR|LOTE|MANZANA|$))'])
     sector = extraer_val([r'(?:Sector|Edf\.?)[:\s#]*([A-Z0-9\-]+)'])
-    colonia = extraer_val([r'(?:Colonia|Col\.|Fraccionamiento|Pueblo)[:\s#]*([A-ZÁÉÍÓÚÑ0-9\s]+?)(?=\s*(?:SECTOR|MUNICIPIO|C\.P\.|$))'])
-    municipio = extraer_val([r'(?:Municipio|Alcaldía)[:\s#]*([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*(?:DISTRITO|ESTADO|C\.P\.|$))'])
-    estado = extraer_val([r'(?:Estado|Entidad\s+Federativa)[:\s#]*([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*(?:OBSERVACIONES|SUPERFICIE|C\.P\.|$))'])
+    colonia = extraer_val([r'(?:Colonia|Col\.|Fraccionamiento|Pueblo)[:\s#]*([A-ZÁÉÍÓÚÑ0-9\- ]+?)(?=\s*(?:SECTOR|MUNICIPIO|C\.P\.|CALLE|LOTE|$))'])
+    municipio = extraer_val([r'(?:Municipio|Alcaldía)[:\s#]*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:DISTRITO|ESTADO|C\.P\.|COLONIA|$))'])
+    estado = extraer_val([r'(?:Estado|Entidad\s+Federativa)[:\s#]*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:OBSERVACIONES|SUPERFICIE|C\.P\.|MUNICIPIO|$))'])
 
     elementos = []
     if vivienda:

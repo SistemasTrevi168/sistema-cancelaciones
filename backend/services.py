@@ -309,46 +309,62 @@ def extraer_oficina_registral(texto):
         return match.group(1).strip()
     return "NO_ENCONTRADO"
 
+
 def armar_ubicacion_inmueble(texto_completo):
     match_seccion = re.search(r'DATOS DE IDENTIFICACIÓN[:\s]*(.*?)(?=DATOS DE REGISTRO|INFORMACIÓN COMPLEMENTARIA|VOLANTE|ENTRADA|$)', texto_completo, re.IGNORECASE | re.DOTALL)
     texto_busqueda = match_seccion.group(1) if match_seccion else texto_completo
 
-    patrones_ordenados = [
-        ("vivienda", r'(?:Vivienda)[:\s#]*([A-Z0-9\-]+)'),
-        ("uso_suelo", r'(?:Uso\s+de?\s+suelo)[:\s#]*([A-ZÁÉÍÓÚ\s]+?)(?=\s*(?:CALLE|LOTE|NO\.|MZ|COL|$))'),
-        ("no_interior", r'(?:No\.\s*Interior|Num\.\s*Int\.|Int\.)[:\s#]*([A-Z0-9\-]+)'),
-        ("lote", r'(?:Lote)[:\s#]*([A-Z0-9\-]+)'),
-        ("manzana", r'(?:Manzana|Mz\.)[:\s#]*([A-Z0-9\-]+)'),
-        ("supermanzana", r'(?:Supermanzana|Smz\.)[:\s#]*([A-Z0-9\-]+)'),
-        ("etapa", r'(?:Etapa)[:\s#]*([A-Z0-9\-]+)(?!\s*FICIE)'),
-        ("condominio", r'(?:Condominio)[:\s#]*([A-Z0-9\-\s]+?)(?=\s*(?:CALLE|NO\.|COL|SECTOR|$))'),
-        ("calle", r'(?:Calle|Andador|Avenida|Av\.)[:\s#]*([A-ZÁÉÍÓÚÑ0-9\s]+?)(?=\s*(?:NO\.|NUM\.|LOTE|MZ|COL|C\.P\.|\d|$))'),
-        ("no_exterior", r'(?:No\.\s*Exterior|Num\.\s*Ext\.|Ext\.)[:\s#]*([A-Z0-9\-]+)'),
-        ("denominacion", r'(?:Denominación\s+del\s+Inmueble|Conjunto|Fraccionamiento)[:\s#]*([A-ZÁÉÍÓÚÑ0-9\s]+?)(?=\s*(?:COLONIA|SECTOR|MUNICIPIO|$))'),
-        ("seccion", r'(?:Sección)[:\s#]*([A-Z0-9\-]+)'),
-        ("colonia", r'(?:Colonia|Col\.)[:\s#]*([A-ZÁÉÍÓÚÑ0-9\s]+?)(?=\s*(?:SECTOR|MUNICIPIO|C\.P\.|$))'),
-        ("sector", r'(?:Sector)[:\s#]*([A-Z0-9\-]+)'),
-        ("municipio", r'(?:Municipio|Alcaldía)[:\s#]*([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*(?:DISTRITO|ESTADO|C\.P\.|$))'),
-        ("distrito", r'(?:Distrito)[:\s#]*([A-ZÁÉÍÓÚÑ\s]+)'),
-        ("estado", r'(?:Estado|Entidad\s+Federativa)[:\s#]*([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*(?:OBSERVACIONES|SUPERFICIE|C\.P\.|$))'),
-        ("observaciones", r'(?:Observaciones)[:\s#]*([A-ZÁÉÍÓÚÑ0-9\s]+?)(?=\s*(?:C\.P\.|SUPERFICIE|VOLANTE|$))'),
-        ("codigo_postal", r'(?:C\.P\.|Código\s+Postal)[:\s#]*(\d{5})')
-    ]
+    def extraer_val(patrones):
+        for pat in patrones:
+            m = re.search(pat, texto_busqueda, re.IGNORECASE)
+            if m:
+                val = m.group(1).strip()
+                val_limpio = re.sub(r'^[:\s\-]+|[:\s\-]+$', '', val).strip()
+                if val_limpio and val_limpio.lower() not in ['ninguna', 'ninguno', 'no_encontrado', 'no consta', 'null', 'super', 'trámite']:
+                    return val_limpio
+        return ""
 
-    componentes_encontrados = []
-    for clave, patron in patrones_ordenados:
-        coincidencia = re.search(patron, texto_busqueda, re.IGNORECASE)
-        if coincidencia:
-            valor = coincidencia.group(1).strip()
-            valor_limpio = re.sub(r'^(CALLE|LOTE|MANZANA|COLONIA|ESTADO)\b', '', valor, flags=re.IGNORECASE).strip()
-            if valor_limpio and valor_limpio.lower() not in ['ninguna', 'ninguno', 'no_encontrado', 'no consta', 'null', 'super']:
-                etiqueta = clave.replace('_', ' ').title()
-                componentes_encontrados.append(f"{etiqueta}: {valor_limpio}")
+    vivienda = extraer_val([r'(?:Vivienda)[:\s#]*([A-Z0-9\-]+)', r'departamento\s*([0-9A-Z\-]+)'])
+    lote = extraer_val([r'(?:Lote)[:\s#]*([A-Z0-9\-]+)'])
+    manzana = extraer_val([r'(?:Manzana|Mz\.)[:\s#]*([A-Z0-9\-]+)'])
+    condominio = extraer_val([r'(?:Condominio)[:\s#]*([A-Z0-9\-\s]+?)(?=\s*(?:CALLE|NO\.|COL|SECTOR|$))'])
+    sector = extraer_val([r'(?:Sector|Edf\.?)[:\s#]*([A-Z0-9\-]+)'])
+    colonia = extraer_val([r'(?:Colonia|Col\.|Fraccionamiento|Pueblo)[:\s#]*([A-ZÁÉÍÓÚÑ0-9\s]+?)(?=\s*(?:SECTOR|MUNICIPIO|C\.P\.|$))'])
+    municipio = extraer_val([r'(?:Municipio|Alcaldía)[:\s#]*([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*(?:DISTRITO|ESTADO|C\.P\.|$))'])
+    estado = extraer_val([r'(?:Estado|Entidad\s+Federativa)[:\s#]*([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*(?:OBSERVACIONES|SUPERFICIE|C\.P\.|$))'])
 
-    if componentes_encontrados:
-        texto_armado = ", ".join(componentes_encontrados)
-        return convertir_inmueble_a_letras(texto_armado)
-    return "NO_ENCONTRADO"
+    elementos = []
+    if vivienda:
+        v_upper = vivienda.upper()
+        if "DEPARTAMENTO" in v_upper or "CASA" in v_upper or "VIVIENDA" in v_upper:
+            elementos.append(vivienda if v_upper.startswith(("EL ", "LA ")) else f"EL INMUEBLE {vivienda}")
+        else:
+            elementos.append(f"EL DEPARTAMENTO HABITACIONAL MARCADO CON EL NÚMERO {vivienda}")
+    if lote:
+        elementos.append(f"CONSTRUIDO SOBRE EL LOTE {lote}")
+    if manzana:
+        elementos.append(f"DE LA MANZANA {manzana}")
+    if condominio:
+        d_upper = condominio.upper()
+        if "RÉGIMEN" in d_upper or "REGIMEN" in d_upper:
+            elementos.append(f"DEL {condominio}")
+        else:
+            elementos.append(f"DEL RÉGIMEN DE PROPIEDAD EN CONDOMINIO {condominio}")
+    if sector:
+        s_upper = sector.upper()
+        elementos.append(sector if "EDIFICIO" in s_upper or "EDF" in s_upper else f"SECTOR EDIFICIO {sector}")
+    if colonia:
+        elementos.append(f"UBICADO EN {colonia}")
+    if municipio:
+        m_upper = municipio.upper()
+        elementos.append(municipio if "MUNICIPIO" in m_upper else f"EN EL MUNICIPIO DE {municipio}")
+    if estado:
+        e_upper = estado.upper()
+        elementos.append(estado if "ESTADO" in e_upper else f"ESTADO DE {estado}")
+
+    if not elementos:
+        return "NO_ENCONTRADO"
+    return ", ".join(elementos)
 
 def determinar_genero_y_estado_civil(texto_completo, nombre_acreditado=""):
     texto_upper = texto_completo.upper()

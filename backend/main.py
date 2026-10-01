@@ -1179,3 +1179,68 @@ async def previsualizar_excel(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+        def construir_prosa_inmueble(puntos: Dict[str, str]) -> str:
+    """Construye una redacción legal en prosa fluida para el documento Word a partir de los puntos extraídos."""
+    vivienda = puntos.get("1_vivienda", "NO_ENCONTRADO")
+    lote = puntos.get("4_lote", "NO_ENCONTRADO")
+    manzana = puntos.get("5_manzana", "NO_ENCONTRADO")
+    denominacion = puntos.get("11_denominacion_del_inmueble", "NO_ENCONTRADO")
+    sector = puntos.get("14_sector", "NO_ENCONTRADO")
+    colonia = puntos.get("13_colonia", "NO_ENCONTRADO")
+    municipio = puntos.get("15_municipio", "NO_ENCONTRADO")
+    estado = puntos.get("17_estado", "NO_ENCONTRADO")
+    
+    elementos = []
+    
+    if vivienda and vivienda != "NO_ENCONTRADO":
+        v_upper = vivienda.upper()
+        if "DEPARTAMENTO" in v_upper or "CASA" in v_upper or "VIVIENDA" in v_upper:
+            if not v_upper.startswith("EL ") and not v_upper.startswith("LA "):
+                elementos.append(f"EL INMUEBLE {vivienda}")
+            else:
+                elementos.append(vivienda)
+        else:
+            elementos.append(f"EL DEPARTAMENTO HABITACIONAL MARCADO CON EL NÚMERO {vivienda}")
+            
+    if lote and lote != "NO_ENCONTRADO":
+        elementos.append(f"CONSTRUIDO SOBRE EL LOTE {lote}")
+        
+    if manzana and manzana != "NO_ENCONTRADO":
+        elementos.append(f"DE LA MANZANA {manzana}")
+        
+    if denominacion and denominacion != "NO_ENCONTRADO":
+        d_upper = denominacion.upper()
+        if "RÉGIMEN" in d_upper or "REGIMEN" in d_upper:
+            elementos.append(f"DEL {denominacion}")
+        else:
+            elementos.append(f"DEL RÉGIMEN DE PROPIEDAD EN CONDOMINIO {denominacion}")
+            
+    if sector and sector != "NO_ENCONTRADO":
+        s_upper = sector.upper()
+        if "EDIFICIO" in s_upper or "EDF" in s_upper:
+            elementos.append(f"SECTOR {sector}")
+        else:
+            elementos.append(f"SECTOR EDIFICIO {sector}")
+            
+    if colonia and colonia != "NO_ENCONTRADO":
+        elementos.append(f"UBICADO EN {colonia}")
+        
+    if municipio and municipio != "NO_ENCONTRADO":
+        m_upper = municipio.upper()
+        if "MUNICIPIO" in m_upper:
+            elementos.append(f"EN EL {municipio}")
+        else:
+            elementos.append(f"EN EL MUNICIPIO DE {municipio}")
+            
+    if estado and estado != "NO_ENCONTRADO":
+        e_upper = estado.upper()
+        if "ESTADO" in e_upper:
+            elementos.append(estado)
+        else:
+            elementos.append(f"ESTADO DE {estado}")
+            
+    if not elementos:
+        return "NO_ENCONTRADO"
+        
+    return ", ".join(elementos)

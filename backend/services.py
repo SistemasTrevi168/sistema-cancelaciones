@@ -1,6 +1,9 @@
 import os
 import fitz  # PyMuPDF
 import re
+import copy
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx import Document
 
 # Constante para calcular Veces Salario Mínimo Mensual en DF/CDMX
@@ -770,24 +773,62 @@ def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
     if not any(key in texto_parrafo for key in mapa_reemplazos.keys()):
         return
 
-    # 1. Si alguna variable está dividida en varios fragmentos (runs) en el Word, unirlas en el primer fragmento
+    # 1. Unir fragmentos si la etiqueta está partida en varios bloques en Word
     for key in mapa_reemplazos.keys():
         if key in parrafo.text and not any(key in r.text for r in parrafo.runs):
             for idx, run in enumerate(parrafo.runs):
                 if "{" in run.text:
                     j = idx + 1
                     while j < len(parrafo.runs) and "}" not in parrafo.runs[j-1].text:
-                        run.text += parrafo.runs[j].text
+                        parrafo.runs[idx].text += parrafo.runs[j].text
                         parrafo.runs[j].text = ""
                         j += 1
 
-    # 2. Reemplazar el texto directamente en su run correspondiente, 
-    # respetando 100% el formato original (títulos intactos y estilo de cada variable según la plantilla)
+    # 2. Reemplazo quirúrgico con XML para mantener el orden exacto y aislar los estilos
     for key, value in mapa_reemplazos.items():
         val_str = str(value)
-        for run in parrafo.runs:
+        
+        runs = list(parrafo.runs)
+        for run in runs:
             if key in run.text:
-                run.text = run.text.replace(key, val_str)
+                text = run.text
+                prefix, suffix = text.split(key, 1)
+                
+                # Obtener las propiedades originales del bloque de texto (run)
+                rPr = run._r.find(qn('w:rPr'))
+                
+                # El bloque actual se queda únicamente con el texto anterior
+                run.text = prefix
+                
+                # Crear el nuevo bloque para el valor insertado (hereda negrita/subrayado de la plantilla)
+                val_r = OxmlElement('w:r')
+                if rPr is not None:
+                    val_r.append(copy.deepcopy(rPr))
+                val_t = OxmlElement('w:t')
+                val_t.text = val_str
+                val_r.append(val_t)
+                
+                # Insertar justo después del bloque actual (mantiene el orden del párrafo)
+                run._r.addnext(val_r)
+                
+                # Crear el bloque para el texto posterior, limpiando subrayado y negrita para que no se extiendan de más
+                suffix_r = OxmlElement('w:r')
+                if rPr is not None:
+                    clean_rPr = copy.deepcopy(rPr)
+                    for u_elem in clean_rPr.findall(qn('w:u')):
+                        clean_rPr.remove(u_elem)
+                    for b_elem in clean_rPr.findall(qn('w:b')):
+                        clean_rPr.remove(b_elem)
+                    suffix_r.append(clean_rPr)
+                
+                suffix_t = OxmlElement('w:t')
+                suffix_t.text = suffix
+                suffix_r.append(suffix_t)
+                
+                # Insertar el sufijo después del valor
+                val_r.addnext(suffix_r)
+                
+                break
 
 
 def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):

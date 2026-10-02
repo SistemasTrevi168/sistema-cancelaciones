@@ -14,3 +14,4 @@ tzdata==2026.3
 pandas
 openpyxl
 docxtpl
+jinja2

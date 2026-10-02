@@ -2,6 +2,7 @@ import os
 import fitz  # PyMuPDF
 import re
 import copy
+from docxtpl import DocxTemplate
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx import Document
@@ -768,66 +769,112 @@ def combinar_datos_pareja(datos_lista):
     return datos_finales
 
 
+import copy
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
 def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
     texto_parrafo = parrafo.text
     if not any(key in texto_parrafo for key in mapa_reemplazos.keys()):
         return
 
-    # 1. Unir fragmentos si la etiqueta está partida en varios bloques en Word
-    for key in mapa_reemplazos.keys():
-        if key in parrafo.text and not any(key in r.text for r in parrafo.runs):
-            for idx, run in enumerate(parrafo.runs):
-                if "{" in run.text:
-                    j = idx + 1
-                    while j < len(parrafo.runs) and "}" not in parrafo.runs[j-1].text:
-                        parrafo.runs[idx].text += parrafo.runs[j].text
-                        parrafo.runs[j].text = ""
-                        j += 1
-
-    # 2. Reemplazo quirúrgico con XML para mantener el orden exacto y aislar los estilos
     for key, value in mapa_reemplazos.items():
         val_str = str(value)
         
-        runs = list(parrafo.runs)
-        for run in runs:
-            if key in run.text:
-                text = run.text
-                prefix, suffix = text.split(key, 1)
+        # Intentar reemplazar mientras la clave exista en el texto del párrafo
+        while key in parrafo.text:
+            # 1. Buscar si la clave está completa en un solo run
+            replaced = False
+            for run in parrafo.runs:
+                if key in run.text:
+                    text = run.text
+                    prefix, suffix = text.split(key, 1)
+                    rPr = run._r.find(qn('w:rPr'))
+                    
+                    run.text = prefix
+                    
+                    # Crear bloque XML para el valor insertado
+                    val_r = OxmlElement('w:r')
+                    if rPr is not None:
+                        val_r.append(copy.deepcopy(rPr))
+                    val_t = OxmlElement('w:t')
+                    val_t.text = val_str
+                    val_r.append(val_t)
+                    run._r.addnext(val_r)
+                    
+                    # Crear bloque XML para el texto posterior (cortando el subrayado si es acreditado/inmueble para que no se siga de corrido)
+                    suffix_r = OxmlElement('w:r')
+                    if rPr is not None:
+                        clean_rPr = copy.deepcopy(rPr)
+                        if "acreditado" in key or "inmueble" in key:
+                            for u_elem in clean_rPr.findall(qn('w:u')):
+                                clean_rPr.remove(u_elem)
+                        suffix_r.append(clean_rPr)
+                    
+                    suffix_t = OxmlElement('w:t')
+                    suffix_t.text = suffix
+                    suffix_r.append(suffix_t)
+                    val_r.addnext(suffix_r)
+                    
+                    replaced = True
+                    break
+            
+            if replaced:
+                continue
+            
+            # 2. Si la clave está fragmentada entre varios runs en Word
+            start_idx = -1
+            for idx, run in enumerate(parrafo.runs):
+                if "{" in run.text:
+                    start_idx = idx
+                    break
+            
+            if start_idx == -1:
+                break
+            
+            # Acumular texto desde start_idx hasta encontrar '}'
+            accumulated_text = ""
+            end_idx = start_idx
+            for idx in range(start_idx, len(parrafo.runs)):
+                accumulated_text += parrafo.runs[idx].text
+                end_idx = idx
+                if "}" in parrafo.runs[idx].text:
+                    break
+            
+            if key in accumulated_text:
+                parts = accumulated_text.split(key, 1)
+                prefix_full = parts[0]
+                suffix_full = parts[1] if len(parts) > 1 else ""
                 
-                # Obtener las propiedades originales del bloque de texto (run)
-                rPr = run._r.find(qn('w:rPr'))
+                rPr = parrafo.runs[start_idx]._r.find(qn('w:rPr'))
                 
-                # El bloque actual se queda únicamente con el texto anterior
-                run.text = prefix
+                # Limpiar los runs involucrados
+                parrafo.runs[start_idx].text = prefix_full
+                for idx in range(start_idx + 1, end_idx + 1):
+                    parrafo.runs[idx].text = ""
                 
-                # Crear el nuevo bloque para el valor insertado (hereda negrita/subrayado de la plantilla)
+                # Insertar valor con addnext de forma segura
                 val_r = OxmlElement('w:r')
                 if rPr is not None:
                     val_r.append(copy.deepcopy(rPr))
                 val_t = OxmlElement('w:t')
                 val_t.text = val_str
                 val_r.append(val_t)
+                parrafo.runs[start_idx]._r.addnext(val_r)
                 
-                # Insertar justo después del bloque actual (mantiene el orden del párrafo)
-                run._r.addnext(val_r)
-                
-                # Crear el bloque para el texto posterior, limpiando subrayado y negrita para que no se extiendan de más
                 suffix_r = OxmlElement('w:r')
                 if rPr is not None:
                     clean_rPr = copy.deepcopy(rPr)
-                    for u_elem in clean_rPr.findall(qn('w:u')):
-                        clean_rPr.remove(u_elem)
-                    for b_elem in clean_rPr.findall(qn('w:b')):
-                        clean_rPr.remove(b_elem)
+                    if "acreditado" in key or "inmueble" in key:
+                        for u_elem in clean_rPr.findall(qn('w:u')):
+                            clean_rPr.remove(u_elem)
                     suffix_r.append(clean_rPr)
                 
                 suffix_t = OxmlElement('w:t')
-                suffix_t.text = suffix
+                suffix_t.text = suffix_full
                 suffix_r.append(suffix_t)
-                
-                # Insertar el sufijo después del valor
                 val_r.addnext(suffix_r)
-                
+            else:
                 break
 
 

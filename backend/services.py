@@ -785,9 +785,9 @@ def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
         for run in parrafo.runs:
             if key in run.text:
                 run.text = run.text.replace(key, val_str)
-                # Forzar formato normal: eliminar subrayados, negritas, cursivas y resaltados heredados
+                # Limpiamos subrayados, cursivas y resaltados heredados,
+                # pero dejamos intactas las negritas de la plantilla.
                 run.font.underline = False
-                run.font.bold = False
                 run.font.italic = False
                 run.font.highlight_color = None
 

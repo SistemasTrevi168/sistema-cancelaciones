@@ -2,7 +2,6 @@ import os
 import fitz  # PyMuPDF
 import re
 import copy
-from docxtpl import DocxTemplate
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx import Document
@@ -768,10 +767,6 @@ def combinar_datos_pareja(datos_lista):
                 
     return datos_finales
 
-
-import copy
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
 
 def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
     texto_parrafo = parrafo.text

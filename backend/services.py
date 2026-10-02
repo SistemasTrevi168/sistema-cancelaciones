@@ -766,14 +766,71 @@ def combinar_datos_pareja(datos_lista):
 
 
 def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
-    # Recorremos cada variable y su valor
     for key, value in mapa_reemplazos.items():
         val_str = str(value)
-        # Reemplazamos el texto directamente en cada fragmento (run) donde se encuentre,
-        # sin fusionar párrafos ni alterar los estilos de los títulos o textos circundantes.
+        
+        # 1. Buscar y reemplazar en runs individuales (protege títulos en negrita que comparten bloque)
+        replaced = False
         for run in parrafo.runs:
             if key in run.text:
-                run.text = run.text.replace(key, val_str)
+                parts = run.text.split(key, 1)
+                before_text = parts[0]
+                after_text = parts[1]
+                
+                is_bold = run.font.bold
+                is_italic = run.font.italic
+                is_underline = run.font.underline
+                
+                # El run original conserva exclusivamente el texto anterior (el título en negrita)
+                run.text = before_text
+                
+                # Creamos un nuevo run para el valor con fuente normal (evita que herede la negrita del título)
+                new_run = parrafo.add_run(val_str)
+                new_run.font.bold = False  
+                new_run.font.italic = is_italic
+                new_run.font.underline = False
+                
+                # Creamos el run con el texto posterior manteniendo el estilo original
+                after_run = parrafo.add_run(after_text)
+                after_run.font.bold = is_bold
+                after_run.font.italic = is_italic
+                after_run.font.underline = is_underline
+                
+                replaced = True
+                break
+                
+        if replaced:
+            continue
+
+        # 2. Manejo por si la clave está dividida entre varios bloques en el Word
+        if key in parrafo.text:
+            for idx, run in enumerate(parrafo.runs):
+                if "{" in run.text:
+                    j = idx + 1
+                    while j < len(parrafo.runs) and "}" not in parrafo.runs[j-1].text:
+                        parrafo.runs[idx].text += parrafo.runs[j].text
+                        parrafo.runs[j].text = ""
+                        j += 1
+                    
+                    if key in parrafo.runs[idx].text:
+                        r = parrafo.runs[idx]
+                        parts = r.text.split(key, 1)
+                        before_text = parts[0]
+                        after_text = parts[1]
+                        
+                        is_bold = r.font.bold
+                        is_italic = r.font.italic
+                        
+                        r.text = before_text
+                        new_run = parrafo.add_run(val_str)
+                        new_run.font.bold = False  # Forzar normal para los datos rellenados
+                        new_run.font.italic = is_italic
+                        new_run.font.underline = False
+                        
+                        after_run = parrafo.add_run(after_text)
+                        after_run.font.bold = is_bold
+                        after_run.font.italic = is_italic
+                        break
 
 
 def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):

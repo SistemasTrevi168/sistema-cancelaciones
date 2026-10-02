@@ -785,14 +785,12 @@ def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
         for run in parrafo.runs:
             if key in run.text:
                 run.text = run.text.replace(key, val_str)
-                # Limpiar estilos heredados no deseados
+                # Forzar formato normal: quitar negrita heredada de los corchetes de la plantilla, 
+                # así como subrayados, cursivas y resaltados.
+                run.font.bold = False
                 run.font.underline = False
                 run.font.italic = False
                 run.font.highlight_color = None
-                
-                # Forzar texto normal (sin negrita) específicamente para los datos del inmueble y acreditado
-                if any(k in key for k in ["datos_inmueble", "inmueble", "nombre_acreditado", "acreditado"]):
-                    run.font.bold = False
 
 
 def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):

@@ -770,6 +770,7 @@ def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
     if not any(key in texto_parrafo for key in mapa_reemplazos.keys()):
         return
 
+    # 1. Unir runs si la clave está fragmentada entre varios fragmentos de texto
     for key in mapa_reemplazos.keys():
         if key in parrafo.text and not any(key in r.text for r in parrafo.runs):
             for idx, run in enumerate(parrafo.runs):
@@ -780,17 +781,14 @@ def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
                         parrafo.runs[j].text = ""
                         j += 1
 
+    # 2. Reemplazar el texto conservando estrictamente el formato que definiste en la plantilla de Word
     for key, value in mapa_reemplazos.items():
         val_str = str(value)
         for run in parrafo.runs:
             if key in run.text:
                 run.text = run.text.replace(key, val_str)
-                # Forzar formato normal: quitar negrita heredada de los corchetes de la plantilla, 
-                # así como subrayados, cursivas y resaltados.
-                run.font.bold = False
-                run.font.underline = False
-                run.font.italic = False
-                run.font.highlight_color = None
+                # No tocamos run.font para que cada variable herede y respete 
+                # exactamente el formato (negrita, subrayado, cursiva, etc.) que tiene en el Word.
 
 
 def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):

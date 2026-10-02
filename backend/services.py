@@ -776,11 +776,10 @@ def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
     for key, value in mapa_reemplazos.items():
         val_str = str(value)
         
-        # Intentar reemplazar mientras la clave exista en el texto del párrafo
+        # Bucle para asegurar que reemplace todas las ocurrencias (incluso si se repiten en el mismo párrafo)
         while key in parrafo.text:
-            # 1. Buscar si la clave está completa en un solo run
             replaced = False
-            for run in parrafo.runs:
+            for run in list(parrafo.runs):
                 if key in run.text:
                     text = run.text
                     prefix, suffix = text.split(key, 1)
@@ -788,7 +787,6 @@ def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
                     
                     run.text = prefix
                     
-                    # Crear bloque XML para el valor insertado
                     val_r = OxmlElement('w:r')
                     if rPr is not None:
                         val_r.append(copy.deepcopy(rPr))
@@ -797,7 +795,6 @@ def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
                     val_r.append(val_t)
                     run._r.addnext(val_r)
                     
-                    # Crear bloque XML para el texto posterior (cortando el subrayado si es acreditado/inmueble para que no se siga de corrido)
                     suffix_r = OxmlElement('w:r')
                     if rPr is not None:
                         clean_rPr = copy.deepcopy(rPr)
@@ -814,64 +811,57 @@ def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
                     replaced = True
                     break
             
-            if replaced:
-                continue
-            
-            # 2. Si la clave está fragmentada entre varios runs en Word
-            start_idx = -1
-            for idx, run in enumerate(parrafo.runs):
-                if "{" in run.text:
-                    start_idx = idx
+            if not replaced:
+                start_idx = -1
+                for idx, run in enumerate(parrafo.runs):
+                    if "{" in run.text:
+                        start_idx = idx
+                        break
+                
+                if start_idx == -1:
                     break
-            
-            if start_idx == -1:
-                break
-            
-            # Acumular texto desde start_idx hasta encontrar '}'
-            accumulated_text = ""
-            end_idx = start_idx
-            for idx in range(start_idx, len(parrafo.runs)):
-                accumulated_text += parrafo.runs[idx].text
-                end_idx = idx
-                if "}" in parrafo.runs[idx].text:
+                
+                accumulated_text = ""
+                end_idx = start_idx
+                for idx in range(start_idx, len(parrafo.runs)):
+                    accumulated_text += parrafo.runs[idx].text
+                    end_idx = idx
+                    if "}" in parrafo.runs[idx].text:
+                        break
+                
+                if key in accumulated_text:
+                    parts = accumulated_text.split(key, 1)
+                    prefix_full = parts[0]
+                    suffix_full = parts[1] if len(parts) > 1 else ""
+                    
+                    rPr = parrafo.runs[start_idx]._r.find(qn('w:rPr'))
+                    
+                    parrafo.runs[start_idx].text = prefix_full
+                    for idx in range(start_idx + 1, end_idx + 1):
+                        parrafo.runs[idx].text = ""
+                    
+                    val_r = OxmlElement('w:r')
+                    if rPr is not None:
+                        val_r.append(copy.deepcopy(rPr))
+                    val_t = OxmlElement('w:t')
+                    val_t.text = val_str
+                    val_r.append(val_t)
+                    parrafo.runs[start_idx]._r.addnext(val_r)
+                    
+                    suffix_r = OxmlElement('w:r')
+                    if rPr is not None:
+                        clean_rPr = copy.deepcopy(rPr)
+                        if "acreditado" in key or "inmueble" in key:
+                            for u_elem in clean_rPr.findall(qn('w:u')):
+                                clean_rPr.remove(u_elem)
+                        suffix_r.append(clean_rPr)
+                    
+                    suffix_t = OxmlElement('w:t')
+                    suffix_t.text = suffix_full
+                    suffix_r.append(suffix_t)
+                    val_r.addnext(suffix_r)
+                else:
                     break
-            
-            if key in accumulated_text:
-                parts = accumulated_text.split(key, 1)
-                prefix_full = parts[0]
-                suffix_full = parts[1] if len(parts) > 1 else ""
-                
-                rPr = parrafo.runs[start_idx]._r.find(qn('w:rPr'))
-                
-                # Limpiar los runs involucrados
-                parrafo.runs[start_idx].text = prefix_full
-                for idx in range(start_idx + 1, end_idx + 1):
-                    parrafo.runs[idx].text = ""
-                
-                # Insertar valor con addnext de forma segura
-                val_r = OxmlElement('w:r')
-                if rPr is not None:
-                    val_r.append(copy.deepcopy(rPr))
-                val_t = OxmlElement('w:t')
-                val_t.text = val_str
-                val_r.append(val_t)
-                parrafo.runs[start_idx]._r.addnext(val_r)
-                
-                suffix_r = OxmlElement('w:r')
-                if rPr is not None:
-                    clean_rPr = copy.deepcopy(rPr)
-                    if "acreditado" in key or "inmueble" in key:
-                        for u_elem in clean_rPr.findall(qn('w:u')):
-                            clean_rPr.remove(u_elem)
-                    suffix_r.append(clean_rPr)
-                
-                suffix_t = OxmlElement('w:t')
-                suffix_t.text = suffix_full
-                suffix_r.append(suffix_t)
-                val_r.addnext(suffix_r)
-            else:
-                break
-
 
 def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
     if not os.path.exists(ruta_plantilla):

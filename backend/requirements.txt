@@ -13,3 +13,4 @@ psycopg-binary==3.3.5
 tzdata==2026.3
 pandas
 openpyxl
+docxtpl

@@ -1205,16 +1205,6 @@ const parsearFechaExpediente = (item) => {
   };
 };
 
-const [toasts, setToasts] = useState([]);
-
-const mostrarToast = (mensaje, tipo = 'success') => {
-  const id = Date.now();
-  setToasts(prev => [...prev, { id, mensaje, tipo }]);
-  setTimeout(() => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, 4000);
-};
-
 // LÓGICA DE FILTRADO CORREGIDA
 const filteredHistorial = (historial || []).filter((item) => {
   const parsed = parsearFechaExpediente(item);
@@ -2020,18 +2010,10 @@ const filteredHistorial = (historial || []).filter((item) => {
         padding: 16px !important;
         box-sizing: border-box !important;
       }
-      .docx-container-scroll::-webkit-scrollbar {
-        width: 6px;
-      }
-      .docx-container-scroll::-webkit-scrollbar-thumb {
-        background-color: rgba(156, 163, 175, 0.5);
-        border-radius: 8px;
-      }
     `}</style>
 
     {/* CONTENEDOR DE TARJETAS DE ESTADO (TOASTS) EN LA ESQUINA INFERIOR DERECHA */}
     <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 99999, display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
-      {/* Si usas un estado global de toasts, puedes mapearlo aquí o usar esta instancia local */}
       {window._batchToasts && window._batchToasts.map(toast => (
         <div key={toast.id} style={{
           pointerEvents: 'auto',
@@ -2113,7 +2095,9 @@ const filteredHistorial = (historial || []).filter((item) => {
       )}
 
       <button
-        onClick={handleUploadBatch}
+        onClick={() => {
+          handleUploadBatch();
+        }}
         disabled={batchFiles.length === 0 || batchLoading}
         style={{
           width: '100%',
@@ -2136,21 +2120,22 @@ const filteredHistorial = (historial || []).filter((item) => {
       </button>
     </div>
 
-    {/* RESULTADOS DEL LOTE */}
+    {/* RESULTADOS DEL LOTE - DISEÑO GRID SEGURO CON MINMAX */}
     {batchResults.length > 0 && (
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: batchPreviewIndex !== null ? '1fr 440px' : '1fr', 
+        gridTemplateColumns: batchPreviewIndex !== null ? 'minmax(0, 1fr) 440px' : '1fr', 
         gap: '24px',
         alignItems: 'start',
+        width: '100%',
+        boxSizing: 'border-box',
         transition: 'all 0.3s ease'
       }}>
         
         {/* COLUMNA IZQUIERDA: LISTA Y ACORDEONES */}
-        <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}` }}>
+        <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}`, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
             
-            {/* CHECKBOX MAESTRO, TÍTULO Y SELECTOR GLOBAL */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <input 
                 type="checkbox"
@@ -2183,40 +2168,11 @@ const filteredHistorial = (historial || []).filter((item) => {
                   }}
                 >
                   <option value="" disabled>Aplicar a seleccionados ({selectedBatchIndices.length})...</option>
-                  
                   <optgroup label="CDMX - APERTURA DE CRÉDITO">
                     <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
                     <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
                     <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
                     <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-                  </optgroup>
-
-                  <optgroup label="CONTRATO DE MUTUO">
-                    <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-                    <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-                    <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-                    <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-                  </optgroup>
-
-                  <optgroup label="MODELOS COACREDITADOS">
-                    <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
-                    <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
-                    <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
-                    <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
-                  </optgroup>
-
-                  <optgroup label="3.EDOMEX - APERTURA DE CRÉDITO">
-                    <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-                    <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-                    <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-                    <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-                  </optgroup>
-
-                  <optgroup label="CONTRATO DE MUTUO">
-                    <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-                    <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
-                    <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-                    <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
                   </optgroup>
                 </select>
               )}
@@ -2240,7 +2196,7 @@ const filteredHistorial = (historial || []).filter((item) => {
                       <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{res.expediente_id}</span>
                     </div>
                     <p style={{ margin: '6px 0 0 28px', fontSize: '12px', color: '#7f1d1d' }}>
-                      Detalle: {res.error} (El resto del lote se ha procesado con éxito).
+                      Detalle: {res.error}
                     </p>
                   </div>
                 );
@@ -2255,11 +2211,9 @@ const filteredHistorial = (historial || []).filter((item) => {
                 <div key={idx} style={{ border: `1px solid ${isPreviewingThis ? theme.accent : theme.border}`, borderRadius: '10px', overflow: 'hidden', transition: 'border-color 0.2s ease' }}>
                   <div 
                     onClick={() => toggleAccordion(idx)}
-                    style={{ padding: '14px 18px', backgroundColor: theme.subtleBg, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                    style={{ padding: '14px 18px', backgroundColor: theme.subtleBg, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', flexWrap: 'wrap', gap: '8px' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      
-                      {/* CHECKBOX INDIVIDUAL */}
                       <input 
                         type="checkbox"
                         checked={isSelected}
@@ -2270,7 +2224,6 @@ const filteredHistorial = (historial || []).filter((item) => {
                         onClick={(e) => e.stopPropagation()}
                         style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: theme.accent }}
                       />
-
                       <CheckCircle size={18} color="#10b981" />
                       <span style={{ fontWeight: '600', fontSize: '14px', color: theme.textPrimary }}>
                         {acreditadoNombre}
@@ -2283,8 +2236,6 @@ const filteredHistorial = (historial || []).filter((item) => {
                     </div>
                     
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      
-                      {/* === MENÚ DESPLEGABLE DE PLANTILLAS === */}
                       <select
                         value={res.plantilla_seleccionada || ""}
                         onChange={(e) => handleBatchPlantillaChange(idx, e.target.value)}
@@ -2298,51 +2249,14 @@ const filteredHistorial = (historial || []).filter((item) => {
                           fontSize: '12px',
                           outline: 'none',
                           cursor: 'pointer',
-                          maxWidth: '220px',
-                          textOverflow: 'ellipsis'
+                          maxWidth: '180px'
                         }}
-                        title="Seleccionar plantilla para este expediente"
                       >
                         <option value="" disabled>Seleccionar plantilla...</option>
-                        
-                        <optgroup label="CDMX - APERTURA DE CRÉDITO">
-                          <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-                          <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-                          <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-                          <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-                        </optgroup>
-
-                        <optgroup label="CONTRATO DE MUTUO">
-                          <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-                          <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-                          <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-                          <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-                        </optgroup>
-
-                        <optgroup label="MODELOS COACREDITADOS">
-                          <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
-                          <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
-                          <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
-                          <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
-                        </optgroup>
-
-                        <optgroup label="3.EDOMEX - APERTURA DE CRÉDITO">
-                          <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-                          <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-                          <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-                          <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-                        </optgroup>
-
-                        <optgroup label="CONTRATO DE MUTUO">
-                          <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-                          <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
-                          <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-                          <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-                        </optgroup>
+                        <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+                        <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
                       </select>
-                      {/* =========================================== */}
 
-                      {/* BOTÓN VISTA PREVIA INDIVIDUAL EN LOTE */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -2385,8 +2299,6 @@ const filteredHistorial = (historial || []).filter((item) => {
                       {Object.entries(datosExtraidos).map(([bKey, bVal]) => {
                         const fieldKey = `batch_${idx}_${bKey}`;
                         const isUnlocked = unlockedFields[fieldKey];
-
-                        {/* VALIDACIÓN DE CAMPO NO ENCONTRADO O VACÍO */}
                         const isMissing = !bVal || String(bVal).toUpperCase() === 'NO_ENCONTRADO' || String(bVal).trim() === '';
 
                         return (
@@ -2453,10 +2365,10 @@ const filteredHistorial = (historial || []).filter((item) => {
             overflow: 'hidden',
             position: 'sticky',
             top: '24px',
-            width: '100%'
+            width: '440px',
+            flexShrink: 0,
+            boxSizing: 'border-box'
           }}>
-
-            {/* Encabezado del visor */}
             <div style={{ 
               padding: '16px 20px', 
               borderBottom: `1px solid ${theme.border}`, 
@@ -2465,12 +2377,11 @@ const filteredHistorial = (historial || []).filter((item) => {
               alignItems: 'center',
               backgroundColor: theme.subtleBg
             }}>
-              <h2 style={{ fontSize: '15px', fontWeight: '700', margin: 0, color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2 style={{ fontSize: '15px', fontWeight: '700', margin: 0, color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 <Eye size={18} color={theme.accent} /> 
                 Previa ({batchResults[batchPreviewIndex]?.datos_extraidos?.acreditado || 'Expediente'})
               </h2>
 
-              {/* Botón de cierre píldora */}
               <button
                 onClick={() => {
                   if (batchPreviewRef.current) {
@@ -2490,24 +2401,20 @@ const filteredHistorial = (historial || []).filter((item) => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
-                  boxShadow: '0 2px 4px rgba(239, 68, 68, 0.2)',
-                  transition: 'all 0.2s ease'
+                  flexShrink: 0
                 }}
-                title="Cerrar vista previa"
               >
                 <span>Cerrar</span>
                 <span style={{ fontSize: '13px', fontWeight: 'bold', marginLeft: '2px' }}>✕</span>
               </button>
             </div>
 
-            {/* Contenedor de la vista previa en tiempo real */}
             <div style={{ flex: 1, padding: '12px', overflow: 'hidden', backgroundColor: theme.dropzoneBg }}>
               <div 
                 ref={batchPreviewRef} 
                 className="docx-container-scroll"
               />
             </div>
-
           </div>
         )}
 
@@ -2515,6 +2422,7 @@ const filteredHistorial = (historial || []).filter((item) => {
     )}
   </div>
 )}
+
 
               {/* VISTA DE CAPTURA MANUAL CON TODOS LOS CAMPOS, SELECTOR 2026 Y VISTA PREVIA */}
 {activeTab === 'manual' && (

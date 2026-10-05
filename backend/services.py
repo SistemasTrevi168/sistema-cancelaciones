@@ -344,8 +344,13 @@ def extraer_oficina_registral(texto):
     return "NO_ENCONTRADO"
 
 def armar_ubicacion_inmueble(texto_completo):
-    match_seccion = re.search(r'DATOS DE IDENTIFICACIÓN[:\s]*(.*?)(?=DATOS DE REGISTRO|INFORMACIÓN COMPLEMENTARIA|VOLANTE|ENTRADA|$)', texto_completo, re.IGNORECASE | re.DOTALL)
+    match_seccion = re.search(r'DATOS\s+DE\s+IDENTIFICACIÓN[:\s]*(.*?)(?=DATOS\s+DE\s+REGISTRO|RUMBOS\s+MEDIDAS|INFORMACIÓN\s+COMPLEMENTARIA|VOLANTE|ENTRADA|$)', texto_completo, re.IGNORECASE | re.DOTALL)
     texto_busqueda = match_seccion.group(1) if match_seccion else texto_completo
+
+    palabras_prohibidas = [
+        'ninguna', 'ninguno', 'no_encontrado', 'no consta', 'null', 'super', 'trámite', 
+        'de', 'del', 'los', 'las', 'el', 'la', 'trabajadores', 'fondo', 'nacional', 'instituto'
+    ]
 
     def extraer_val(patrones):
         for pat in patrones:
@@ -353,47 +358,58 @@ def armar_ubicacion_inmueble(texto_completo):
             if m:
                 val = m.group(1).strip()
                 val_limpio = re.sub(r'^[:\s\-]+|[:\s\-]+$', '', val).strip()
-                if val_limpio and val_limpio.lower() not in ['ninguna', 'ninguno', 'no_encontrado', 'no consta', 'null', 'super', 'trámite']:
+                if val_limpio and val_limpio.lower() not in palabras_prohibidas and len(val_limpio) > 0:
                     return val_limpio
         return ""
 
-    vivienda = extraer_val([r'(?:Vivienda)[:\s#]*([A-Z0-9\-]+)', r'departamento\s*([0-9A-Z\-]+)'])
-    lote = extraer_val([r'(?:Lote)[:\s#]*([A-Z0-9\-]+)'])
-    manzana = extraer_val([r'(?:Manzana|Mz\.)[:\s#]*([A-Z0-9\-]+)'])
-    condominio = extraer_val([r'(?:Condominio)[:\s#]*([A-Z0-9\- ]+?)(?=\s*(?:CALLE|NO\.|COL|SECTOR|LOTE|MANZANA|$))'])
-    sector = extraer_val([r'(?:Sector|Edf\.?)[:\s#]*([A-Z0-9\-]+)'])
-    colonia = extraer_val([r'(?:Colonia|Col\.|Fraccionamiento|Pueblo)[:\s#]*([A-ZÁÉÍÓÚÑ0-9\- ]+?)(?=\s*(?:SECTOR|MUNICIPIO|C\.P\.|CALLE|LOTE|$))'])
-    municipio = extraer_val([r'(?:Municipio|Alcaldía)[:\s#]*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:DISTRITO|ESTADO|C\.P\.|COLONIA|$))'])
-    estado = extraer_val([r'(?:Estado|Entidad\s+Federativa)[:\s#]*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:OBSERVACIONES|SUPERFICIE|C\.P\.|MUNICIPIO|$))'])
+    vivienda = extraer_val([r'\bVivienda[:\s#]*([A-Z0-9\-]+)', r'\bdepartamento\s*([0-9A-Z\-]+)'])
+    lote = extraer_val([r'\bLote[:\s#]*([A-Z0-9\-]+)'])
+    manzana = extraer_val([r'\b(?:Manzana|Mz\.)[:\s#]*([A-Z0-9\-]+)'])
+    condominio = extraer_val([r'\bCondominio[:\s#]*([A-Z0-9\- ]+?)(?=\s*(?:CALLE|NO\.|COL|SECTOR|LOTE|MANZANA|$))'])
+    sector = extraer_val([r'\b(?:Sector|Edf\.?)[:\s#]*([A-Z0-9\-]+)'])
+    colonia = extraer_val([r'\b(?:Colonia|Col\.|Fraccionamiento|Pueblo)[:\s#]*([A-ZÁÉÍÓÚÑ0-9\- ]+?)(?=\s*(?:SECTOR|MUNICIPIO|C\.P\.|CALLE|LOTE|$))'])
+    municipio = extraer_val([r'\b(?:Municipio|Alcaldía)[:\s#]*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:DISTRITO|ESTADO|C\.P\.|COLONIA|$))'])
+    estado = extraer_val([r'\b(?:Estado|Entidad\s+Federativa)[:\s#]*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:OBSERVACIONES|SUPERFICIE|C\.P\.|MUNICIPIO|$))'])
 
     elementos = []
     if vivienda:
         v_upper = vivienda.upper()
-        if "DEPARTAMENTO" in v_upper or "CASA" in v_upper or "VIVIENDA" in v_upper:
-            elementos.append(vivienda if v_upper.startswith(("EL ", "LA ")) else f"EL INMUEBLE {vivienda}")
-        else:
-            elementos.append(f"EL DEPARTAMENTO HABITACIONAL MARCADO CON EL NÚMERO {vivienda}")
+        if v_upper not in ['NO CONSTA', 'NO_ENCONTRADO']:
+            if "DEPARTAMENTO" in v_upper or "CASA" in v_upper or "VIVIENDA" in v_upper:
+                elementos.append(vivienda if v_upper.startswith(("EL ", "LA ")) else f"EL INMUEBLE {vivienda}")
+            else:
+                elementos.append(f"EL DEPARTAMENTO HABITACIONAL MARCADO CON EL NÚMERO {vivienda}")
     if lote:
-        elementos.append(f"CONSTRUIDO SOBRE EL LOTE {lote}")
+        l_upper = lote.upper()
+        if l_upper not in ['NO CONSTA', 'NO_ENCONTRADO']:
+            elementos.append(f"CONSTRUIDO SOBRE EL LOTE {lote}")
     if manzana:
-        elementos.append(f"DE LA MANZANA {manzana}")
+        m_upper = manzana.upper()
+        if m_upper not in ['NO CONSTA', 'NO_ENCONTRADO']:
+            elementos.append(f"DE LA MANZANA {manzana}")
     if condominio:
-        d_upper = condominio.upper()
-        if "RÉGIMEN" in d_upper or "REGIMEN" in d_upper:
-            elementos.append(f"DEL {condominio}")
-        else:
-            elementos.append(f"DEL RÉGIMEN DE PROPIEDAD EN CONDOMINIO {condominio}")
+        c_upper = condominio.upper()
+        if c_upper not in ['NO CONSTA', 'NO_ENCONTRADO']:
+            if "RÉGIMEN" in c_upper or "REGIMEN" in c_upper:
+                elementos.append(f"DEL {condominio}")
+            else:
+                elementos.append(f"DEL RÉGIMEN DE PROPIEDAD EN CONDOMINIO {condominio}")
     if sector:
         s_upper = sector.upper()
-        elementos.append(sector if "EDIFICIO" in s_upper or "EDF" in s_upper else f"SECTOR EDIFICIO {sector}")
+        if s_upper not in ['NO CONSTA', 'NO_ENCONTRADO']:
+            elementos.append(sector if "EDIFICIO" in s_upper or "EDF" in s_upper else f"SECTOR EDIFICIO {sector}")
     if colonia:
-        elementos.append(f"UBICADO EN {colonia}")
+        co_upper = colonia.upper()
+        if co_upper not in ['NO CONSTA', 'NO_ENCONTRADO']:
+            elementos.append(f"UBICADO EN {colonia}")
     if municipio:
-        m_upper = municipio.upper()
-        elementos.append(municipio if "MUNICIPIO" in m_upper else f"EN EL MUNICIPIO DE {municipio}")
+        mu_upper = municipio.upper()
+        if mu_upper not in ['NO CONSTA', 'NO_ENCONTRADO']:
+            elementos.append(municipio if "MUNICIPIO" in mu_upper else f"EN EL MUNICIPIO DE {municipio}")
     if estado:
         e_upper = estado.upper()
-        elementos.append(estado if "ESTADO" in e_upper else f"ESTADO DE {estado}")
+        if e_upper not in ['NO CONSTA', 'NO_ENCONTRADO']:
+            elementos.append(estado if "ESTADO" in e_upper else f"ESTADO DE {estado}")
 
     if not elementos:
         return "NO_ENCONTRADO"

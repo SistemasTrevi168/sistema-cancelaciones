@@ -102,6 +102,29 @@ def numero_a_palabras_generico(numero):
 
     return f"{texto_enteros}{texto_dec}"
 
+def convertir_vsm_a_letras(val_str):
+    """Convierte el valor de veces salario mínimo a letras manejando correctamente los decimales."""
+    try:
+        val_str = str(val_str).replace(',', '').strip()
+        if '.' in val_str:
+            partes = val_str.split('.')
+            enteros = int(partes[0])
+            dec_part = partes[1]
+            texto_enteros = numero_a_palabras_generico(enteros).lower()
+            
+            mapa_digitos = {
+                '0': 'cero', '1': 'uno', '2': 'dos', '3': 'tres', '4': 'cuatro',
+                '5': 'cinco', '6': 'seis', '7': 'siete', '8': 'ocho', '9': 'nueve'
+            }
+            dec_palabras = [mapa_digitos.get(d, d) for d in dec_part if d.isdigit()]
+            if dec_palabras:
+                return f"{texto_enteros} punto {' '.join(dec_palabras)}"
+            return texto_enteros
+        else:
+            return numero_a_palabras_generico(int(val_str)).lower()
+    except Exception:
+        return str(val_str)
+
 def convertir_fecha_texto(texto_fecha):
     if not texto_fecha or str(texto_fecha).upper() in ["NO_ENCONTRADO", "NONE", ""]:
         return "NO_ENCONTRADO"
@@ -363,7 +386,10 @@ def armar_ubicacion_inmueble(texto_completo):
 
     if not elementos:
         return "NO_ENCONTRADO"
-    return ", ".join(elementos)
+    
+    resultado_ubicacion = ", ".join(elementos)
+    # Aplicar conversión de números arábigos y romanos a minúsculas
+    return convertir_inmueble_a_letras(resultado_ubicacion)
 
 def determinar_genero_y_estado_civil(texto_completo, nombre_acreditado=""):
     texto_upper = texto_completo.upper()
@@ -425,21 +451,21 @@ def extraer_notario_robusto(texto_limpio, texto_completo=""):
                 
                 sub_texto = texto_upper[match.start():min(len(texto_upper), match.end() + 100)]
                 if "ESTADO DE MÉXICO" in sub_texto or "ESTADO DE MEXICO" in sub_texto:
-                    jur_fmt = "del estado de méxico"
+                    jur_fmt = "del Estado de México"
                 elif "CIUDAD DE MÉXICO" in sub_texto or "CIUDAD DE MEXICO" in sub_texto or "DISTRITO FEDERAL" in sub_texto:
-                    jur_fmt = "de la ciudad de méxico"
+                    jur_fmt = "de la Ciudad de México"
                 else:
                     jurisdiccion_lower = jurisdiccion.lower()
                     if "méxico" in jurisdiccion_lower or "mexico" in jurisdiccion_lower:
-                        jur_fmt = "del estado de méxico"
+                        jur_fmt = "del Estado de México"
                     elif "federal" in jurisdiccion_lower or "ciudad" in jurisdiccion_lower:
-                        jur_fmt = "de la ciudad de méxico"
+                        jur_fmt = "de la Ciudad de México"
                     else:
-                        jur_fmt = f"del {jurisdiccion_lower}" if not jurisdiccion_lower.startswith("de") else f"de {jurisdiccion_lower}"
+                        jur_fmt = f"del {jurisdiccion_lower.capitalize()}" if not jurisdiccion_lower.startswith("de") else f"de {jurisdiccion_lower.capitalize()}"
 
                 candidatos_validos.append({
                     "pos": match.start(),
-                    "texto": f"{nombre_limpio} notario público número {num_notaria_letra} {jur_fmt}"
+                    "texto": f"{nombre_limpio} Notario Público número {num_notaria_letra} {jur_fmt}"
                 })
 
     if not [c for c in candidatos_validos if "JUAN CARLOS" not in c["texto"].upper()]:
@@ -469,21 +495,21 @@ def extraer_notario_robusto(texto_limpio, texto_completo=""):
                 
                 sub_texto = texto_upper[match_not.start():min(len(texto_upper), match_not.end() + 100)]
                 if "ESTADO DE MÉXICO" in sub_texto or "ESTADO DE MEXICO" in sub_texto:
-                    jur_fmt = "del estado de méxico"
+                    jur_fmt = "del Estado de México"
                 elif "CIUDAD DE MÉXICO" in sub_texto or "CIUDAD DE MEXICO" in sub_texto or "DISTRITO FEDERAL" in sub_texto:
-                    jur_fmt = "de la ciudad de méxico"
+                    jur_fmt = "de la Ciudad de México"
                 else:
                     jurisdiccion_lower = jurisdiccion.lower()
                     if "méxico" in jurisdiccion_lower or "mexico" in jurisdiccion_lower:
-                        jur_fmt = "del estado de méxico"
+                        jur_fmt = "del Estado de México"
                     elif "federal" in jurisdiccion_lower or "ciudad" in jurisdiccion_lower:
-                        jur_fmt = "de la ciudad de méxico"
+                        jur_fmt = "de la Ciudad de México"
                     else:
-                        jur_fmt = f"del {jurisdiccion_lower}" if not jurisdiccion_lower.startswith("de") else f"de {jurisdiccion_lower}"
+                        jur_fmt = f"del {jurisdiccion_lower.capitalize()}" if not jurisdiccion_lower.startswith("de") else f"de {jurisdiccion_lower.capitalize()}"
 
                 candidatos_validos.append({
                     "pos": match_not.start(),
-                    "texto": f"{nombre_notario} notario público número {num_notaria_letra} {jur_fmt}"
+                    "texto": f"{nombre_notario} Notario Público número {num_notaria_letra} {jur_fmt}"
                 })
 
     candidatos_validos = [c for c in candidatos_validos if "JUAN CARLOS" not in c["texto"].upper()]
@@ -497,12 +523,12 @@ def extraer_notario_robusto(texto_limpio, texto_completo=""):
         sup_upper = texto_completo.upper()
         menciones_extra = []
         if "PATRIMONIO INMUEBLE FEDERAL" in sup_upper:
-            menciones_extra.append("patrimonio inmueble federal")
+            menciones_extra.append("Patrimonio Inmueble Federal")
         elif "INMOBILIARIO FEDERAL" in sup_upper:
-            menciones_extra.append("inmobiliario federal")
+            menciones_extra.append("Inmobiliario Federal")
         if " NACIONAL" in sup_upper or "DEL NACIONAL" in sup_upper:
             if "nacional" not in str(texto_resultado).lower():
-                menciones_extra.append("nacional")
+                menciones_extra.append("Nacional")
         
         if menciones_extra and texto_resultado != "NO_ENCONTRADO":
             texto_resultado += f", {', '.join(menciones_extra)}"
@@ -599,7 +625,7 @@ def extraer_datos_pdf(ruta_pdf):
     match_vsm = re.search(r'([\d,]+\.?\d*)\s*(?:VECES\s+EL\s+SALARIO|V\.?S\.?M\.?|VSM)', texto_credito, re.IGNORECASE)
     if match_vsm:
         raw_vsm = match_vsm.group(1).replace(",", "").strip()
-        datos["credito_a_salario"] = numero_a_palabras_generico(raw_vsm).lower()
+        datos["credito_a_salario"] = convertir_vsm_a_letras(raw_vsm)
 
     match_monto_cred = re.search(
         r'(?:IMPORTE\s+(?:DE\s+LA\s+OBLIGACION\s+GARANTIZADA|DEL\s+CREDITO)?[:\s]*|CANTIDAD\s+DE\s*|CRÉDITO\s+HASTA\s+POR\s+LA\s+CANTIDAD\s+DE\s*)\$\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?)',
@@ -623,7 +649,7 @@ def extraer_datos_pdf(ruta_pdf):
             if datos["credito_a_salario"] == "NO_ENCONTRADO":
                 veces_salario = num / SALARIO_MINIMO_MENSUAL_DF
                 veces_salario_str = f"{veces_salario:.4f}".rstrip('0').rstrip('.')
-                datos["credito_a_salario"] = numero_a_palabras_generico(veces_salario_str).lower()
+                datos["credito_a_salario"] = convertir_vsm_a_letras(veces_salario_str)
         except Exception:
             datos["monto_credito"] = monto_raw
             datos["monto_credito_letras"] = monto_raw
@@ -770,8 +796,6 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
             print(f"ADVERTENCIA: No se encontró la plantilla en {ruta_plantilla}")
             return False
 
-    # CORRECCIÓN DEFINITIVA: Usamos DocxTemplate para respetar 100% el formato,
-    # negritas, subrayados, espacios y guiones (-------) de tus 20 plantillas.
     doc = DocxTemplate(ruta_plantilla)
     
     folio_raw = str(datos.get("folio_real", "")).strip()
@@ -789,7 +813,8 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
     if monto_raw and monto_raw != "NO_ENCONTRADO":
         if not monto_letras or monto_letras == "NO_ENCONTRADO":
             monto_letras = numero_a_letras(monto_raw)
-        monto_texto = f"{monto_raw} ({monto_letras})"
+        # Se agrega M.N. enfrente de la cantidad numérica
+        monto_texto = f"{monto_raw} M.N. ({monto_letras})"
     else:
         monto_texto = ""
 
@@ -799,7 +824,6 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
             return ""
         return val
 
-    # Contexto limpio para el motor de plantillas docxtpl (Jinja2)
     context = {
         "numero_carta": obtener_valor("numero_carta"),
         "fecha_expedicion": obtener_valor("fecha_expedicion"),
@@ -820,7 +844,6 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         "tiene_conyuge": obtener_valor("tiene_conyuge"),
     }
 
-    # Renderiza automáticamente conservando estilos, espacios y guiones intactos
     doc.render(context)
 
     directorio_salida = os.path.dirname(ruta_salida)

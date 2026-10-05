@@ -1205,6 +1205,16 @@ const parsearFechaExpediente = (item) => {
   };
 };
 
+const [toasts, setToasts] = useState([]);
+
+const mostrarToast = (mensaje, tipo = 'success') => {
+  const id = Date.now();
+  setToasts(prev => [...prev, { id, mensaje, tipo }]);
+  setTimeout(() => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, 4000);
+};
+
 // LÓGICA DE FILTRADO CORREGIDA
 const filteredHistorial = (historial || []).filter((item) => {
   const parsed = parsearFechaExpediente(item);
@@ -1975,9 +1985,75 @@ const filteredHistorial = (historial || []).filter((item) => {
   </div>
 )}
 
-              {/* TAB: CARGA MASIVA */}
+             {/* TAB: CARGA MASIVA */}
 {activeTab === 'batch' && (
   <div>
+    {/* ESTILOS GLOBALES Y TOASTS FLOTANTES (ESQUINA INFERIOR DERECHA) */}
+    <style>{`
+      @keyframes fadeInOut {
+        0% { opacity: 0; transform: translateY(15px); }
+        12% { opacity: 1; transform: translateY(0); }
+        82% { opacity: 1; transform: translateY(0); }
+        100% { opacity: 0; transform: translateY(-10px); }
+      }
+      .docx-container-scroll {
+        height: 100% !important;
+        max-height: 100% !important;
+        overflow-y: auto !important;
+      }
+      .docx-container-scroll .docx-wrapper {
+        background-color: transparent !important;
+        padding: 12px 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 16px !important;
+      }
+      .docx-container-scroll .docx-wrapper > section {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+        border-radius: 6px !important;
+        margin-bottom: 0 !important;
+        background-color: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 16px !important;
+        box-sizing: border-box !important;
+      }
+      .docx-container-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+      .docx-container-scroll::-webkit-scrollbar-thumb {
+        background-color: rgba(156, 163, 175, 0.5);
+        border-radius: 8px;
+      }
+    `}</style>
+
+    {/* CONTENEDOR DE TARJETAS DE ESTADO (TOASTS) EN LA ESQUINA INFERIOR DERECHA */}
+    <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 99999, display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
+      {/* Si usas un estado global de toasts, puedes mapearlo aquí o usar esta instancia local */}
+      {window._batchToasts && window._batchToasts.map(toast => (
+        <div key={toast.id} style={{
+          pointerEvents: 'auto',
+          backgroundColor: toast.tipo === 'error' ? '#ef4444' : '#10b981',
+          color: '#fff',
+          padding: '12px 20px',
+          borderRadius: '10px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          fontSize: '13px',
+          fontWeight: '600',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          animation: 'fadeInOut 4s forwards',
+          transition: 'all 0.3s ease'
+        }}>
+          <span>{toast.tipo === 'error' ? '⚠️' : '✅'}</span>
+          <span>{toast.mensaje}</span>
+        </div>
+      ))}
+    </div>
+
     {/* SECCIÓN SUPERIOR: FORMULARIO DE CARGA */}
     <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}`, marginBottom: '24px' }}>
       <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2064,7 +2140,7 @@ const filteredHistorial = (historial || []).filter((item) => {
     {batchResults.length > 0 && (
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: batchPreviewIndex !== null ? '1.2fr 1fr' : '1fr', 
+        gridTemplateColumns: batchPreviewIndex !== null ? '1fr 440px' : '1fr', 
         gap: '24px',
         alignItems: 'start',
         transition: 'all 0.3s ease'
@@ -2109,39 +2185,39 @@ const filteredHistorial = (historial || []).filter((item) => {
                   <option value="" disabled>Aplicar a seleccionados ({selectedBatchIndices.length})...</option>
                   
                   <optgroup label="CDMX - APERTURA DE CRÉDITO">
-            <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-            <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-            <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-            <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-          </optgroup>
+                    <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+                    <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
+                    <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
+                    <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
+                  </optgroup>
 
-          <optgroup label="CONTRATO DE MUTUO">
-            <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-            <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-            <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-            <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-          </optgroup>
+                  <optgroup label="CONTRATO DE MUTUO">
+                    <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
+                    <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
+                    <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
+                    <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
+                  </optgroup>
 
-          <optgroup label="MODELOS COACREDITADOS">
-            <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
-            <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
-            <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
-            <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
-          </optgroup>
+                  <optgroup label="MODELOS COACREDITADOS">
+                    <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
+                    <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
+                    <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
+                    <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
+                  </optgroup>
 
-          <optgroup label="3.EDOMEX - APERTURA DE CRÉDITO">
-            <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-            <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-            <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-            <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-          </optgroup>
+                  <optgroup label="3.EDOMEX - APERTURA DE CRÉDITO">
+                    <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+                    <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
+                    <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
+                    <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
+                  </optgroup>
 
-          <optgroup label="CONTRATO DE MUTUO">
-            <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-            <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
-            <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-            <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-          </optgroup>
+                  <optgroup label="CONTRATO DE MUTUO">
+                    <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
+                    <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
+                    <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
+                    <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
+                  </optgroup>
                 </select>
               )}
             </div>
@@ -2155,27 +2231,27 @@ const filteredHistorial = (historial || []).filter((item) => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-{batchResults.map((res, idx) => {
-  if (res.error) {
-    return (
-      <div key={idx} style={{ border: '1px solid #ef4444', borderRadius: '10px', padding: '14px 18px', backgroundColor: '#fef2f2', marginBottom: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#b91c1c', fontSize: '14px', fontWeight: '600' }}>
-          <span>⚠️ Error al procesar archivo:</span>
-          <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{res.expediente_id}</span>
-        </div>
-        <p style={{ margin: '6px 0 0 28px', fontSize: '12px', color: '#7f1d1d' }}>
-          Detalle: {res.error} (El resto del lote se a procesado con éxito).
-        </p>
-      </div>
-    );
-  }
-  const isOpen = !!openAccordion[idx];
-  const datosExtraidos = res.datos_extraidos || {};
-  const acreditadoNombre = datosExtraidos.acreditado || datosExtraidos.nombre_acreditado || 'Acreditado no identificado';
-  const isPreviewingThis = batchPreviewIndex === idx;
-  const isSelected = selectedBatchIndices.includes(idx);
+            {batchResults.map((res, idx) => {
+              if (res.error) {
+                return (
+                  <div key={idx} style={{ border: '1px solid #ef4444', borderRadius: '10px', padding: '14px 18px', backgroundColor: '#fef2f2', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#b91c1c', fontSize: '14px', fontWeight: '600' }}>
+                      <span>⚠️ Error al procesar archivo:</span>
+                      <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{res.expediente_id}</span>
+                    </div>
+                    <p style={{ margin: '6px 0 0 28px', fontSize: '12px', color: '#7f1d1d' }}>
+                      Detalle: {res.error} (El resto del lote se ha procesado con éxito).
+                    </p>
+                  </div>
+                );
+              }
+              const isOpen = !!openAccordion[idx];
+              const datosExtraidos = res.datos_extraidos || {};
+              const acreditadoNombre = datosExtraidos.acreditado || datosExtraidos.nombre_acreditado || 'Acreditado no identificado';
+              const isPreviewingThis = batchPreviewIndex === idx;
+              const isSelected = selectedBatchIndices.includes(idx);
 
-  return (
+              return (
                 <div key={idx} style={{ border: `1px solid ${isPreviewingThis ? theme.accent : theme.border}`, borderRadius: '10px', overflow: 'hidden', transition: 'border-color 0.2s ease' }}>
                   <div 
                     onClick={() => toggleAccordion(idx)}
@@ -2230,39 +2306,39 @@ const filteredHistorial = (historial || []).filter((item) => {
                         <option value="" disabled>Seleccionar plantilla...</option>
                         
                         <optgroup label="CDMX - APERTURA DE CRÉDITO">
-            <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-            <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-            <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-            <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-          </optgroup>
+                          <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+                          <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
+                          <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
+                          <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
+                        </optgroup>
 
-          <optgroup label="CONTRATO DE MUTUO">
-            <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-            <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-            <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-            <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-          </optgroup>
+                        <optgroup label="CONTRATO DE MUTUO">
+                          <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
+                          <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
+                          <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
+                          <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
+                        </optgroup>
 
-          <optgroup label="MODELOS COACREDITADOS">
-            <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
-            <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
-            <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
-            <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
-          </optgroup>
+                        <optgroup label="MODELOS COACREDITADOS">
+                          <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
+                          <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
+                          <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
+                          <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
+                        </optgroup>
 
-          <optgroup label="3.EDOMEX - APERTURA DE CRÉDITO">
-            <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-            <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-            <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-            <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-          </optgroup>
+                        <optgroup label="3.EDOMEX - APERTURA DE CRÉDITO">
+                          <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+                          <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
+                          <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
+                          <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
+                        </optgroup>
 
-          <optgroup label="CONTRATO DE MUTUO">
-            <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-            <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
-            <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-            <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-          </optgroup>
+                        <optgroup label="CONTRATO DE MUTUO">
+                          <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
+                          <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
+                          <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
+                          <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
+                        </optgroup>
                       </select>
                       {/* =========================================== */}
 
@@ -2310,10 +2386,13 @@ const filteredHistorial = (historial || []).filter((item) => {
                         const fieldKey = `batch_${idx}_${bKey}`;
                         const isUnlocked = unlockedFields[fieldKey];
 
+                        {/* VALIDACIÓN DE CAMPO NO ENCONTRADO O VACÍO */}
+                        const isMissing = !bVal || String(bVal).toUpperCase() === 'NO_ENCONTRADO' || String(bVal).trim() === '';
+
                         return (
                           <div key={bKey} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: '600', color: theme.textSecondary }}>
-                              {formatLabel(bKey)}
+                            <label style={{ fontSize: '11px', fontWeight: '600', color: isMissing && !isUnlocked ? '#ef4444' : theme.textSecondary }}>
+                              {formatLabel(bKey)} {isMissing && !isUnlocked && '(No encontrado)'}
                             </label>
                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                               <input
@@ -2325,11 +2404,11 @@ const filteredHistorial = (historial || []).filter((item) => {
                                   flex: 1,
                                   padding: '8px 10px',
                                   borderRadius: '6px',
-                                  border: `1px solid ${theme.border}`,
-                                  backgroundColor: isUnlocked ? theme.inputBg : theme.subtleBg,
-                                  color: theme.textPrimary,
+                                  border: `1px solid ${isMissing && !isUnlocked ? '#ef4444' : theme.border}`,
+                                  backgroundColor: isMissing && !isUnlocked ? '#fef2f2' : (isUnlocked ? theme.inputBg : theme.subtleBg),
+                                  color: isMissing && !isUnlocked ? '#b91c1c' : theme.textPrimary,
                                   fontSize: '12px',
-                                  opacity: isUnlocked ? 1 : 0.8
+                                  opacity: isUnlocked ? 1 : 0.9
                                 }}
                               />
                               <button
@@ -2361,7 +2440,7 @@ const filteredHistorial = (historial || []).filter((item) => {
           </div>
         </div>
 
-        {/* COLUMNA DERECHA: PANEL DE VISTA PREVIA MASIVA */}
+        {/* COLUMNA DERECHA: PANEL DE VISTA PREVIA MASIVA (ANCHO FIJO ESTABLE 440px) */}
         {batchPreviewIndex !== null && (
           <div style={{ 
             backgroundColor: theme.cardBg, 
@@ -2373,43 +2452,9 @@ const filteredHistorial = (historial || []).filter((item) => {
             flexDirection: 'column',
             overflow: 'hidden',
             position: 'sticky',
-            top: '24px'
+            top: '24px',
+            width: '100%'
           }}>
-            
-            {/* Reglas CSS para scroll interno */}
-            <style>{`
-              .docx-container-scroll {
-                height: 100% !important;
-                max-height: 100% !important;
-                overflow-y: auto !important;
-              }
-              .docx-container-scroll .docx-wrapper {
-                background-color: transparent !important;
-                padding: 12px 0 !important;
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: center !important;
-                gap: 16px !important;
-              }
-              .docx-container-scroll .docx-wrapper > section {
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
-                border-radius: 6px !important;
-                margin-bottom: 0 !important;
-                background-color: #ffffff !important;
-                border: 1px solid #e2e8f0 !important;
-                width: 100% !important;
-                max-width: 100% !important;
-                padding: 16px !important;
-                box-sizing: border-box !important;
-              }
-              .docx-container-scroll::-webkit-scrollbar {
-                width: 6px;
-              }
-              .docx-container-scroll::-webkit-scrollbar-thumb {
-                background-color: rgba(156, 163, 175, 0.5);
-                border-radius: 8px;
-              }
-            `}</style>
 
             {/* Encabezado del visor */}
             <div style={{ 

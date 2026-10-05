@@ -1,11 +1,7 @@
 import os
 import fitz  # PyMuPDF
 import re
-import copy
 from docxtpl import DocxTemplate
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx import Document
 
 # Constante para calcular Veces Salario Mínimo Mensual en DF/CDMX
 SALARIO_MINIMO_MENSUAL_DF = 3713.40
@@ -313,7 +309,6 @@ def extraer_oficina_registral(texto):
         return match.group(1).strip()
     return "NO_ENCONTRADO"
 
-
 def armar_ubicacion_inmueble(texto_completo):
     match_seccion = re.search(r'DATOS DE IDENTIFICACIÓN[:\s]*(.*?)(?=DATOS DE REGISTRO|INFORMACIÓN COMPLEMENTARIA|VOLANTE|ENTRADA|$)', texto_completo, re.IGNORECASE | re.DOTALL)
     texto_busqueda = match_seccion.group(1) if match_seccion else texto_completo
@@ -328,7 +323,6 @@ def armar_ubicacion_inmueble(texto_completo):
                     return val_limpio
         return ""
 
-    # Delimitamos estrictamente para que no crucen saltos de línea ni consuman etiquetas vecinas
     vivienda = extraer_val([r'(?:Vivienda)[:\s#]*([A-Z0-9\-]+)', r'departamento\s*([0-9A-Z\-]+)'])
     lote = extraer_val([r'(?:Lote)[:\s#]*([A-Z0-9\-]+)'])
     manzana = extraer_val([r'(?:Manzana|Mz\.)[:\s#]*([A-Z0-9\-]+)'])
@@ -737,7 +731,6 @@ def extraer_datos_pdf(ruta_pdf):
 
     return datos
 
-
 def combinar_datos_pareja(datos_lista):
     datos_finales = {
         "numero_carta": "NO_ENCONTRADO",
@@ -768,70 +761,6 @@ def combinar_datos_pareja(datos_lista):
                 
     return datos_finales
 
-
-def reemplazar_texto_en_parrafo(parrafo, mapa_reemplazos):
-    texto_parrafo = parrafo.text
-    if not any(key in texto_parrafo for key in mapa_reemplazos.keys()):
-        return
-
-    # 1. Unir fragmentos si la etiqueta está partida en varios bloques en Word
-    for key in mapa_reemplazos.keys():
-        if key in parrafo.text and not any(key in r.text for r in parrafo.runs):
-            for idx, run in enumerate(parrafo.runs):
-                if "{" in run.text:
-                    j = idx + 1
-                    while j < len(parrafo.runs) and "}" not in parrafo.runs[j-1].text:
-                        parrafo.runs[idx].text += parrafo.runs[j].text
-                        parrafo.runs[j].text = ""
-                        j += 1
-
-    # 2. Reemplazo quirúrgico con XML para mantener el orden exacto y aislar los estilos
-    for key, value in mapa_reemplazos.items():
-        val_str = str(value)
-        
-        runs = list(parrafo.runs)
-        for run in runs:
-            if key in run.text:
-                text = run.text
-                prefix, suffix = text.split(key, 1)
-                
-                # Obtener las propiedades originales del bloque de texto (run)
-                rPr = run._r.find(qn('w:rPr'))
-                
-                # El bloque actual se queda únicamente con el texto anterior
-                run.text = prefix
-                
-                # Crear el nuevo bloque para el valor insertado (hereda negrita/subrayado de la plantilla)
-                val_r = OxmlElement('w:r')
-                if rPr is not None:
-                    val_r.append(copy.deepcopy(rPr))
-                val_t = OxmlElement('w:t')
-                val_t.text = val_str
-                val_r.append(val_t)
-                
-                # Insertar justo después del bloque actual (mantiene el orden del párrafo)
-                run._r.addnext(val_r)
-                
-                # Crear el bloque para el texto posterior, limpiando subrayado y negrita para que no se extiendan de más
-                suffix_r = OxmlElement('w:r')
-                if rPr is not None:
-                    clean_rPr = copy.deepcopy(rPr)
-                    for u_elem in clean_rPr.findall(qn('w:u')):
-                        clean_rPr.remove(u_elem)
-                    for b_elem in clean_rPr.findall(qn('w:b')):
-                        clean_rPr.remove(b_elem)
-                    suffix_r.append(clean_rPr)
-                
-                suffix_t = OxmlElement('w:t')
-                suffix_t.text = suffix
-                suffix_r.append(suffix_t)
-                
-                # Insertar el sufijo después del valor
-                val_r.addnext(suffix_r)
-                
-                break
-
-
 def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
     if not os.path.exists(ruta_plantilla):
         ruta_plantilla_alt = os.path.join("templates", "plantilla_manera2.docx")
@@ -841,7 +770,9 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
             print(f"ADVERTENCIA: No se encontró la plantilla en {ruta_plantilla}")
             return False
 
-    doc = Document(ruta_plantilla)
+    # CORRECCIÓN DEFINITIVA: Usamos DocxTemplate para respetar 100% el formato,
+    # negritas, subrayados, espacios y guiones (-------) de tus 20 plantillas.
+    doc = DocxTemplate(ruta_plantilla)
     
     folio_raw = str(datos.get("folio_real", "")).strip()
     folio_limpio = limpiar_ceros_izquierda(folio_raw) if folio_raw and folio_raw != "NO_ENCONTRADO" else ""
@@ -868,76 +799,29 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
             return ""
         return val
 
-    mapa_reemplazos = {
-        "{{ numero_carta }}": obtener_valor("numero_carta"),
-        "{{numero_carta}}": obtener_valor("numero_carta"),
-        "{numero_carta}": obtener_valor("numero_carta"),
-
-        "{{ fecha_expedicion }}": obtener_valor("fecha_expedicion"),
-        "{{fecha_expedicion}}": obtener_valor("fecha_expedicion"),
-        "{fecha_expedicion}": obtener_valor("fecha_expedicion"),
-
-        "{{ crédito_a_salario }}": obtener_valor("credito_a_salario"),
-        "{{credito_a_salario}}": obtener_valor("credito_a_salario"),
-        "{credito_a_salario}": obtener_valor("credito_a_salario"),
-        
-        "{{ numero_credito }}": credito_texto,
-        "{{numero_credito}}": credito_texto,
-        "{numero_credito}": credito_texto,
-
-        "{{ nombre_acreditado }}": obtener_valor("nombre_acreditado"),
-        "{{nombre_acreditado}}": obtener_valor("nombre_acreditado"),
-        "{nombre_acreditado}": obtener_valor("nombre_acreditado"),
-
-        "{{ monto_credito }}": monto_texto,
-        "{{monto_credito}}": monto_texto,
-        "{monto_credito}": monto_texto,
-
-        "{{ monto_letras }}": monto_letras,
-        "{{monto_letras}}": monto_letras,
-        "{monto_letras}": monto_letras,
-
-        "{{ entidad_financiera }}": obtener_valor("entidad_financiera"),
-        "{{entidad_financiera}}": obtener_valor("entidad_financiera"),
-        "{entidad_financiera}": obtener_valor("entidad_financiera"),
-
-        "{{ fecha_liquidacion }}": obtener_valor("fecha_liquidacion"),
-        "{{fecha_liquidacion}}": obtener_valor("fecha_liquidacion"),
-        "{fecha_liquidacion}": obtener_valor("fecha_liquidacion"),
-
-        "{{ folio_real }}": folio_limpio,
-        "{{folio_real}}": folio_limpio,
-        "{folio_real}": folio_limpio,
-
-        "{{ oficina_registral }}": obtener_valor("oficina_registral"),
-        "{{oficina_registral}}": obtener_valor("oficina_registral"),
-        "{oficina_registral}": obtener_valor("oficina_registral"),
-
-        "{{ datos_inmueble }}": obtener_valor("datos_inmueble"),
-        "{{datos_inmueble}}": obtener_valor("datos_inmueble"),
-        "{datos_inmueble}": obtener_valor("datos_inmueble"),
-
-        "{{ numero_escritura }}": obtener_valor("numero_escritura"),
-        "{{numero_escritura}}": obtener_valor("numero_escritura"),
-
-        "{{ fecha_escritura }}": obtener_valor("fecha_escritura"),
-        "{{fecha_escritura}}": obtener_valor("fecha_escritura"),
-
-        "{{ notario_origen_completo }}": obtener_valor("notario_origen_completo"),
-        "{{notario_origen_completo}}": obtener_valor("notario_origen_completo"),
-
-        "{{ tiene_conyuge }}": obtener_valor("tiene_conyuge"),
-        "{{tiene_conyuge}}": obtener_valor("tiene_conyuge"),
+    # Contexto limpio para el motor de plantillas docxtpl (Jinja2)
+    context = {
+        "numero_carta": obtener_valor("numero_carta"),
+        "fecha_expedicion": obtener_valor("fecha_expedicion"),
+        "crédito_a_salario": obtener_valor("credito_a_salario"),
+        "credito_a_salario": obtener_valor("credito_a_salario"),
+        "numero_credito": credito_texto,
+        "nombre_acreditado": obtener_valor("nombre_acreditado"),
+        "monto_credito": monto_texto,
+        "monto_letras": monto_letras,
+        "entidad_financiera": obtener_valor("entidad_financiera"),
+        "fecha_liquidacion": obtener_valor("fecha_liquidacion"),
+        "folio_real": folio_limpio,
+        "oficina_registral": obtener_valor("oficina_registral"),
+        "datos_inmueble": obtener_valor("datos_inmueble"),
+        "numero_escritura": obtener_valor("numero_escritura"),
+        "fecha_escritura": obtener_valor("fecha_escritura"),
+        "notario_origen_completo": obtener_valor("notario_origen_completo"),
+        "tiene_conyuge": obtener_valor("tiene_conyuge"),
     }
 
-    for p in doc.paragraphs:
-        reemplazar_texto_en_parrafo(p, mapa_reemplazos)
-
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for p in cell.paragraphs:
-                    reemplazar_texto_en_parrafo(p, mapa_reemplazos)
+    # Renderiza automáticamente conservando estilos, espacios y guiones intactos
+    doc.render(context)
 
     directorio_salida = os.path.dirname(ruta_salida)
     if directorio_salida:

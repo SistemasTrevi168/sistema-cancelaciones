@@ -103,22 +103,19 @@ def numero_a_palabras_generico(numero):
     return f"{texto_enteros}{texto_dec}"
 
 def convertir_vsm_a_letras(val_str):
-    """Convierte el valor de veces salario mínimo a letras manejando correctamente los decimales."""
+    """Convierte el valor de veces salario mínimo manejando los decimales como cantidad numérica."""
+    if not val_str or str(val_str).upper() in ["NO_ENCONTRADO", "NONE", ""]:
+        return ""
     try:
         val_str = str(val_str).replace(',', '').strip()
         if '.' in val_str:
             partes = val_str.split('.')
-            enteros = int(partes[0])
-            dec_part = partes[1]
+            enteros = int(partes[0]) if partes[0] else 0
+            dec_part = partes[1] if len(partes) > 1 and partes[1] else ""
             texto_enteros = numero_a_palabras_generico(enteros).lower()
-            
-            mapa_digitos = {
-                '0': 'cero', '1': 'uno', '2': 'dos', '3': 'tres', '4': 'cuatro',
-                '5': 'cinco', '6': 'seis', '7': 'siete', '8': 'ocho', '9': 'nueve'
-            }
-            dec_palabras = [mapa_digitos.get(d, d) for d in dec_part if d.isdigit()]
-            if dec_palabras:
-                return f"{texto_enteros} punto {' '.join(dec_palabras)}"
+            if dec_part:
+                texto_dec = numero_a_palabras_generico(int(dec_part)).lower()
+                return f"{texto_enteros} punto {texto_dec}"
             return texto_enteros
         else:
             return numero_a_palabras_generico(int(val_str)).lower()
@@ -329,7 +326,8 @@ def extraer_oficina_registral(texto):
     if not match:
         match = re.search(r'OFICINA\s+REGISTRAL\s+DE\s+["“\']?([^"”\'\n\r]+?)["”\']?(?=\s+INMUEBLES|\n|,|\.|$)', texto, re.IGNORECASE)
     if match:
-        return match.group(1).strip()
+        val = match.group(1).strip()
+        return val.title()
     return "NO_ENCONTRADO"
 
 def armar_ubicacion_inmueble(texto_completo):
@@ -388,19 +386,19 @@ def armar_ubicacion_inmueble(texto_completo):
         return "NO_ENCONTRADO"
     
     resultado_ubicacion = ", ".join(elementos)
-    # Aplicar conversión de números arábigos y romanos a minúsculas
     return convertir_inmueble_a_letras(resultado_ubicacion)
 
 def determinar_genero_y_estado_civil(texto_completo, nombre_acreditado=""):
     texto_upper = texto_completo.upper()
-    nombre_upper = nombre_acreditado.upper()
+    nombre_upper = str(nombre_acreditado).upper()
     
     if re.search(r'\bLA\s+ACREDITADA\b|\bSEÑORA\b|\bA\s+FAVOR\s+DE\s+LA\b|\bCIUDADANA\b', texto_upper):
         genero = "FEMENINO"
     elif re.search(r'\bEL\s+ACREDITADO\b|\bSEÑOR\b|\bA\s+FAVOR\s+DEL\b|\bCIUDADANO\b', texto_upper):
         genero = "MASCULINO"
     else:
-        primer_nombre = nombre_upper.split()[0] if nombre_upper else ""
+        partes_nombre = nombre_upper.split()
+        primer_nombre = partes_nombre[0] if partes_nombre else ""
         if primer_nombre.endswith(('A', 'IA', 'IS')):
             genero = "FEMENINO"
         else:
@@ -544,7 +542,7 @@ def extraer_datos_pdf(ruta_pdf):
         "nombre_acreditado": "NO_ENCONTRADO",
         "monto_credito": "NO_ENCONTRADO",
         "monto_credito_letras": "NO_ENCONTRADO",
-        "credito_a_salario": "NO_ENCONTRADO",
+        "credito_a_salario": "",
         "credito_a_salario_letras": "NO_ENCONTRADO",
         "entidad_financiera": "NO_ENCONTRADO",
         "fecha_liquidacion": "NO_ENCONTRADO",
@@ -646,7 +644,7 @@ def extraer_datos_pdf(ruta_pdf):
             datos["monto_credito"] = f"${num:,.2f}"
             datos["monto_credito_letras"] = numero_a_letras(num)
             
-            if datos["credito_a_salario"] == "NO_ENCONTRADO":
+            if not datos["credito_a_salario"]:
                 veces_salario = num / SALARIO_MINIMO_MENSUAL_DF
                 veces_salario_str = f"{veces_salario:.4f}".rstrip('0').rstrip('.')
                 datos["credito_a_salario"] = convertir_vsm_a_letras(veces_salario_str)
@@ -766,7 +764,7 @@ def combinar_datos_pareja(datos_lista):
         "nombre_acreditado": "NO_ENCONTRADO",
         "monto_credito": "NO_ENCONTRADO",
         "monto_credito_letras": "NO_ENCONTRADO",
-        "credito_a_salario": "NO_ENCONTRADO",
+        "credito_a_salario": "",
         "entidad_financiera": "NO_ENCONTRADO",
         "fecha_liquidacion": "NO_ENCONTRADO",
         "folio_real": "NO_ENCONTRADO",
@@ -782,7 +780,7 @@ def combinar_datos_pareja(datos_lista):
         for k, v in d.items():
             val = str(v).strip()
             if val != "NO_ENCONTRADO" and val.lower() not in ['de', 'sreales', 'folio', 'carta', 'real']:
-                if datos_finales.get(k) == "NO_ENCONTRADO" or len(val) > len(str(datos_finales.get(k, ""))):
+                if datos_finales.get(k) == "" or datos_finales.get(k) == "NO_ENCONTRADO" or len(val) > len(str(datos_finales.get(k, ""))):
                     datos_finales[k] = val
                 
     return datos_finales

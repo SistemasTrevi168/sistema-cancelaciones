@@ -103,7 +103,9 @@ def numero_a_palabras_generico(numero):
     return f"{texto_enteros}{texto_dec}"
 
 def convertir_vsm_a_letras(val_str):
-    """Convierte el valor de veces salario mínimo a letras manejando correctamente los decimales."""
+    """Convierte el valor de veces salario mínimo manejando decimales como cantidad numérica."""
+    if not val_str or str(val_str).upper() in ["NO_ENCONTRADO", "NONE", ""]:
+        return ""
     try:
         val_str = str(val_str).replace(',', '').strip()
         if '.' in val_str:
@@ -111,15 +113,8 @@ def convertir_vsm_a_letras(val_str):
             enteros = int(partes[0])
             dec_part = partes[1]
             texto_enteros = numero_a_palabras_generico(enteros).lower()
-            
-            mapa_digitos = {
-                '0': 'cero', '1': 'uno', '2': 'dos', '3': 'tres', '4': 'cuatro',
-                '5': 'cinco', '6': 'seis', '7': 'siete', '8': 'ocho', '9': 'nueve'
-            }
-            dec_palabras = [mapa_digitos.get(d, d) for d in dec_part if d.isdigit()]
-            if dec_palabras:
-                return f"{texto_enteros} punto {' '.join(dec_palabras)}"
-            return texto_enteros
+            texto_dec = numero_a_palabras_generico(int(dec_part)).lower()
+            return f"{texto_enteros} punto {texto_dec}"
         else:
             return numero_a_palabras_generico(int(val_str)).lower()
     except Exception:
@@ -317,6 +312,7 @@ def convertir_inmueble_a_letras(texto_inmueble):
         num_str = match.group(0)
         return numero_a_palabras_generico(num_str).lower()
 
+    # Reemplazar números romanos y arábigos en todo el texto del inmueble
     texto_procesado = re.sub(r'\b(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV)\b', reemplazar_romano, texto_inmueble, flags=re.IGNORECASE)
     texto_procesado = re.sub(r'\b(?!\d{5}\b)\d+\b', reemplazar_arabigo, texto_procesado)
 
@@ -329,67 +325,26 @@ def extraer_oficina_registral(texto):
     if not match:
         match = re.search(r'OFICINA\s+REGISTRAL\s+DE\s+["“\']?([^"”\'\n\r]+?)["”\']?(?=\s+INMUEBLES|\n|,|\.|$)', texto, re.IGNORECASE)
     if match:
-        return match.group(1).strip()
+        val = match.group(1).strip()
+        # Solo la primera letra de cada palabra en mayúscula (Title Case)
+        return val.title()
     return "NO_ENCONTRADO"
 
 def armar_ubicacion_inmueble(texto_completo):
     match_seccion = re.search(r'DATOS DE IDENTIFICACIÓN[:\s]*(.*?)(?=DATOS DE REGISTRO|INFORMACIÓN COMPLEMENTARIA|VOLANTE|ENTRADA|$)', texto_completo, re.IGNORECASE | re.DOTALL)
-    texto_busqueda = match_seccion.group(1) if match_seccion else texto_completo
+    if match_seccion:
+        texto_ubicacion = match_seccion.group(1).strip()
+    else:
+        match_vivienda = re.search(r'(Vivienda:.*?)(?=DATOS DE REGISTRO|INFORMACIÓN COMPLEMENTARIA|$)', texto_completo, re.IGNORECASE | re.DOTALL)
+        texto_ubicacion = match_vivienda.group(1).strip() if match_vivienda else texto_completo
 
-    def extraer_val(patrones):
-        for pat in patrones:
-            m = re.search(pat, texto_busqueda, re.IGNORECASE)
-            if m:
-                val = m.group(1).strip()
-                val_limpio = re.sub(r'^[:\s\-]+|[:\s\-]+$', '', val).strip()
-                if val_limpio and val_limpio.lower() not in ['ninguna', 'ninguno', 'no_encontrado', 'no consta', 'null', 'super', 'trámite']:
-                    return val_limpio
-        return ""
+    texto_ubicacion = re.sub(r'\s+', ' ', texto_ubicacion)
 
-    vivienda = extraer_val([r'(?:Vivienda)[:\s#]*([A-Z0-9\-]+)', r'departamento\s*([0-9A-Z\-]+)'])
-    lote = extraer_val([r'(?:Lote)[:\s#]*([A-Z0-9\-]+)'])
-    manzana = extraer_val([r'(?:Manzana|Mz\.)[:\s#]*([A-Z0-9\-]+)'])
-    condominio = extraer_val([r'(?:Condominio)[:\s#]*([A-Z0-9\- ]+?)(?=\s*(?:CALLE|NO\.|COL|SECTOR|LOTE|MANZANA|$))'])
-    sector = extraer_val([r'(?:Sector|Edf\.?)[:\s#]*([A-Z0-9\-]+)'])
-    colonia = extraer_val([r'(?:Colonia|Col\.|Fraccionamiento|Pueblo)[:\s#]*([A-ZÁÉÍÓÚÑ0-9\- ]+?)(?=\s*(?:SECTOR|MUNICIPIO|C\.P\.|CALLE|LOTE|$))'])
-    municipio = extraer_val([r'(?:Municipio|Alcaldía)[:\s#]*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:DISTRITO|ESTADO|C\.P\.|COLONIA|$))'])
-    estado = extraer_val([r'(?:Estado|Entidad\s+Federativa)[:\s#]*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:OBSERVACIONES|SUPERFICIE|C\.P\.|MUNICIPIO|$))'])
-
-    elementos = []
-    if vivienda:
-        v_upper = vivienda.upper()
-        if "DEPARTAMENTO" in v_upper or "CASA" in v_upper or "VIVIENDA" in v_upper:
-            elementos.append(vivienda if v_upper.startswith(("EL ", "LA ")) else f"EL INMUEBLE {vivienda}")
-        else:
-            elementos.append(f"EL DEPARTAMENTO HABITACIONAL MARCADO CON EL NÚMERO {vivienda}")
-    if lote:
-        elementos.append(f"CONSTRUIDO SOBRE EL LOTE {lote}")
-    if manzana:
-        elementos.append(f"DE LA MANZANA {manzana}")
-    if condominio:
-        d_upper = condominio.upper()
-        if "RÉGIMEN" in d_upper or "REGIMEN" in d_upper:
-            elementos.append(f"DEL {condominio}")
-        else:
-            elementos.append(f"DEL RÉGIMEN DE PROPIEDAD EN CONDOMINIO {condominio}")
-    if sector:
-        s_upper = sector.upper()
-        elementos.append(sector if "EDIFICIO" in s_upper or "EDF" in s_upper else f"SECTOR EDIFICIO {sector}")
-    if colonia:
-        elementos.append(f"UBICADO EN {colonia}")
-    if municipio:
-        m_upper = municipio.upper()
-        elementos.append(municipio if "MUNICIPIO" in m_upper else f"EN EL MUNICIPIO DE {municipio}")
-    if estado:
-        e_upper = estado.upper()
-        elementos.append(estado if "ESTADO" in e_upper else f"ESTADO DE {estado}")
-
-    if not elementos:
+    if not texto_ubicacion or texto_ubicacion == "NO_ENCONTRADO":
         return "NO_ENCONTRADO"
-    
-    resultado_ubicacion = ", ".join(elementos)
-    # Aplicar conversión de números arábigos y romanos a minúsculas
-    return convertir_inmueble_a_letras(resultado_ubicacion)
+
+    # Aplica la conversión de números y romanos a minúsculas en todo el bloque del inmueble
+    return convertir_inmueble_a_letras(texto_ubicacion)
 
 def determinar_genero_y_estado_civil(texto_completo, nombre_acreditado=""):
     texto_upper = texto_completo.upper()
@@ -544,7 +499,7 @@ def extraer_datos_pdf(ruta_pdf):
         "nombre_acreditado": "NO_ENCONTRADO",
         "monto_credito": "NO_ENCONTRADO",
         "monto_credito_letras": "NO_ENCONTRADO",
-        "credito_a_salario": "NO_ENCONTRADO",
+        "credito_a_salario": "",
         "credito_a_salario_letras": "NO_ENCONTRADO",
         "entidad_financiera": "NO_ENCONTRADO",
         "fecha_liquidacion": "NO_ENCONTRADO",
@@ -646,7 +601,7 @@ def extraer_datos_pdf(ruta_pdf):
             datos["monto_credito"] = f"${num:,.2f}"
             datos["monto_credito_letras"] = numero_a_letras(num)
             
-            if datos["credito_a_salario"] == "NO_ENCONTRADO":
+            if not datos["credito_a_salario"]:
                 veces_salario = num / SALARIO_MINIMO_MENSUAL_DF
                 veces_salario_str = f"{veces_salario:.4f}".rstrip('0').rstrip('.')
                 datos["credito_a_salario"] = convertir_vsm_a_letras(veces_salario_str)
@@ -766,7 +721,7 @@ def combinar_datos_pareja(datos_lista):
         "nombre_acreditado": "NO_ENCONTRADO",
         "monto_credito": "NO_ENCONTRADO",
         "monto_credito_letras": "NO_ENCONTRADO",
-        "credito_a_salario": "NO_ENCONTRADO",
+        "credito_a_salario": "",
         "entidad_financiera": "NO_ENCONTRADO",
         "fecha_liquidacion": "NO_ENCONTRADO",
         "folio_real": "NO_ENCONTRADO",
@@ -782,7 +737,7 @@ def combinar_datos_pareja(datos_lista):
         for k, v in d.items():
             val = str(v).strip()
             if val != "NO_ENCONTRADO" and val.lower() not in ['de', 'sreales', 'folio', 'carta', 'real']:
-                if datos_finales.get(k) == "NO_ENCONTRADO" or len(val) > len(str(datos_finales.get(k, ""))):
+                if datos_finales.get(k) == "" or datos_finales.get(k) == "NO_ENCONTRADO" or len(val) > len(str(datos_finales.get(k, ""))):
                     datos_finales[k] = val
                 
     return datos_finales
@@ -813,7 +768,6 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
     if monto_raw and monto_raw != "NO_ENCONTRADO":
         if not monto_letras or monto_letras == "NO_ENCONTRADO":
             monto_letras = numero_a_letras(monto_raw)
-        # Se agrega M.N. enfrente de la cantidad numérica
         monto_texto = f"{monto_raw} M.N. ({monto_letras})"
     else:
         monto_texto = ""

@@ -103,7 +103,7 @@ def numero_a_palabras_generico(numero):
     return f"{texto_enteros}{texto_dec}"
 
 def convertir_vsm_a_letras(val_str):
-    """Convierte el valor de veces salario mínimo manejando los decimales como cantidad numérica."""
+    """Convierte el valor de veces salario mínimo manejando los decimales agrupados de dos en dos."""
     if not val_str or str(val_str).upper() in ["NO_ENCONTRADO", "NONE", ""]:
         return ""
     try:
@@ -113,10 +113,23 @@ def convertir_vsm_a_letras(val_str):
             enteros = int(partes[0]) if partes[0] else 0
             dec_part = partes[1] if len(partes) > 1 and partes[1] else ""
             texto_enteros = numero_a_palabras_generico(enteros).lower()
+            
             if dec_part:
-                texto_dec = numero_a_palabras_generico(int(dec_part)).lower()
-                return f"{texto_enteros} punto {texto_dec}"
-            return texto_enteros
+                dec_str = dec_part.strip()
+                if len(dec_str) % 2 != 0:
+                    dec_str += '0'
+                pares_dec = []
+                for i in range(0, len(dec_str), 2):
+                    par = int(dec_str[i:i+2])
+                    if par == 0:
+                        pares_dec.append("cero")
+                    else:
+                        pares_dec.append(numero_a_palabras_generico(par).lower())
+                texto_dec = " " + " ".join(pares_dec)
+            else:
+                texto_dec = ""
+                
+            return f"{texto_enteros} punto{texto_dec}"
         else:
             return numero_a_palabras_generico(int(val_str)).lower()
     except Exception:
@@ -811,7 +824,6 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
     if monto_raw and monto_raw != "NO_ENCONTRADO":
         if not monto_letras or monto_letras == "NO_ENCONTRADO":
             monto_letras = numero_a_letras(monto_raw)
-        # Se agrega M.N. enfrente de la cantidad numérica
         monto_texto = f"{monto_raw} M.N. ({monto_letras})"
     else:
         monto_texto = ""
@@ -821,6 +833,8 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         if not val or val == "NO_ENCONTRADO" or val.lower() in ['l', 'no', 'no_encontrado', 'null']:
             return ""
         return val
+
+    datos_inmueble_val = convertir_inmueble_a_letras(obtener_valor("datos_inmueble"))
 
     context = {
         "numero_carta": obtener_valor("numero_carta"),
@@ -835,7 +849,7 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         "fecha_liquidacion": obtener_valor("fecha_liquidacion"),
         "folio_real": folio_limpio,
         "oficina_registral": obtener_valor("oficina_registral"),
-        "datos_inmueble": obtener_valor("datos_inmueble"),
+        "datos_inmueble": datos_inmueble_val,
         "numero_escritura": obtener_valor("numero_escritura"),
         "fecha_escritura": obtener_valor("fecha_escritura"),
         "notario_origen_completo": obtener_valor("notario_origen_completo"),

@@ -110,11 +110,13 @@ def convertir_vsm_a_letras(val_str):
         val_str = str(val_str).replace(',', '').strip()
         if '.' in val_str:
             partes = val_str.split('.')
-            enteros = int(partes[0])
-            dec_part = partes[1]
+            enteros = int(partes[0]) if partes[0] else 0
+            dec_part = partes[1] if len(partes) > 1 and partes[1] else ""
             texto_enteros = numero_a_palabras_generico(enteros).lower()
-            texto_dec = numero_a_palabras_generico(int(dec_part)).lower()
-            return f"{texto_enteros} punto {texto_dec}"
+            if dec_part:
+                texto_dec = numero_a_palabras_generico(int(dec_part)).lower()
+                return f"{texto_enteros} punto {texto_dec}"
+            return texto_enteros
         else:
             return numero_a_palabras_generico(int(val_str)).lower()
     except Exception:
@@ -312,7 +314,6 @@ def convertir_inmueble_a_letras(texto_inmueble):
         num_str = match.group(0)
         return numero_a_palabras_generico(num_str).lower()
 
-    # Reemplazar números romanos y arábigos en todo el texto del inmueble
     texto_procesado = re.sub(r'\b(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV)\b', reemplazar_romano, texto_inmueble, flags=re.IGNORECASE)
     texto_procesado = re.sub(r'\b(?!\d{5}\b)\d+\b', reemplazar_arabigo, texto_procesado)
 
@@ -326,7 +327,6 @@ def extraer_oficina_registral(texto):
         match = re.search(r'OFICINA\s+REGISTRAL\s+DE\s+["“\']?([^"”\'\n\r]+?)["”\']?(?=\s+INMUEBLES|\n|,|\.|$)', texto, re.IGNORECASE)
     if match:
         val = match.group(1).strip()
-        # Solo la primera letra de cada palabra en mayúscula (Title Case)
         return val.title()
     return "NO_ENCONTRADO"
 
@@ -343,19 +343,19 @@ def armar_ubicacion_inmueble(texto_completo):
     if not texto_ubicacion or texto_ubicacion == "NO_ENCONTRADO":
         return "NO_ENCONTRADO"
 
-    # Aplica la conversión de números y romanos a minúsculas en todo el bloque del inmueble
     return convertir_inmueble_a_letras(texto_ubicacion)
 
 def determinar_genero_y_estado_civil(texto_completo, nombre_acreditado=""):
     texto_upper = texto_completo.upper()
-    nombre_upper = nombre_acreditado.upper()
+    nombre_upper = str(nombre_acreditado).upper()
     
     if re.search(r'\bLA\s+ACREDITADA\b|\bSEÑORA\b|\bA\s+FAVOR\s+DE\s+LA\b|\bCIUDADANA\b', texto_upper):
         genero = "FEMENINO"
     elif re.search(r'\bEL\s+ACREDITADO\b|\bSEÑOR\b|\bA\s+FAVOR\s+DEL\b|\bCIUDADANO\b', texto_upper):
         genero = "MASCULINO"
     else:
-        primer_nombre = nombre_upper.split()[0] if nombre_upper else ""
+        partes_nombre = nombre_upper.split()
+        primer_nombre = partes_nombre[0] if partes_nombre else ""
         if primer_nombre.endswith(('A', 'IA', 'IS')):
             genero = "FEMENINO"
         else:

@@ -819,25 +819,33 @@ const handlePreviewExcel = async (file) => {
     }
   };
 
-  const handleApplyTemplateToSelected = async (plantillaElegida) => {
-    if (!plantillaElegida || selectedBatchIndices.length === 0) return;
+const handleApplyTemplateToSelected = async (plantillaElegida) => {
+  if (!plantillaElegida || selectedBatchIndices.length === 0) return;
 
-    setBatchResults(prev => {
-      const updated = [...prev];
-      selectedBatchIndices.forEach(index => {
-        if (updated[index]) {
-          updated[index].plantilla_seleccionada = plantillaElegida;
-        }
-      });
-      return updated;
+  // 1. Actualizamos el estado local de golpe
+  let expedientesActualizados = [];
+  setBatchResults(prev => {
+    expedientesActualizados = prev.map((item, idx) => {
+      if (selectedBatchIndices.includes(idx)) {
+        return {
+          ...item,
+          plantilla_seleccionada: plantillaElegida
+        };
+      }
+      return item;
     });
+    return expedientesActualizados;
+  });
 
-    for (const index of selectedBatchIndices) {
-      await actualizarVistaPreviaMasivaTiempoReal(index);
+  // 2. Actualizamos la vista previa de los seleccionados enviando la plantilla explícitamente
+  for (const index of selectedBatchIndices) {
+    if (expedientesActualizados[index]) {
+      await actualizarVistaPreviaMasivaTiempoReal(index, plantillaElegida);
     }
+  }
 
-    setSelectedBatchIndices([]);
-  };
+  setSelectedBatchIndices([]);
+};
 
   const handleSelectAllBatch = (e) => {
     if (e.target.checked) {
@@ -2269,66 +2277,70 @@ const filteredHistorial = (historial || []).filter((item) => {
                     </div>
                     
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {/* SELECTOR GLOBAL (CORREGIDO SIN LA VARIABLE 'res') */}
+                      {/* SELECTOR INDIVIDUAL CARGA MASIVA*/}
               {selectedBatchIndices.length > 0 && (
                 <select
-                  defaultValue=""
-                  onChange={(e) => {
-                    const plantillaElegida = e.target.value;
-                    if (plantillaElegida) {
-                      handleApplyTemplateToSelected(plantillaElegida);
-                      e.target.value = ""; 
-                    }
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    border: `1px solid ${theme.border}`,
-                    backgroundColor: theme.inputBg,
-                    color: theme.textPrimary,
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    outline: 'none'
-                  }}
-                >
-                  <option value="" disabled>Aplicar a seleccionados ({selectedBatchIndices.length})...</option>
-                  
-                  <optgroup label="CDMX - APERTURA DE CRÉDITO">
-                    <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-                    <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-                    <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-                    <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-                  </optgroup>
+  value={res.plantilla_seleccionada || ""}
+  onChange={(e) => {
+    const nuevaPlantilla = e.target.value;
+    handleBatchPlantillaChange(idx, nuevaPlantilla);
+    if (batchPreviewIndex === idx) {
+      setTimeout(() => {
+        actualizarVistaPreviaMasivaTiempoReal(idx);
+      }, 50);
+    }
+  }}
+  onClick={(e) => e.stopPropagation()}
+  style={{
+    padding: '6px 8px',
+    borderRadius: '6px',
+    border: `1px solid ${theme.border}`,
+    backgroundColor: theme.inputBg,
+    color: theme.textPrimary,
+    fontSize: '12px',
+    outline: 'none',
+    cursor: 'pointer',
+    maxWidth: '200px'
+  }}
+  title="Seleccionar plantilla para este expediente"
+>
+  <option value="" disabled>Seleccionar plantilla...</option>
+  
+  <optgroup label="CDMX - APERTURA DE CRÉDITO">
+    <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+    <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
+    <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
+    <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
+  </optgroup>
 
-                  <optgroup label="CONTRATO DE MUTUO (CDMX)">
-                    <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-                    <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-                    <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-                    <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-                  </optgroup>
+  <optgroup label="CONTRATO DE MUTUO (CDMX)">
+    <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
+    <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
+    <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
+    <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
+  </optgroup>
 
-                  <optgroup label="MODELOS COACREDITADOS">
-                    <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
-                    <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
-                    <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
-                    <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
-                  </optgroup>
+  <optgroup label="MODELOS COACREDITADOS">
+    <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
+    <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
+    <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
+    <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
+  </optgroup>
 
-                  <optgroup label="EDOMEX - APERTURA DE CRÉDITO">
-                    <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-                    <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-                    <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-                    <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-                  </optgroup>
+  <optgroup label="EDOMEX - APERTURA DE CRÉDITO">
+    <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+    <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
+    <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
+    <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
+  </optgroup>
 
-                  <optgroup label="CONTRATO DE MUTUO (EDOMEX)">
-                    <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-                    <option value="EDOMEX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-                    <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-                    <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-                  </optgroup>
-                </select>
+  <optgroup label="CONTRATO DE MUTUO (EDOMEX)">
+    <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
+    <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
+    <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
+    <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
+  </optgroup>
+</select>
               )}
 
                       <button

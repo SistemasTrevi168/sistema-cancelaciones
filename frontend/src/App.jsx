@@ -1674,7 +1674,7 @@ const filteredHistorial = (historial || []).filter((item) => {
             <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
           </optgroup>
 
-          <optgroup label="3.EDOMEX - APERTURA DE CRÉDITO">
+          <optgroup label="EDOMEX - APERTURA DE CRÉDITO">
             <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
             <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
             <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
@@ -2150,31 +2150,55 @@ const filteredHistorial = (historial || []).filter((item) => {
 
               {selectedBatchIndices.length > 0 && (
                 <select
-                  onChange={(e) => {
-                    handleApplyTemplateToSelected(e.target.value);
-                    e.target.value = "";
-                  }}
-                  defaultValue=""
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    border: `1px solid ${theme.border}`,
-                    backgroundColor: theme.inputBg,
-                    color: theme.textPrimary,
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    outline: 'none'
-                  }}
-                >
-                  <option value="" disabled>Aplicar a seleccionados ({selectedBatchIndices.length})...</option>
-                  <optgroup label="CDMX - APERTURA DE CRÉDITO">
-                    <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-                    <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-                    <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-                    <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-                  </optgroup>
-                </select>
+          value={selectedPlantilla}
+          onChange={(e) => setSelectedPlantilla(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '10px 12px',
+            borderRadius: '8px',
+            border: `1px solid ${theme.border}`,
+            backgroundColor: theme.inputBg,
+            color: theme.textPrimary,
+            fontSize: '13px',
+            fontWeight: '600',
+            cursor: 'pointer'
+          }}
+        >
+          <optgroup label="CDMX - APERTURA DE CRÉDITO">
+            <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+            <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
+            <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
+            <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
+          </optgroup>
+
+          <optgroup label="CONTRATO DE MUTUO">
+            <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
+            <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
+            <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
+            <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
+          </optgroup>
+
+          <optgroup label="MODELOS COACREDITADOS">
+            <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
+            <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
+            <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
+            <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
+          </optgroup>
+
+          <optgroup label="EDOMEX - APERTURA DE CRÉDITO">
+            <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+            <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
+            <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
+            <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
+          </optgroup>
+
+          <optgroup label="CONTRATO DE MUTUO">
+            <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
+            <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
+            <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
+            <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
+          </optgroup>
+        </select>
               )}
             </div>
 
@@ -2237,25 +2261,55 @@ const filteredHistorial = (historial || []).filter((item) => {
                     
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <select
-                        value={res.plantilla_seleccionada || ""}
-                        onChange={(e) => handleBatchPlantillaChange(idx, e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          padding: '6px 8px',
-                          borderRadius: '6px',
-                          border: `1px solid ${theme.border}`,
-                          backgroundColor: theme.inputBg,
-                          color: theme.textPrimary,
-                          fontSize: '12px',
-                          outline: 'none',
-                          cursor: 'pointer',
-                          maxWidth: '180px'
-                        }}
-                      >
-                        <option value="" disabled>Seleccionar plantilla...</option>
-                        <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-                        <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-                      </select>
+          value={selectedPlantilla}
+          onChange={(e) => setSelectedPlantilla(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '10px 12px',
+            borderRadius: '8px',
+            border: `1px solid ${theme.border}`,
+            backgroundColor: theme.inputBg,
+            color: theme.textPrimary,
+            fontSize: '13px',
+            fontWeight: '600',
+            cursor: 'pointer'
+          }}
+        >
+          <optgroup label="CDMX - APERTURA DE CRÉDITO">
+            <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+            <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
+            <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
+            <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
+          </optgroup>
+
+          <optgroup label="CONTRATO DE MUTUO">
+            <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
+            <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
+            <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
+            <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
+          </optgroup>
+
+          <optgroup label="MODELOS COACREDITADOS">
+            <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
+            <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
+            <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
+            <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
+          </optgroup>
+
+          <optgroup label="EDOMEX - APERTURA DE CRÉDITO">
+            <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
+            <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
+            <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
+            <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
+          </optgroup>
+
+          <optgroup label="CONTRATO DE MUTUO">
+            <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
+            <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
+            <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
+            <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
+          </optgroup>
+        </select>
 
                       <button
                         onClick={(e) => {

@@ -2276,19 +2276,15 @@ const filteredHistorial = (historial || []).filter((item) => {
                     
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <select
-  value={res.plantilla_seleccionada || ""}
+  defaultValue=""
   onChange={(e) => {
-    const nuevaPlantilla = e.target.value;
-    handleBatchPlantillaChange(idx, nuevaPlantilla);
-    
-    // Si estamos viendo la previa de este elemento, la actualizamos al instante
-    if (batchPreviewIndex === idx) {
-      setTimeout(() => {
-        actualizarVistaPreviaMasivaTiempoReal(idx);
-      }, 50);
+    const plantillaElegida = e.target.value;
+    if (plantillaElegida) {
+      handleApplyTemplateToSelected(plantillaElegida);
+      // Opcional: limpiar el select después de aplicar si lo deseas
+      e.target.value = ""; 
     }
   }}
-  onClick={(e) => e.stopPropagation()}
   style={{
     padding: '6px 8px',
     borderRadius: '6px',
@@ -2301,9 +2297,9 @@ const filteredHistorial = (historial || []).filter((item) => {
     maxWidth: '220px',
     textOverflow: 'ellipsis'
   }}
-  title="Seleccionar plantilla para este expediente"
+  title="Aplicar plantilla a los elementos seleccionados"
 >
-  <option value="" disabled>Seleccionar plantilla...</option>
+  <option value="" disabled>Aplicar a seleccionados...</option>
   
   <optgroup label="CDMX - APERTURA DE CRÉDITO">
     <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>

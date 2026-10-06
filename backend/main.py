@@ -827,7 +827,13 @@ def generar_word(
     db: Session = Depends(get_db)
 ):
     try:
-        expediente = db.query(models.Expediente).filter(models.Expediente.id == expediente_id).first()
+        # 🛡️ Conversión segura de string a UUID para PostgreSQL
+        try:
+            uuid_val = uuid.UUID(str(expediente_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="ID de expediente inválido")
+
+        expediente = db.query(models.Expediente).filter(models.Expediente.id == uuid_val).first()
         
         if not expediente:
             raise HTTPException(status_code=404, detail="Expediente no encontrado")
@@ -839,7 +845,6 @@ def generar_word(
         if isinstance(datos_modificados, dict):
             datos_actuales.update(datos_modificados)
 
-        # Extraemos la plantilla enviada desde el payload o la base de datos
         nombre_plantilla = (
             datos_payload.get("plantilla") 
             or datos_actuales.get("plantilla_seleccionada") 
@@ -847,7 +852,6 @@ def generar_word(
             or "plantilla_manera2.docx"
         )
         
-        # 🛡️ Usamos el catálogo y la función robusta para resolver la ruta física sin errores
         ruta_plantilla = resolver_ruta_plantilla(nombre_plantilla)
         os.makedirs("uploads/generados", exist_ok=True)
         
@@ -874,6 +878,8 @@ def generar_word(
             filename=f"Cancelacion_{num_credito}.docx",
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
+    except HTTPException as he:
+        raise he
     except Exception as e:
         db.rollback()
         print(f"ERROR EN /generar-word: {e}")

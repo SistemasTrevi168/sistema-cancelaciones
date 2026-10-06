@@ -826,51 +826,58 @@ def generar_word(
     datos_payload: Optional[Dict[str, Any]] = Body(None), 
     db: Session = Depends(get_db)
 ):
-    expediente = db.query(models.Expediente).filter(models.Expediente.id == expediente_id).first()
-    
-    if not expediente:
-        raise HTTPException(status_code=404, detail="Expediente no encontrado")
-    
-    datos_payload = datos_payload or {}
-    datos_modificados = datos_payload.get("datos", datos_payload)
-    
-    datos_actuales = dict(expediente.datos_extraidos or {})
-    if isinstance(datos_modificados, dict):
-        datos_actuales.update(datos_modificados)
+    try:
+        expediente = db.query(models.Expediente).filter(models.Expediente.id == expediente_id).first()
+        
+        if not expediente:
+            raise HTTPException(status_code=404, detail="Expediente no encontrado")
+        
+        datos_payload = datos_payload or {}
+        datos_modificados = datos_payload.get("datos", datos_payload)
+        
+        datos_actuales = dict(expediente.datos_extraidos or {})
+        if isinstance(datos_modificados, dict):
+            datos_actuales.update(datos_modificados)
 
-    nombre_plantilla = (
-        datos_payload.get("plantilla") 
-        or datos_actuales.get("plantilla_seleccionada") 
-        or datos_actuales.get("plantilla")
-        or "plantilla_manera2.docx"
-    )
-    
-    ruta_plantilla = resolver_ruta_plantilla(nombre_plantilla)
-    os.makedirs("uploads/generados", exist_ok=True)
-    
-    num_credito = datos_actuales.get("numero_credito") or expediente.numero_credito
-    datos_finales = limpiar_datos_para_plantilla(datos_actuales, num_credito)
-    datos_finales["plantilla_seleccionada"] = nombre_plantilla
+        # Extraemos la plantilla enviada desde el payload o la base de datos
+        nombre_plantilla = (
+            datos_payload.get("plantilla") 
+            or datos_actuales.get("plantilla_seleccionada") 
+            or datos_actuales.get("plantilla")
+            or "plantilla_manera2.docx"
+        )
+        
+        # 🛡️ Usamos el catálogo y la función robusta para resolver la ruta física sin errores
+        ruta_plantilla = resolver_ruta_plantilla(nombre_plantilla)
+        os.makedirs("uploads/generados", exist_ok=True)
+        
+        num_credito = datos_actuales.get("numero_credito") or expediente.numero_credito
+        datos_finales = limpiar_datos_para_plantilla(datos_actuales, num_credito)
+        datos_finales["plantilla_seleccionada"] = nombre_plantilla
 
-    expediente.datos_extraidos = datos_finales
-    expediente.numero_credito = num_credito
-    flag_modified(expediente, "datos_extraidos")
+        expediente.datos_extraidos = datos_finales
+        expediente.numero_credito = num_credito
+        flag_modified(expediente, "datos_extraidos")
 
-    ruta_salida = f"uploads/generados/Cancelacion_{num_credito}.docx"
-    exito = services.generar_word_cancelacion(ruta_plantilla, datos_finales, ruta_salida)
-    
-    if not exito:
-        raise HTTPException(status_code=500, detail="Error al reescribir la plantilla Word")
-    
-    expediente.ruta_word_generado = ruta_salida
-    db.commit()
-    db.refresh(expediente)
-    
-    return FileResponse(
-        path=ruta_salida,
-        filename=f"Cancelacion_{num_credito}.docx",
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
+        ruta_salida = f"uploads/generados/Cancelacion_{num_credito}.docx"
+        exito = services.generar_word_cancelacion(ruta_plantilla, datos_finales, ruta_salida)
+        
+        if not exito or not os.path.exists(ruta_salida):
+            raise HTTPException(status_code=500, detail="Error al reescribir la plantilla Word")
+        
+        expediente.ruta_word_generado = ruta_salida
+        db.commit()
+        db.refresh(expediente)
+        
+        return FileResponse(
+            path=ruta_salida,
+            filename=f"Cancelacion_{num_credito}.docx",
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    except Exception as e:
+        db.rollback()
+        print(f"ERROR EN /generar-word: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/admin/usuarios")

@@ -183,6 +183,18 @@ def me(usuario: dict = Depends(require_user)):
     return {"user": usuario}
 
 
+@router.get("/sesion")
+def estado_sesion(request: Request, db: Session = Depends(get_db)):
+    """
+    Igual que /me, pero responde 200 aunque no haya sesión.
+    Lo usa el frontend al abrir la página para no llenar la consola de errores 401.
+    """
+    try:
+        return {"autenticado": True, "user": obtener_sesion(request, db)}
+    except HTTPException:
+        return {"autenticado": False, "user": None}
+
+
 @router.post("/logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     session_id = request.cookies.get("session_id")

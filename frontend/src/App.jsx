@@ -222,28 +222,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // --- EFECTOS (USEEFFECT) ---
   // ==========================================
 
-  // Validar sesión activa al recargar la página (F5)
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const response = await api.get('/auth/me', { withCredentials: true });
-        if (response.data && response.data.user) {
-          setIsAuthenticated(true);
-          setCurrentUser(response.data.user);
-        } else {
-          setIsAuthenticated(false);
-        }
-      } catch (error) {
-        console.error("Error verificando sesión al recargar:", error);
-        setIsAuthenticated(false);
-        setCurrentUser(null);
-      } finally {
-        setIsCheckingAuth(false);
-      }
-    };
-    checkAuth();
-  }, []);
-
+  // Validar sesión activa al recargar la página (F5), una sola vez
   useEffect(() => {
     verificarSesion();
   }, []);
@@ -301,12 +280,17 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
 
   const verificarSesion = async () => {
     try {
-      const res = await api.get('/auth/me');
-      if (res.data?.user) {
+      // /auth/sesion responde 200 aunque no haya sesión, así la consola no muestra errores
+      const res = await api.get('/auth/sesion');
+      if (res.data?.autenticado && res.data?.user) {
         setCurrentUser(res.data.user);
         setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+        setCurrentUser(null);
       }
     } catch {
+      // Sin conexión con el servidor: se muestra la pantalla de login
       setIsAuthenticated(false);
       setCurrentUser(null);
     } finally {

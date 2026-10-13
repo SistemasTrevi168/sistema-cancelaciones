@@ -1,7 +1,8 @@
 import {
-  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Download, Eye, FileArchive, FileText, FolderPlus, Loader2,
+  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Eye, FileArchive, FolderPlus, Loader2,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
+import IconoArchivo from './IconoArchivo';
 import CamposDatos from './CamposDatos';
 import OpcionesPlantilla from './OpcionesPlantilla';
 import { nombrePlantilla } from '../plantillasCatalogo';
@@ -111,7 +112,7 @@ export default function TabMasivo() {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: '150px', overflowY: 'auto' }}>
             {batchFiles.map((f, i) => (
               <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '6px', backgroundColor: theme.subtleBg, marginBottom: '6px', fontSize: '13px', color: theme.textPrimary }}>
-                <FileText size={14} color={theme.textSecondary} />
+                <IconoArchivo tipo="pdf" size={18} />
                 <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
               </li>
             ))}
@@ -225,7 +226,7 @@ export default function TabMasivo() {
               disabled={descargandoZip}
               style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              {descargandoZip ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={16} />} Descargar Todo (ZIP)
+              {descargandoZip ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="zip" size={20} />} Descargar Todo (ZIP)
             </button>
           </div>
 
@@ -331,7 +332,7 @@ export default function TabMasivo() {
                         disabled={descargandoId === res.expediente_id}
                         style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        {descargandoId === res.expediente_id ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={12} />} DOCX
+                        {descargandoId === res.expediente_id ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={16} />} DOCX
                       </button>
                       {isOpen ? <ChevronUp size={18} color={theme.textSecondary} /> : <ChevronDown size={18} color={theme.textSecondary} />}
                     </div>

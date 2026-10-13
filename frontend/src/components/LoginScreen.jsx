@@ -153,13 +153,13 @@ export default function LoginScreen() {
             <button
               type="submit"
               disabled={isLoggingIn}
-              className="login-boton login-entrada"
-              style={{ animationDelay: '0.32s' }}
+              className={`login-boton login-entrada ${loginUser && loginPassword ? 'listo' : ''} ${isLoggingIn ? 'cargando' : ''}`}
+              style={{ animationDelay: '0.32s', '--fondo-boton': isDarkMode ? '#1e293b' : '#eff6ff' }}
             >
               {isLoggingIn ? (
-                <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Verificando…</>
+                <span className="login-boton-texto"><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Verificando…</span>
               ) : (
-                <>Ingresar <ArrowRight size={18} className="login-boton-flecha" /></>
+                <span className="login-boton-texto">Ingresar <ArrowRight size={18} className="login-boton-flecha" /></span>
               )}
             </button>
           </form>

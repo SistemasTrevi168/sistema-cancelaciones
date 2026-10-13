@@ -1,7 +1,8 @@
 import {
-  AlertTriangle, CheckCircle, Download, Eye, FileText, Loader2, Upload,
+  AlertTriangle, CheckCircle, Eye, FileText, Loader2, Upload,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
+import IconoArchivo from './IconoArchivo';
 import CamposDatos from './CamposDatos';
 import OpcionesPlantilla from './OpcionesPlantilla';
 
@@ -98,7 +99,7 @@ export default function TabIndividual() {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: '150px', overflowY: 'auto' }}>
             {singleFiles.map((f, i) => (
               <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '6px', backgroundColor: theme.subtleBg, marginBottom: '6px', fontSize: '13px', color: theme.textPrimary }}>
-                <FileText size={14} color={theme.textSecondary} />
+                <IconoArchivo tipo="pdf" size={18} />
                 <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
               </li>
             ))}
@@ -178,7 +179,7 @@ export default function TabIndividual() {
               disabled={descargandoId === expedienteId}
               style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              {descargandoId === expedienteId ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={14} />} Descargar Word
+              {descargandoId === expedienteId ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={18} />} Descargar Word
             </button>
           </div>
         </div>

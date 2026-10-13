@@ -2,9 +2,11 @@ import {
   ArrowUpDown, Download, Eye, Filter, History, Loader2, Search,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
+import IconoArchivo from './IconoArchivo';
 
 export default function TabHistorial() {
   const {
+    formatearMonto,
     abrirVistaPrevia,
     selectedPlantilla,
     vistaPrevia,
@@ -137,33 +139,25 @@ export default function TabHistorial() {
                   </button>
 
                   {showExportMenu && (
-                    <div style={{ position: 'absolute', right: 0, top: '110%', backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100, minWidth: '180px', overflow: 'hidden' }}>
-                      <button
-                        onClick={() => handleExport('csv')}
-                        style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                        onMouseOver={(e) => e.target.style.backgroundColor = theme.subtleBg}
-                        onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
-                      >
-                        📊 Excel (.CSV)
-                      </button>
-
-                      <button
-                        onClick={() => handleExport('image')}
-                        style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '13px', cursor: 'pointer', borderTop: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: '8px' }}
-                        onMouseOver={(e) => e.target.style.backgroundColor = theme.subtleBg}
-                        onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
-                      >
-                        🖼️ Imagen (.PNG)
-                      </button>
-
-                      <button
-                        onClick={() => handleExport('print')}
-                        style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '13px', cursor: 'pointer', borderTop: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: '8px' }}
-                        onMouseOver={(e) => e.target.style.backgroundColor = theme.subtleBg}
-                        onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
-                      >
-                        🖨️ Imprimir / PDF
-                      </button>
+                    <div className="menu-exportar" style={{ position: 'absolute', right: 0, top: '110%', backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: '10px', boxShadow: '0 10px 24px rgba(0,0,0,0.15)', zIndex: 100, minWidth: '220px', overflow: 'hidden', padding: '6px' }}>
+                      {[
+                        ['csv', 'csv', 'Excel', '.csv'],
+                        ['word', 'doc', 'Word', '.doc'],
+                        ['txt', 'txt', 'Texto', '.txt'],
+                        ['image', 'png', 'Imagen', '.png'],
+                        ['print', 'pdf', 'Imprimir / PDF', ''],
+                      ].map(([formato, icono, etiqueta, ext]) => (
+                        <button
+                          key={formato}
+                          onClick={() => handleExport(formato)}
+                          className="opcion-exportar"
+                          style={{ width: '100%', textAlign: 'left', padding: '9px 10px', border: 'none', borderRadius: '8px', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+                        >
+                          <IconoArchivo tipo={icono} size={24} />
+                          <span style={{ fontWeight: 600 }}>{etiqueta}</span>
+                          {ext && <span style={{ marginLeft: 'auto', color: theme.textSecondary, fontSize: '12px' }}>{ext}</span>}
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -186,7 +180,9 @@ export default function TabHistorial() {
                       <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textSecondary }}>
                         <th style={{ padding: '12px' }}>Acreditado</th>
                         <th style={{ padding: '12px' }}>No. Crédito</th>
+                        <th style={{ padding: '12px', textAlign: 'right' }}>Monto</th>
                         <th style={{ padding: '12px' }}>Fecha</th>
+                        <th style={{ padding: '12px' }}>Hora</th>
                         <th style={{ padding: '12px', textAlign: 'right' }}>Acciones</th>
                       </tr>
                     </thead>
@@ -198,12 +194,16 @@ export default function TabHistorial() {
                         
                         const parsed = parsearFechaExpediente(item);
                         const fechaStr = parsed ? parsed.fechaTexto : (item.created_at || item.fecha || 'Sin fecha');
+                        const horaStr = parsed ? parsed.horaTexto : (item.hora || '—');
+                        const montoStr = formatearMonto(dExtra.monto_credito || item.monto);
 
                         return (
-                          <tr key={idx} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                          <tr key={idx} className="fila-historial" style={{ borderBottom: `1px solid ${theme.border}` }}>
                             <td style={{ padding: '12px', fontWeight: '600', color: theme.textPrimary }}>{nombre}</td>
                             <td style={{ padding: '12px', color: theme.textSecondary }}>{numCred}</td>
-                            <td style={{ padding: '12px', color: theme.textSecondary }}>{fechaStr}</td>
+                            <td style={{ padding: '12px', color: theme.textPrimary, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{montoStr}</td>
+                            <td style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{fechaStr}</td>
+                            <td style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{horaStr}</td>
                             <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               <button
                                 onClick={() => abrirVistaPrevia({
@@ -224,7 +224,7 @@ export default function TabHistorial() {
                                 disabled={descargandoId === (item.id || item.expediente_id)}
                                 style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, border: `1px solid ${theme.border}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                               >
-                                {descargandoId === (item.id || item.expediente_id) ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={12} />} Descargar DOCX
+                                {descargandoId === (item.id || item.expediente_id) ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={18} />} Descargar
                               </button>
                             </td>
                           </tr>

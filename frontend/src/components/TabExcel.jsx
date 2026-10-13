@@ -1,5 +1,7 @@
 import { FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../AppContext';
+import IconoArchivo from './IconoArchivo';
+import { tipoDeArchivo } from '../tiposArchivo';
 import { avisar } from '../ui/notificaciones';
 
 export default function TabExcel() {
@@ -132,7 +134,7 @@ export default function TabExcel() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: theme.subtleBg, borderRadius: '8px' }}>
             <span style={{ color: theme.textPrimary, fontWeight: '600', fontSize: '14px' }}>
-              Archivo: <strong>{archivoExcel?.name}</strong> ({filasPreview.length} registros - Pág. {paginaActual} de {totalPaginas})
+              <IconoArchivo tipo={tipoDeArchivo(archivoExcel?.name)} size={20} /> Archivo: <strong>{archivoExcel?.name}</strong> ({filasPreview.length} registros - Pág. {paginaActual} de {totalPaginas})
             </span>
             <button
               onClick={() => { setFilasPreview([]); setArchivoExcel(null); setFilasSeleccionadas([]); setPaginaActual(1); }}

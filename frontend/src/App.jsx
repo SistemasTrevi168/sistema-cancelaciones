@@ -42,6 +42,45 @@ export default function App() {
 const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLTERO');
 
   // FUNCIÓN MULTI-FORMATO DE EXPORTACIÓN
+  // Monto con formato de pesos ($250,000.00); si no es número se deja como viene
+  const formatearMonto = (valor) => {
+    if (valor === null || valor === undefined || String(valor).trim() === '' || String(valor).toUpperCase() === 'NO_ENCONTRADO') return '—';
+    const numero = Number(String(valor).replace(/[^0-9.-]/g, ''));
+    if (!Number.isFinite(numero) || String(valor).replace(/[^0-9]/g, '') === '') return String(valor);
+    return numero.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+  };
+
+  // Filas del reporte (las mismas columnas en todos los formatos)
+  const filasReporte = () => filteredHistorial.map((item, index) => {
+    const dExtra = item.datos_extraidos || {};
+    const p = parsearFechaExpediente(item);
+    return {
+      numero: index + 1,
+      propietario: item.usuario_propietario || item.usuario || 'N/A',
+      acreditado: dExtra.nombre_acreditado || dExtra.acreditado || item.acreditado || 'N/A',
+      credito: dExtra.numero_credito || item.numero_credito || 'N/A',
+      monto: formatearMonto(dExtra.monto_credito || item.monto),
+      fecha: p ? p.fechaTexto : (item.fecha || 'N/A'),
+      hora: p ? p.horaTexto : (item.hora || ''),
+    };
+  });
+  const COLUMNAS_REPORTE = [
+    ['numero', '#'], ['propietario', 'Propietario'], ['acreditado', 'Acreditado'], ['credito', 'No. Crédito'],
+    ['monto', 'Monto'], ['fecha', 'Fecha'], ['hora', 'Hora'],
+  ];
+
+  const descargarBlob = (contenido, tipo, nombre) => {
+    const blob = new Blob([contenido], { type: tipo });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', nombre);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleExport = async (format) => {
     setShowExportMenu(false);
 
@@ -52,59 +91,57 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
 
     const now = new Date();
     const fechaEmision = now.toLocaleDateString('es-MX') + ' ' + now.toLocaleTimeString('es-MX');
+    const nombreBase = `Reporte_Expedientes_${now.toISOString().slice(0, 10)}`;
+    const filas = filasReporte();
+    const escaparHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    // 1. EXPORTAR A CSV / EXCEL
-    if (format === 'csv') {
-      try {
- let csvLines = [];
-        csvLines.push("\uFEFFREPORTE DE HISTORIAL DE EXPEDIENTES");
-        csvLines.push(`Fecha de Emisión:,${fechaEmision}`);
-        csvLines.push(`Total de Registros:,${filteredHistorial.length}`);
-        csvLines.push("");
-        
-        // 1. CABECERA: 5 columnas exactas
-        csvLines.push("#,Propietario,Acreditado,No. Credito,Fecha");
-
-        // 2. FILAS: 5 valores exactos correspondientes
-        filteredHistorial.forEach((item, index) => {
-          const dExtra = item.datos_extraidos || {};
-          
-          const prop = item.usuario_propietario || item.usuario || 'N/A';
-
-          const nom = 
-            dExtra.acreditado || 
-            dExtra.nombre_acreditado || 
-            dExtra.nombre || 
-            dExtra.titular || 
-            item.nombre_acreditado || 
-            'N/A';
-
-          const num = dExtra.numero_credito || item.numero_credito || 'N/A';
-          const p = parsearFechaExpediente(item);
-          const fec = p ? p.fechaTexto : (item.created_at || item.fecha || 'N/A');
-
-          // Formato idéntico a las cabeceras
-          csvLines.push(`${index + 1},"${prop}","${nom.replace(/"/g, '""')}","${num}","${fec}"`);
-        });
-
-        const csvContent = csvLines.join("\n");
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', `Reporte_Expedientes_${now.toISOString().slice(0, 10)}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        avisar.error("Error al generar CSV: " + err.message);
+    try {
+      // 1. EXCEL (.CSV)
+      if (format === 'csv') {
+        const celda = (v) => `"${String(v).replace(/"/g, '""')}"`;
+        const lineas = [
+          '\uFEFFREPORTE DE HISTORIAL DE EXPEDIENTES',
+          `Fecha de Emisión:,${celda(fechaEmision)}`,
+          `Total de Registros:,${filas.length}`,
+          '',
+          COLUMNAS_REPORTE.map(([, t]) => celda(t)).join(','),
+          ...filas.map((f) => COLUMNAS_REPORTE.map(([k]) => celda(f[k])).join(',')),
+        ];
+        descargarBlob(lineas.join('\n'), 'text/csv;charset=utf-8;', `${nombreBase}.csv`);
+        avisar.exito('Reporte de Excel descargado.');
       }
-    }
 
-    // 2. EXPORTAR A IMAGEN (PNG)
-    if (format === 'image') {
-      try {
+      // 2. WORD (.DOC) — Word abre directamente esta tabla
+      if (format === 'word') {
+        const encabezado = COLUMNAS_REPORTE.map(([, t]) => `<th>${escaparHtml(t)}</th>`).join('');
+        const cuerpo = filas.map((f) => `<tr>${COLUMNAS_REPORTE.map(([k]) => `<td>${escaparHtml(f[k])}</td>`).join('')}</tr>`).join('');
+        const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>Reporte</title>
+<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt}h1{font-size:16pt;color:#1e3a8a}table{border-collapse:collapse;width:100%}th{background:#1e3a8a;color:#fff;padding:6px;text-align:left}td{border-bottom:1px solid #cbd5e1;padding:5px}</style></head>
+<body><h1>Reporte de Historial de Expedientes</h1><p>Fecha de emisión: ${escaparHtml(fechaEmision)}<br>Total de registros: ${filas.length}</p>
+<table><thead><tr>${encabezado}</tr></thead><tbody>${cuerpo}</tbody></table></body></html>`;
+        descargarBlob('\uFEFF' + html, 'application/msword', `${nombreBase}.doc`);
+        avisar.exito('Reporte de Word descargado.');
+      }
+
+      // 3. TEXTO (.TXT) — columnas alineadas
+      if (format === 'txt') {
+        const anchos = COLUMNAS_REPORTE.map(([k, t]) => Math.max(t.length, ...filas.map((f) => String(f[k]).length)));
+        const linea = (vals) => vals.map((v, i) => String(v).padEnd(anchos[i])).join('  ');
+        const texto = [
+          'REPORTE DE HISTORIAL DE EXPEDIENTES',
+          `Fecha de emisión: ${fechaEmision}`,
+          `Total de registros: ${filas.length}`,
+          '',
+          linea(COLUMNAS_REPORTE.map(([, t]) => t)),
+          anchos.map((a) => '-'.repeat(a)).join('  '),
+          ...filas.map((f) => linea(COLUMNAS_REPORTE.map(([k]) => f[k]))),
+        ].join('\r\n');
+        descargarBlob('\uFEFF' + texto, 'text/plain;charset=utf-8', `${nombreBase}.txt`);
+        avisar.exito('Reporte de texto descargado.');
+      }
+
+      // 4. IMAGEN (.PNG)
+      if (format === 'image') {
         const html2canvas = (await import('html2canvas')).default;
         const element = document.getElementById('tabla-historial-export');
         if (!element) {
@@ -113,19 +150,21 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         }
         const canvas = await html2canvas(element, { scale: 2 });
         const link = document.createElement('a');
-        link.download = `Reporte_Expedientes_${now.toISOString().slice(0, 10)}.png`;
+        link.download = `${nombreBase}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
-      } catch (err) {
-        avisar.error("Para exportar a imagen, instala html2canvas con: npm install html2canvas");
+        avisar.exito('Imagen del reporte descargada.');
       }
-    }
 
-    // 3. IMPRIMIR / PDF
-    if (format === 'print') {
-      window.print();
+      // 5. IMPRIMIR / PDF
+      if (format === 'print') {
+        window.print();
+      }
+    } catch (err) {
+      avisar.error('No se pudo generar el reporte: ' + err.message);
     }
   };
+;
 
  // --- 1. ESTADOS DE TEMA Y SESIÓN ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -133,6 +172,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   // Pantalla de bienvenida después de iniciar sesión: null o { nombre, saliendo }
   const [bienvenida, setBienvenida] = useState(null);
+  const [animarEntrada, setAnimarEntrada] = useState(false);
 
   // --- 2. ESTADOS DE AUTENTICACIÓN / LOGIN ---
   const [loginUser, setLoginUser] = useState('');
@@ -475,8 +515,12 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         crearGuardiaHistorial();
         // Presentación de bienvenida (se va sola)
         setBienvenida({ nombre: res.data.user?.username, saliendo: false });
-        setTimeout(() => setBienvenida((b) => (b ? { ...b, saliendo: true } : b)), 1700);
+        setTimeout(() => {
+          setBienvenida((b) => (b ? { ...b, saliendo: true } : b));
+          setAnimarEntrada(true); // el sistema entra mientras se desvanece la bienvenida
+        }, 1700);
         setTimeout(() => setBienvenida(null), 2100);
+        setTimeout(() => setAnimarEntrada(false), 3000);
         setLoginPassword('');
         setSingleFiles([]);
         setDatos(null);
@@ -1224,13 +1268,16 @@ const handleExcelSubmit = async (e) => {
 
  // HELPER: Extrae Año, Mes (0-11) y Día de cualquier tipo de fecha/string
 const parsearFechaExpediente = (item) => {
-  const rawDate = item.created_at || item.createdAt || item.fecha || item.fecha_creacion;
+  // fecha_creacion trae zona horaria: se convierte a la hora local (México) correctamente.
+  // "fecha" viene ya formateada por el servidor en hora UTC, por eso queda como respaldo.
+  const rawDate = item.fecha_creacion || item.created_at || item.createdAt || item.fecha;
   if (!rawDate) return null;
 
   let year = null, month = null, day = null, horaStr = '00:00';
+  const esISO = typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(rawDate);
 
   // Caso 1: String en formato "DD-MM-YYYY" o "DD/MM/YYYY" (ej. "15-09-2026")
-  if (typeof rawDate === 'string' && (rawDate.includes('-') || rawDate.includes('/'))) {
+  if (!esISO && typeof rawDate === 'string' && (rawDate.includes('-') || rawDate.includes('/'))) {
     const separador = rawDate.includes('-') ? '-' : '/';
     const partes = rawDate.split(' ')[0].split(separador); // Separa fecha de hora si existe
     
@@ -1259,7 +1306,7 @@ const parsearFechaExpediente = (item) => {
       day = d.getDate();
       month = d.getMonth();
       year = d.getFullYear();
-      horaStr = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true });
+      horaStr = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }).replace(/\s+/g, ' ');
     }
   }
 
@@ -1342,6 +1389,7 @@ const filteredHistorial = (historial || []).filter((item) => {
 
   // Todo lo que las pantallas (components/) necesitan leer del estado de App
   const ctx = {
+    formatearMonto,
     abrirVistaPrevia,
     batchPreviewIndex: vistaPrevia?.origen === 'batch' ? vistaPrevia.index : null,
     cerrarVistaPrevia,
@@ -1485,7 +1533,7 @@ const filteredHistorial = (historial || []).filter((item) => {
       ) : !isAuthenticated ? (
         <LoginScreen />
       ) : (
-        <div className="fade-in layout-app" style={{ 
+        <div className={`layout-app ${bienvenida && !bienvenida.saliendo ? 'esperando-entrada' : ''} ${animarEntrada ? 'entrada-sistema' : 'fade-in'}`} style={{ 
           display: 'flex',
           minHeight: '100vh',
           width: '100%',

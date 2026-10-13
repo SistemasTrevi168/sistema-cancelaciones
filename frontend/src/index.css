@@ -534,10 +534,45 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
 }
 
 /* =====================================================================
+   ENTRADA AL SISTEMA (después de la bienvenida)
+   ===================================================================== */
+.esperando-entrada {
+  opacity: 0;
+}
+.entrada-sistema .barra-lateral {
+  animation: entrarIzquierdaSuave 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.entrada-sistema .barra-lateral-nav > button {
+  animation: subirAparecer 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.entrada-sistema .barra-lateral-nav > button:nth-of-type(1) { animation-delay: 0.15s; }
+.entrada-sistema .barra-lateral-nav > button:nth-of-type(2) { animation-delay: 0.2s; }
+.entrada-sistema .barra-lateral-nav > button:nth-of-type(3) { animation-delay: 0.25s; }
+.entrada-sistema .barra-lateral-nav > button:nth-of-type(4) { animation-delay: 0.3s; }
+.entrada-sistema .barra-lateral-nav > button:nth-of-type(5) { animation-delay: 0.35s; }
+.entrada-sistema .barra-lateral-nav > button:nth-of-type(6) { animation-delay: 0.4s; }
+.entrada-sistema .nav-indicador {
+  animation: aparecerFondo 0.4s ease 0.45s both;
+}
+.entrada-sistema .tarjeta-principal {
+  animation: entradaTarjeta 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+@keyframes entrarIzquierdaSuave {
+  from { opacity: 0; transform: translateX(-32px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes entradaTarjeta {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* =====================================================================
    LOGIN
    ===================================================================== */
 .login-pantalla {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
 }
@@ -547,7 +582,7 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 56px;
+  padding: clamp(28px, 6vh, 56px) 56px;
   color: #fff;
   background: linear-gradient(140deg, #1e3a8a 0%, #1d4ed8 45%, #2563eb 75%, #0ea5e9 100%);
 }
@@ -636,7 +671,8 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 24px;
+  padding: 24px;
+  overflow-y: auto;
 }
 .login-tema {
   position: absolute;
@@ -717,27 +753,56 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   80% { transform: translateX(3px); }
 }
 .login-boton {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
   padding: 15px;
-  border: none;
+  border: 2px solid #2563eb;
   border-radius: 12px;
   font-size: 15px;
   font-weight: 700;
-  color: #fff;
+  color: #2563eb;
   cursor: pointer;
-  background: linear-gradient(135deg, #1d4ed8, #2563eb 50%, #3b82f6);
-  background-size: 200% 100%;
-  box-shadow: 0 10px 24px -10px rgba(37, 99, 235, 0.8);
-  transition: background-position 0.4s ease, box-shadow 0.25s ease, transform 0.1s ease;
+  background: var(--fondo-boton, #eff6ff);
+  transition: color 0.35s ease, box-shadow 0.35s ease, transform 0.1s ease;
 }
-.login-boton:not(:disabled):hover {
-  background-position: 100% 0;
-  box-shadow: 0 14px 28px -10px rgba(37, 99, 235, 0.9);
+/* Barrido azul de izquierda a derecha */
+.login-boton::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, #1d4ed8, #2563eb 60%, #3b82f6);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.login-boton:not(:disabled):hover::before,
+.login-boton:focus-visible::before,
+.login-boton.listo::before,
+.login-boton.cargando::before {
+  transform: scaleX(1);
+}
+.login-boton:not(:disabled):hover,
+.login-boton:focus-visible,
+.login-boton.listo,
+.login-boton.cargando {
+  color: #fff;
+  box-shadow: 0 12px 26px -10px rgba(37, 99, 235, 0.85);
   filter: none;
+}
+.login-boton.cargando:disabled {
+  opacity: 1 !important;
+  cursor: wait !important;
+}
+.login-boton-texto {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 .login-boton-flecha {
   transition: transform 0.25s ease;
@@ -748,6 +813,23 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
 .login-entrada {
   animation: subirAparecer 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+/* Pantallas bajas (laptops): todo cabe sin hacer scroll */
+@media (max-height: 760px) {
+  .login-logo { width: 46px; height: 46px; margin-bottom: 18px; }
+  .login-marca h1 { font-size: 30px !important; margin-bottom: 10px !important; }
+  .login-subtitulo { margin-bottom: 22px !important; font-size: 15px; }
+  .login-beneficios { gap: 10px; }
+  .login-beneficios li { padding: 10px 14px; }
+  .login-tarjeta { padding: 28px 30px; }
+  .login-tarjeta h2 { font-size: 24px !important; }
+  .login-pie { bottom: 14px; }
+}
+@media (max-height: 620px) {
+  .login-beneficios span { display: none; }
+  .login-subtitulo { display: none; }
+  .login-tarjeta { padding: 22px 26px; }
+}
+
 @media (max-width: 900px) {
   .login-pantalla {
     grid-template-columns: 1fr;
@@ -761,6 +843,28 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   .login-tarjeta {
     padding: 32px 24px;
   }
+}
+
+/* Tabla del historial y menú de exportación */
+.fila-historial {
+  transition: background-color 0.15s ease;
+}
+.fila-historial:hover {
+  background-color: rgba(148, 163, 184, 0.1);
+}
+.menu-exportar {
+  animation: avisoEntrada 0.18s ease-out both;
+  transform-origin: top right;
+}
+.opcion-exportar:not(:disabled):hover {
+  filter: none;
+  background-color: rgba(148, 163, 184, 0.14) !important;
+}
+.opcion-exportar svg {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.opcion-exportar:hover svg {
+  transform: scale(1.12) rotate(-4deg);
 }
 
 /* =====================================================================

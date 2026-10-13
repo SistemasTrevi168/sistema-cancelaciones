@@ -1,8 +1,11 @@
-import { Loader2, Plus, Trash2, Users } from 'lucide-react';
+import { KeyRound, Loader2, Plus, Power, Trash2, Users } from 'lucide-react';
 import { useApp } from '../AppContext';
 
 export default function TabUsuarios() {
   const {
+    currentUser,
+    handleCambiarActivo,
+    setModalPassword,
     handleCrearUsuario,
     handleEliminarUsuario,
     loadingUsuarios,
@@ -75,28 +78,47 @@ export default function TabUsuarios() {
                       <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textSecondary }}>
                         <th style={{ padding: '10px' }}>Usuario</th>
                         <th style={{ padding: '10px' }}>Rol</th>
+                        <th style={{ padding: '10px' }}>Estado</th>
                         <th style={{ padding: '10px', textAlign: 'right' }}>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {usuariosLista.map((u) => {
                         const esUsuarioAdmin = u.es_admin || u.role === 'admin' || u.username === 'admin';
+                        const esYo = u.username === currentUser?.username;
+                        const activo = u.activo !== false;
+                        const btnIcono = { backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '6px' };
                         return (
-                          <tr key={u.id} style={{ borderBottom: `1px solid ${theme.border}` }}>
-                            <td style={{ padding: '10px', fontWeight: '600', color: theme.textPrimary }}>{u.username}</td>
+                          <tr key={u.id} style={{ borderBottom: `1px solid ${theme.border}`, opacity: activo ? 1 : 0.6 }}>
+                            <td style={{ padding: '10px', fontWeight: '600', color: theme.textPrimary }}>{u.username}{esYo && <span style={{ fontWeight: 'normal', color: theme.textSecondary }}> (tú)</span>}</td>
                             <td style={{ padding: '10px', color: theme.textSecondary }}>{esUsuarioAdmin ? 'Administrador' : 'Operador'}</td>
-                            <td style={{ padding: '10px', textAlign: 'right' }}>
+                            <td style={{ padding: '10px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '999px', backgroundColor: activo ? '#dcfce7' : '#f1f5f9', color: activo ? '#166534' : '#475569' }}>
+                                {activo ? 'Activo' : 'Inactivo'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              {!esYo && (
+                                <button type="button" onClick={() => setModalPassword({ modo: 'reset', usuario: u })} style={{ ...btnIcono, color: theme.accent }} title="Asignar nueva contraseña">
+                                  <KeyRound size={16} />
+                                </button>
+                              )}
+                              {!esUsuarioAdmin && !esYo && (
+                                <button type="button" onClick={() => handleCambiarActivo(u)} style={{ ...btnIcono, color: activo ? '#d97706' : '#16a34a' }} title={activo ? 'Desactivar usuario' : 'Activar usuario'}>
+                                  <Power size={16} />
+                                </button>
+                              )}
                               {!esUsuarioAdmin ? (
                                 <button
                                   type="button"
                                   onClick={(e) => handleEliminarUsuario(e, u.id)}
-                                  style={{ backgroundColor: 'transparent', color: '#ef4444', border: 'none', cursor: 'pointer', padding: '6px' }}
+                                  style={{ ...btnIcono, color: '#ef4444' }}
                                   title="Eliminar usuario"
                                 >
                                   <Trash2 size={16} />
                                 </button>
                               ) : (
-                                <span style={{ fontSize: '11px', color: theme.textSecondary, fontStyle: 'italic' }}>Protegido</span>
+                                esYo && <span style={{ fontSize: '11px', color: theme.textSecondary, fontStyle: 'italic' }}>Protegido</span>
                               )}
                             </td>
                           </tr>

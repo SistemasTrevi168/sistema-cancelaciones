@@ -1,11 +1,11 @@
 import {
-  Edit3, FileSpreadsheet, FileText, FolderPlus, History, LogOut, Moon, Sun,
-  Users,
+  Edit3, FileSpreadsheet, FileText, FolderPlus, History, KeyRound, LogOut, Moon, Sun, Users,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 
 export default function Sidebar() {
   const {
+    setModalPassword,
     activeTab,
     currentUser,
     esAdmin,
@@ -239,6 +239,14 @@ export default function Sidebar() {
                   {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
                 </button>
               </div>
+
+              <button
+                onClick={() => setModalPassword({ modo: 'propio' })}
+                className="pulse-hover"
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: theme.subtleBg, color: theme.textPrimary, border: `1px solid ${theme.border}`, padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '13px', marginBottom: '8px' }}
+              >
+                <KeyRound size={16} /> Cambiar contraseña
+              </button>
 
               <button
                 onClick={() => setShowLogoutModal(true)}

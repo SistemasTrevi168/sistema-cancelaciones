@@ -34,6 +34,25 @@ def _a_utc(fecha: datetime) -> datetime:
     return fecha
 
 
+LONGITUD_MINIMA_PASSWORD = 6
+
+
+def validar_password_nueva(password: str):
+    """Reglas mínimas para una contraseña nueva."""
+    if not password or len(password) < LONGITUD_MINIMA_PASSWORD:
+        raise HTTPException(status_code=400, detail=f"La contraseña debe tener al menos {LONGITUD_MINIMA_PASSWORD} caracteres.")
+    if len(password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="La contraseña es demasiado larga (máximo 72 caracteres).")
+
+
+def cerrar_sesiones_de(db: Session, username: str, excepto: str = None):
+    """Cierra todas las sesiones abiertas de un usuario (opcionalmente menos una)."""
+    q = db.query(Sesion).filter(Sesion.username == username)
+    if excepto:
+        q = q.filter(Sesion.id != excepto)
+    q.delete(synchronize_session=False)
+
+
 def comprobar_password(user: Usuario, password: str, db: Session) -> bool:
     """
     Verifica la contraseña contra el hash bcrypt.
@@ -64,6 +83,11 @@ class LoginRequest(BaseModel):
 
 class VerifyPasswordRequest(BaseModel):
     password: str
+
+
+class CambiarPasswordRequest(BaseModel):
+    password_actual: str
+    password_nueva: str
 
 
 # --- SEMILLERO: CREAR USUARIOS INICIALES SI LA TABLA ESTÁ VACÍA ---
@@ -97,8 +121,8 @@ def obtener_sesion(request: Request, db: Session) -> dict:
         raise HTTPException(status_code=401, detail="Sesión no válida o expirada")
 
     user = db.query(Usuario).filter(Usuario.username == sesion.username).first()
-    if not user:
-        # El usuario fue eliminado: la sesión deja de valer
+    if not user or getattr(user, "activo", True) is False:
+        # El usuario fue eliminado o desactivado: la sesión deja de valer
         db.delete(sesion)
         db.commit()
         raise HTTPException(status_code=401, detail="Sesión no válida o expirada")
@@ -134,13 +158,14 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
     # Inserta el usuario admin por defecto si la tabla está vacía
     inicializar_usuarios_default(db)
 
-    query = db.query(Usuario).filter(Usuario.username == data.username)
-    if hasattr(Usuario, "activo"):
-        query = query.filter(Usuario.activo == True)
-    user = query.first()
+    user = db.query(Usuario).filter(Usuario.username == data.username).first()
 
     if not user or not comprobar_password(user, data.password, db):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+
+    # Solo se avisa que está desactivado si la contraseña era correcta
+    if getattr(user, "activo", True) is False:
+        raise HTTPException(status_code=403, detail="Tu usuario está desactivado. Contacta al administrador.")
 
     es_administrador = bool(getattr(user, "es_admin", False)) or getattr(user, "role", "") == "admin"
     rol_nombre = "admin" if es_administrador else getattr(user, "role", "operador")
@@ -217,3 +242,26 @@ def verify_password_endpoint(
         raise HTTPException(status_code=400, detail="Contraseña incorrecta")
 
     return {"status": "autorizado"}
+
+
+@router.post("/cambiar-password")
+def cambiar_password(
+    data: CambiarPasswordRequest,
+    request: Request,
+    usuario: dict = Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    """El usuario cambia su propia contraseña (debe escribir la actual)."""
+    user_db = db.query(Usuario).filter(Usuario.username == usuario["username"]).first()
+    if not user_db or not comprobar_password(user_db, data.password_actual, db):
+        raise HTTPException(status_code=400, detail="La contraseña actual no es correcta.")
+
+    validar_password_nueva(data.password_nueva)
+    if data.password_nueva == data.password_actual:
+        raise HTTPException(status_code=400, detail="La contraseña nueva debe ser diferente a la actual.")
+
+    user_db.password_hash = hash_password(data.password_nueva)
+    # Por seguridad se cierran sus otras sesiones abiertas (otras computadoras)
+    cerrar_sesiones_de(db, user_db.username, excepto=request.cookies.get("session_id"))
+    db.commit()
+    return {"status": "exito", "mensaje": "Contraseña actualizada correctamente."}

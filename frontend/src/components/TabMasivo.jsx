@@ -1,11 +1,13 @@
 import {
-  CheckCircle, ChevronDown, ChevronUp, Download, Eye, FileArchive, FileText, FolderPlus,
-  Loader2, Lock, Unlock,
+  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Download, Eye, FileArchive, FileText, FolderPlus, Loader2, Lock, Unlock,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 
 export default function TabMasivo() {
   const {
+    etiquetaCampo,
+    faltantesPara,
+    selectedPlantilla,
     actualizarVistaPreviaMasivaTiempoReal,
     batchFiles,
     batchLoading,
@@ -297,6 +299,7 @@ export default function TabMasivo() {
               const acreditadoNombre = datosExtraidos.acreditado || datosExtraidos.nombre_acreditado || 'Acreditado no identificado';
               const isPreviewingThis = batchPreviewIndex === idx;
               const isSelected = selectedBatchIndices.includes(idx);
+              const faltanItem = faltantesPara(datosExtraidos, res.plantilla_seleccionada || datosExtraidos.plantilla_seleccionada || selectedPlantilla);
 
               return (
                 <div key={idx} style={{ border: `1px solid ${isPreviewingThis ? theme.accent : theme.border}`, borderRadius: '10px', overflow: 'hidden', transition: 'border-color 0.2s ease' }}>
@@ -315,10 +318,17 @@ export default function TabMasivo() {
                         onClick={(e) => e.stopPropagation()}
                         style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: theme.accent }}
                       />
-                      <CheckCircle size={18} color="#10b981" />
+                      {faltanItem.length > 0
+                        ? <AlertTriangle size={18} color="#d97706" />
+                        : <CheckCircle size={18} color="#10b981" />}
                       <span style={{ fontWeight: '600', fontSize: '14px', color: theme.textPrimary }}>
                         {acreditadoNombre}
                       </span>
+                      {faltanItem.length > 0 && (
+                        <span title={`Faltan: ${faltanItem.map(etiquetaCampo).join(', ')}`} style={{ fontSize: '11px', fontWeight: '600', color: '#92400e', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px', border: '1px solid #fcd34d' }}>
+                          ⚠ Faltan {faltanItem.length} dato(s)
+                        </span>
+                      )}
                       {datosExtraidos.numero_credito && (
                         <span style={{ fontSize: '12px', color: theme.textSecondary, backgroundColor: theme.cardBg, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${theme.border}` }}>
                           Crédito: {datosExtraidos.numero_credito}

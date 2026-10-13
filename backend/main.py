@@ -5,12 +5,13 @@ import re
 import pathlib
 import uuid
 from typing import Optional, Dict, Any, List
-from fastapi import FastAPI, UploadFile, BackgroundTasks, File, Form, Depends, HTTPException, Body, Query, Header
+from fastapi import FastAPI, UploadFile, BackgroundTasks, File, Form, Depends, HTTPException, Body, Query, Header, Request
+from pydantic import BaseModel
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 import pandas as pd
 
@@ -24,6 +25,14 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Crear las tablas en PostgreSQL automáticamente al arrancar
 models.Base.metadata.create_all(bind=engine)
+
+# create_all no agrega columnas nuevas a tablas que ya existen: se agregan aquí
+# (es seguro correrlo en cada arranque gracias a IF NOT EXISTS)
+try:
+    with engine.begin() as _conn:
+        _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE"))
+except Exception as _e:
+    print(f"Aviso al actualizar la tabla usuarios: {_e}")
 
 app = FastAPI(title="Sistema de Cancelaciones de Hipotecas")
 
@@ -692,6 +701,44 @@ def obtener_lista_plantillas(usuario: dict = Depends(require_user)):
     return {"plantillas": sorted(archivos)}
 
 
+# --- CAMPOS QUE USA CADA PLANTILLA (para avisar qué datos faltan antes de generar) ---
+# Variables de las plantillas que corresponden a datos que el usuario puede capturar/editar
+CAMPOS_EDITABLES = {
+    "nombre_acreditado", "monto_credito", "numero_credito", "oficina_registral", "numero_carta",
+    "entidad_financiera", "fecha_liquidacion", "folio_real", "datos_inmueble", "fecha_expedicion",
+    "credito_a_salario", "numero_escritura", "fecha_escritura", "notario_origen_completo",
+}
+ALIAS_VARIABLES = {"crédito_a_salario": "credito_a_salario"}
+_cache_campos: Dict[str, Any] = {}
+
+
+def campos_de_plantilla(ruta: str) -> Optional[List[str]]:
+    """Regresa los datos que usa una plantilla .docx (None si no se puede leer)."""
+    try:
+        clave = (ruta, os.path.getmtime(ruta))
+        if clave not in _cache_campos:
+            from docxtpl import DocxTemplate
+            variables = DocxTemplate(ruta).get_undeclared_template_variables()
+            campos = {ALIAS_VARIABLES.get(v, v) for v in variables}
+            _cache_campos[clave] = sorted(c for c in campos if c in CAMPOS_EDITABLES)
+        return _cache_campos[clave]
+    except Exception as e:
+        print(f"No se pudieron leer los campos de {ruta}: {e}")
+        return None
+
+
+@app.get("/api/plantillas/campos")
+def obtener_campos_plantillas(usuario: dict = Depends(require_user)):
+    os.makedirs(TEMPLATES_DIR, exist_ok=True)
+    resultado = {}
+    for f in sorted(os.listdir(TEMPLATES_DIR)):
+        if f.endswith(".docx") and not f.startswith("~$"):
+            campos = campos_de_plantilla(os.path.join(TEMPLATES_DIR, f))
+            if campos is not None:
+                resultado[f[:-5]] = campos
+    return {"campos": resultado}
+
+
 @app.get("/api/expedientes")
 def obtener_historial(
     usuario: Optional[str] = Query(None),
@@ -1022,7 +1069,8 @@ def obtener_usuarios(db: Session = Depends(get_db), admin: dict = Depends(requir
             "id": str(u.id),
             "username": u.username,
             "es_admin": u.es_admin,
-            "creado_en": u.creado_en.isoformat() if hasattr(u, "creado_en") and u.creado_en else None
+            "creado_en": u.creado_en.isoformat() if hasattr(u, "creado_en") and u.creado_en else None,
+            "activo": bool(getattr(u, "activo", True)),
         }
         for u in usuarios
     ]
@@ -1039,7 +1087,8 @@ def crear_usuario_admin(
     usuario_existente = db.query(models.Usuario).filter(models.Usuario.username == username).first()
     if usuario_existente:
         raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
-    
+
+    auth.validar_password_nueva(password)
     pass_hash = auth.hash_password(password)
     
     nuevo_usuario = models.Usuario(
@@ -1082,12 +1131,71 @@ def eliminar_usuario(
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail=f"No se puede eliminar a {nombre_usuario} porque tiene expedientes registrados."
+            detail=f"No se puede eliminar a {nombre_usuario} porque tiene expedientes registrados. Puedes desactivarlo para quitarle el acceso."
         )
     except Exception as e:
         db.rollback()
         print(f"ERROR al eliminar usuario: {e}")
         raise HTTPException(status_code=500, detail="Error al eliminar usuario.")
+
+
+class ResetPasswordRequest(BaseModel):
+    password_nueva: str
+
+
+class CambiarActivoRequest(BaseModel):
+    activo: bool
+
+
+def _buscar_usuario(db: Session, usuario_id: str) -> models.Usuario:
+    try:
+        uuid_usuario = uuid.UUID(str(usuario_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de usuario inválido")
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == uuid_usuario).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return usuario
+
+
+@app.post("/api/admin/usuarios/{usuario_id}/password")
+def restablecer_password(
+    usuario_id: str,
+    data: ResetPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """El admin asigna una contraseña nueva a cualquier usuario."""
+    usuario = _buscar_usuario(db, usuario_id)
+    auth.validar_password_nueva(data.password_nueva)
+    usuario.password_hash = auth.hash_password(data.password_nueva)
+    # Se cierran las sesiones abiertas de ese usuario (menos la del admin que hace el cambio)
+    auth.cerrar_sesiones_de(db, usuario.username, excepto=request.cookies.get("session_id"))
+    db.commit()
+    return {"status": "exito", "mensaje": f"Contraseña de {usuario.username} actualizada."}
+
+
+@app.put("/api/admin/usuarios/{usuario_id}/activo")
+def cambiar_estado_usuario(
+    usuario_id: str,
+    data: CambiarActivoRequest,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Activa o desactiva a un usuario. Uno desactivado no puede entrar, pero se conserva su historial."""
+    usuario = _buscar_usuario(db, usuario_id)
+    if usuario.username == admin["username"]:
+        raise HTTPException(status_code=400, detail="No puedes desactivar tu propio usuario.")
+    if not data.activo and (usuario.es_admin or usuario.username.lower() == "admin"):
+        raise HTTPException(status_code=400, detail="No se puede desactivar a un administrador.")
+
+    usuario.activo = data.activo
+    if not data.activo:
+        auth.cerrar_sesiones_de(db, usuario.username)
+    db.commit()
+    estado = "activado" if data.activo else "desactivado"
+    return {"status": "exito", "mensaje": f"Usuario {usuario.username} {estado}.", "activo": usuario.activo}
 
 
 @app.post("/api/admin/plantilla")

@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, Boolean, DateTime, JSON, ForeignKey, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 from database import Base
 
 class Usuario(Base):
@@ -11,6 +11,8 @@ class Usuario(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     es_admin = Column(Boolean, default=False)
+    # Un usuario desactivado no puede iniciar sesión, pero se conserva su historial
+    activo = Column(Boolean, nullable=False, default=True, server_default=text("true"))
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
 
 class Expediente(Base):

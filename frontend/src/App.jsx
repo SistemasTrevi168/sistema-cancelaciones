@@ -4,6 +4,8 @@ import { api, API_BASE } from './api';
 import { AppContext } from './AppContext';
 import LoginScreen from './components/LoginScreen';
 import LogoutModal from './components/LogoutModal';
+import ModalPassword from './components/ModalPassword';
+import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla } from './datosFaltantes';
 import Sidebar from './components/Sidebar';
 import TabExcel from './components/TabExcel';
 import TabHistorial from './components/TabHistorial';
@@ -127,6 +129,10 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  // Ventana de contraseña: null, { modo: 'propio' } o { modo: 'reset', usuario }
+  const [modalPassword, setModalPassword] = useState(null);
+  // Campos que usa cada plantilla (para avisar qué datos faltan)
+  const [camposPorPlantilla, setCamposPorPlantilla] = useState({});
 
   // --- 3. NAVEGACIÓN Y TABS ---
   const [activeTab, setActiveTab] = useState('single');
@@ -194,7 +200,10 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     folio_real: '',
     datos_inmueble: '',
     fecha_expedicion: '',
-    credito_a_salario: ''
+    credito_a_salario: '',
+    numero_escritura: '',
+    fecha_escritura: '',
+    notario_origen_completo: ''
   });
 
   // --- 11. ESTADOS - Paginación ---
@@ -226,6 +235,17 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   useEffect(() => {
     verificarSesion();
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    api.get('/plantillas/campos')
+      .then((res) => setCamposPorPlantilla(res.data?.campos || {}))
+      .catch(() => setCamposPorPlantilla({})); // si falla, se usa la lista básica
+  }, [isAuthenticated]);
+
+  // Datos vacíos que sí usa la plantilla indicada
+  const faltantesPara = (datosRevisar, plantilla) =>
+    camposFaltantes(datosRevisar || {}, camposPorPlantilla[normalizarPlantilla(plantilla)]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -615,6 +635,32 @@ const handlePreviewExcel = async (file) => {
     }
   };
 
+  // --- Contraseñas y estado de usuarios ---
+  const handleGuardarPassword = async (actual, nueva) => {
+    if (modalPassword?.modo === 'reset') {
+      await api.post(`/admin/usuarios/${modalPassword.usuario.id}/password`, { password_nueva: nueva });
+      alert(`Contraseña de ${modalPassword.usuario.username} actualizada. Sus sesiones abiertas se cerraron.`);
+    } else {
+      await api.post('/auth/cambiar-password', { password_actual: actual, password_nueva: nueva });
+      alert('Tu contraseña se actualizó correctamente.');
+    }
+    setModalPassword(null);
+  };
+
+  const handleCambiarActivo = async (usuario) => {
+    const activar = usuario.activo === false;
+    const pregunta = activar
+      ? `¿Activar de nuevo a ${usuario.username}? Podrá volver a entrar al sistema.`
+      : `¿Desactivar a ${usuario.username}? No podrá entrar al sistema, pero su historial se conserva.`;
+    if (!window.confirm(pregunta)) return;
+    try {
+      await api.put(`/admin/usuarios/${usuario.id}/activo`, { activo: activar });
+      cargarUsuarios();
+    } catch (err) {
+      alert(err.response?.data?.detail || 'No se pudo cambiar el estado del usuario.');
+    }
+  };
+
   const handleSubirPlantilla = async (e) => {
     e.preventDefault();
     if (!archivoPlantilla) return;
@@ -912,6 +958,10 @@ const handleDownloadWord = async (expedienteId, datosParam = null) => {
       return;
     }
 
+    // Aviso si faltan datos que la plantilla necesita
+    const faltan = faltantesPara(datosParam || datos, selectedPlantilla);
+    if (faltan.length > 0 && !window.confirm(mensajeFaltantes(faltan))) return;
+
     const response = await api.post(
       `/expedientes/${idReal}/generar-word`,
       {
@@ -1081,6 +1131,14 @@ const handleExcelSubmit = async (e) => {
 };
 
   const handleDownloadZip = async () => {
+    const conFaltantes = batchResults.filter((r) => !r.error && faltantesPara(
+      r.datos_extraidos,
+      r.plantilla_seleccionada || r.datos_extraidos?.plantilla_seleccionada || selectedPlantilla
+    ).length > 0);
+    if (conFaltantes.length > 0 && !window.confirm(
+      `${conFaltantes.length} de ${batchResults.length} expediente(s) tienen datos faltantes (están marcados con ⚠ en la lista).\n\n¿Quieres descargar el ZIP de todas formas?`
+    )) return;
+
     const ids = batchResults.map((r) => r.expediente_id);
     try {
       const res = await api.post('/expedientes/descargar-zip', ids, { responseType: 'blob' });
@@ -1232,6 +1290,11 @@ const filteredHistorial = (historial || []).filter((item) => {
 
   // Todo lo que las pantallas (components/) necesitan leer del estado de App
   const ctx = {
+    mensajeFaltantesManual: (faltan) => mensajeFaltantes(faltan, 'generar el expediente'),
+    etiquetaCampo,
+    faltantesPara,
+    handleCambiarActivo,
+    setModalPassword,
     activeTab,
     actualizarVistaPreviaMasivaTiempoReal,
     archivoExcel,
@@ -1400,6 +1463,19 @@ const filteredHistorial = (historial || []).filter((item) => {
 
       {/* MODAL DE CIERRE DE SESIÓN */}
       {showLogoutModal && <LogoutModal />}
+
+      {/* VENTANA DE CONTRASEÑA */}
+      {modalPassword && (
+        <ModalPassword
+          titulo={modalPassword.modo === 'reset' ? `Nueva contraseña para ${modalPassword.usuario.username}` : 'Cambiar mi contraseña'}
+          descripcion={modalPassword.modo === 'reset'
+            ? 'El usuario deberá entrar con esta contraseña. Sus sesiones abiertas se cerrarán.'
+            : 'Por seguridad, se cerrará tu sesión en otras computadoras.'}
+          pedirActual={modalPassword.modo !== 'reset'}
+          onCancelar={() => setModalPassword(null)}
+          onGuardar={handleGuardarPassword}
+        />
+      )}
     </div>
     </AppContext.Provider>
   );

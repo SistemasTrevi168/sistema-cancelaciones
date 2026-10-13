@@ -3,6 +3,8 @@ import { useApp } from '../AppContext';
 
 export default function TabManual() {
   const {
+    faltantesPara,
+    mensajeFaltantesManual,
     cargando,
     expedientes,
     formData,
@@ -24,6 +26,8 @@ export default function TabManual() {
       
       <form onSubmit={async (e) => {
         e.preventDefault();
+        const faltan = faltantesPara(formData, selectedPlantilla || 'CDMX_AP_H_SOLTERO');
+        if (faltan.length > 0 && !window.confirm(mensajeFaltantesManual(faltan))) return;
         setCargando(true);
         try {
           // Recuperar token de autenticación si lo guardas en localStorage (para evitar el error 401)
@@ -229,6 +233,36 @@ export default function TabManual() {
             type="text"
             value={formData.credito_a_salario}
             onChange={e => setFormData({...formData, credito_a_salario: e.target.value})}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg || '#fff', color: theme.textPrimary, outline: 'none' }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: theme.textSecondary, marginBottom: '6px' }}>Número de Escritura</label>
+          <input
+            type="text"
+            value={formData.numero_escritura}
+            onChange={e => setFormData({...formData, numero_escritura: e.target.value})}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg || '#fff', color: theme.textPrimary, outline: 'none' }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: theme.textSecondary, marginBottom: '6px' }}>Fecha de Escritura</label>
+          <input
+            type="text"
+            value={formData.fecha_escritura}
+            onChange={e => setFormData({...formData, fecha_escritura: e.target.value})}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg || '#fff', color: theme.textPrimary, outline: 'none' }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: theme.textSecondary, marginBottom: '6px' }}>Notario de Origen</label>
+          <input
+            type="text"
+            value={formData.notario_origen_completo}
+            onChange={e => setFormData({...formData, notario_origen_completo: e.target.value})}
             style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg || '#fff', color: theme.textPrimary, outline: 'none' }}
           />
         </div>

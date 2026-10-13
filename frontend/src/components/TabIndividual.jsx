@@ -1,10 +1,12 @@
 import {
-  CheckCircle, Download, Eye, FileText, Loader2, Lock, Unlock, Upload,
+  AlertTriangle, CheckCircle, Download, Eye, FileText, Loader2, Lock, Unlock, Upload,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 
 export default function TabIndividual() {
   const {
+    etiquetaCampo,
+    faltantesPara,
     cargandoPreview,
     datos,
     expedienteId,
@@ -216,14 +218,33 @@ export default function TabIndividual() {
           </div>
         </div>
 
+        {(() => {
+          const faltan = faltantesPara(datos, selectedPlantilla);
+          if (faltan.length === 0) return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '10px 12px', borderRadius: '8px', fontSize: '12px', marginBottom: '14px' }}>
+              <CheckCircle size={16} /> Están completos todos los datos que usa la plantilla seleccionada.
+            </div>
+          );
+          return (
+            <div style={{ display: 'flex', gap: '10px', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fcd34d', padding: '12px', borderRadius: '8px', fontSize: '12px', marginBottom: '14px' }}>
+              <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+              <div>
+                <strong>Faltan {faltan.length} dato(s) que usa la plantilla:</strong> {faltan.map(etiquetaCampo).join(', ')}.
+                <div style={{ marginTop: '4px' }}>Están marcados en rojo. Haz clic en el candado del campo para capturarlo.</div>
+              </div>
+            </div>
+          );
+        })()}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '500px', overflowY: 'auto', paddingRight: '4px' }}>
           {Object.entries(datos).map(([key, val]) => {
             if (key === 'datos_inmueble') return null;
+            const falta = val === "NO_ENCONTRADO" || faltantesPara(datos, selectedPlantilla).includes(key);
             const isUnlocked = unlockedFields[`single_${key}`];
             return (
               <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '12px', fontWeight: '600', color: theme.textSecondary }}>
-                  {formatLabel(key)}
+                  {formatLabel(key)} {falta && <span style={{ color: '#dc3545' }}>(falta)</span>}
                 </label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <input
@@ -235,11 +256,11 @@ export default function TabIndividual() {
                       flex: 1,
                       padding: '10px 12px',
                       borderRadius: '8px',
-                      border: val === "NO_ENCONTRADO" ? '1px solid #dc3545' : `1px solid ${theme.border}`,
-                      backgroundColor: val === "NO_ENCONTRADO" ? '#fff8f8' : (isUnlocked ? theme.inputBg : theme.subtleBg),
-                      color: val === "NO_ENCONTRADO" ? '#dc3545' : theme.textPrimary,
+                      border: falta ? '1px solid #dc3545' : `1px solid ${theme.border}`,
+                      backgroundColor: falta ? '#fff8f8' : (isUnlocked ? theme.inputBg : theme.subtleBg),
+                      color: falta ? '#dc3545' : theme.textPrimary,
                       fontSize: '13px',
-                      fontWeight: val === "NO_ENCONTRADO" ? '600' : 'normal',
+                      fontWeight: falta ? '600' : 'normal',
                       opacity: isUnlocked ? 1 : 0.8
                     }}
                   />

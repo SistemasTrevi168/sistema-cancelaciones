@@ -27,3 +27,14 @@ class Expediente(Base):
     ruta_pdf_carta = Column(String, nullable=True)
     ruta_word_generado = Column(String, nullable=True)
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())
+
+class Sesion(Base):
+    """Sesiones de login guardadas en la base de datos (sobreviven reinicios del servidor)."""
+    __tablename__ = "sesiones"
+
+    id = Column(String, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    es_admin = Column(Boolean, default=False)
+    role = Column(String, default="operador")
+    creada_en = Column(DateTime(timezone=True), server_default=func.now())
+    expira_en = Column(DateTime(timezone=True), nullable=False)

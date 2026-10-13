@@ -11,11 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 import pandas as pd
 
 import models, services
 from database import get_db, SessionLocal, engine
 import auth
+from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -56,6 +58,27 @@ PLANTILLAS_CATALOGO = {
     "EDOMEX_MUTUO_M_SOLTERA": "EDOMEX_MUTUO_M_SOLTERA.docx",
 }
 
+def es_admin(usuario: dict) -> bool:
+    return bool(usuario and usuario.get("es_admin"))
+
+
+def obtener_expediente_autorizado(db: Session, expediente_id: str, usuario: dict):
+    """Busca el expediente y verifica que pertenezca al usuario (o que sea admin)."""
+    try:
+        uuid_val = uuid.UUID(str(expediente_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de expediente inválido")
+
+    expediente = db.query(models.Expediente).filter(models.Expediente.id == uuid_val).first()
+    if not expediente:
+        raise HTTPException(status_code=404, detail="Expediente no encontrado")
+
+    if not es_admin(usuario) and expediente.usuario_propietario != usuario["username"]:
+        # Se responde 404 para no revelar que el expediente existe
+        raise HTTPException(status_code=404, detail="Expediente no encontrado")
+    return expediente
+
+
 def eliminar_archivo_temporal(ruta: str):
     """Elimina el archivo ZIP del servidor de manera segura después de la descarga."""
     if os.path.exists(ruta):
@@ -68,7 +91,8 @@ def eliminar_archivo_temporal(ruta: str):
 def descargar_zip(
     expediente_ids: List[str] = Body(...), 
     background_tasks: BackgroundTasks = None, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_user)
 ):
     os.makedirs("uploads/zips", exist_ok=True)
     ruta_zip = "uploads/zips/Cancelaciones_Lote.zip"
@@ -81,6 +105,8 @@ def descargar_zip(
                 continue 
             
             exp = db.query(models.Expediente).filter(models.Expediente.id == uuid_val).first()
+            if exp and not es_admin(usuario) and exp.usuario_propietario != usuario["username"]:
+                continue
             if exp and exp.ruta_word_generado and os.path.exists(exp.ruta_word_generado):
                 nombre_archivo = os.path.basename(exp.ruta_word_generado)
                 zipf.write(exp.ruta_word_generado, arcname=nombre_archivo)
@@ -503,18 +529,20 @@ def crear_usuario_admin_defecto():
     db = SessionLocal()
     try:
         admin_existente = db.query(models.Usuario).filter(models.Usuario.username == "admin").first()
-        pass_hash = auth.hash_password("admin123")
-        
+        # Opcional: definir ADMIN_PASSWORD en las variables de Railway para fijar la contraseña del admin
+        password_env = os.getenv("ADMIN_PASSWORD")
+
         if not admin_existente:
+            # Solo se crea si no existe; ya NO se reinicia la contraseña en cada arranque
             nuevo_admin = models.Usuario(
                 username="admin",
-                password_hash=pass_hash,
+                password_hash=auth.hash_password(password_env or "admin123"),
                 es_admin=True
             )
             db.add(nuevo_admin)
-        else:
-            admin_existente.password_hash = pass_hash
-        
+        elif password_env:
+            admin_existente.password_hash = auth.hash_password(password_env)
+
         db.commit()
         print("--> USUARIO ADMIN CONFIGURADO CORRECTAMENTE")
     except Exception as e:
@@ -553,7 +581,7 @@ def home():
 
 
 @app.get("/api/plantillas")
-def obtener_lista_plantillas():
+def obtener_lista_plantillas(usuario: dict = Depends(require_user)):
     if not os.path.exists(TEMPLATES_DIR):
         os.makedirs(TEMPLATES_DIR, exist_ok=True)
         return {"plantillas": []}
@@ -569,9 +597,14 @@ def obtener_lista_plantillas():
 def obtener_historial(
     usuario: Optional[str] = Query(None),
     x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user)
 ):
-    usuario_activo = usuario or x_user_id
+    # Un usuario normal SOLO ve sus expedientes; el admin puede filtrar por cualquier usuario
+    if es_admin(sesion):
+        usuario_activo = usuario or x_user_id
+    else:
+        usuario_activo = sesion["username"]
     query = db.query(models.Expediente)
 
     if usuario_activo:
@@ -616,10 +649,12 @@ async def procesar_documento(
     files: List[UploadFile] = File(...),
     usuario_propietario: Optional[str] = Form(None),
     plantilla: Optional[str] = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user)
 ):
     try:
-        propietario_final = usuario_propietario if usuario_propietario else "admin"
+        # El propietario siempre es el usuario de la sesión
+        propietario_final = sesion["username"]
 
         os.makedirs("uploads", exist_ok=True)
         datos_extraidos_lista = []
@@ -668,10 +703,11 @@ async def procesar_masivo(
     files: List[UploadFile] = File(...),
     usuario_propietario: Optional[str] = Form(None),
     plantilla: Optional[str] = Form("plantilla_manera2.docx"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user)
 ):
     try:
-        propietario_final = usuario_propietario if usuario_propietario else "admin"
+        propietario_final = sesion["username"]
 
         os.makedirs("uploads", exist_ok=True)
         os.makedirs("uploads/generados", exist_ok=True)
@@ -794,11 +830,10 @@ async def procesar_masivo(
 def actualizar_datos_expediente(
     expediente_id: str,
     datos_actualizados: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user)
 ):
-    expediente = db.query(models.Expediente).filter(models.Expediente.id == expediente_id).first()
-    if not expediente:
-        raise HTTPException(status_code=404, detail="Expediente no encontrado")
+    expediente = obtener_expediente_autorizado(db, expediente_id, sesion)
 
     datos_existentes = dict(expediente.datos_extraidos or {})
     datos_existentes.update(datos_actualizados)
@@ -824,19 +859,11 @@ def actualizar_datos_expediente(
 def generar_word(
     expediente_id: str, 
     datos_payload: Optional[Dict[str, Any]] = Body(None), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user)
 ):
     try:
-        # 🛡️ Conversión segura de string a UUID para PostgreSQL
-        try:
-            uuid_val = uuid.UUID(str(expediente_id))
-        except ValueError:
-            raise HTTPException(status_code=400, detail="ID de expediente inválido")
-
-        expediente = db.query(models.Expediente).filter(models.Expediente.id == uuid_val).first()
-        
-        if not expediente:
-            raise HTTPException(status_code=404, detail="Expediente no encontrado")
+        expediente = obtener_expediente_autorizado(db, expediente_id, sesion)
         
         datos_payload = datos_payload or {}
         datos_modificados = datos_payload.get("datos", datos_payload)
@@ -887,7 +914,7 @@ def generar_word(
 
 
 @app.get("/api/admin/usuarios")
-def obtener_usuarios(db: Session = Depends(get_db)):
+def obtener_usuarios(db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
     usuarios = db.query(models.Usuario).all()
     return [
         {
@@ -905,13 +932,14 @@ def crear_usuario_admin(
     username: str = Form(...),
     password: str = Form(...),
     es_admin: bool = Form(False),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
 ):
     usuario_existente = db.query(models.Usuario).filter(models.Usuario.username == username).first()
     if usuario_existente:
         raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
     
-    pass_hash = auth.pwd_context.hash(password) if hasattr(auth, 'pwd_context') else password
+    pass_hash = auth.hash_password(password)
     
     nuevo_usuario = models.Usuario(
         username=username,
@@ -929,43 +957,55 @@ def crear_usuario_admin(
 def eliminar_usuario(
     usuario_id: str, 
     db: Session = Depends(get_db),
-    usuario_actual: models.Usuario = Depends(auth.get_current_user)
+    admin: dict = Depends(require_admin)
 ):
-    if not usuario_actual.es_admin:
-        raise HTTPException(status_code=403, detail="No tienes permisos de administrador")
+    try:
+        uuid_usuario = uuid.UUID(str(usuario_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de usuario inválido")
 
-    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id).first()
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == uuid_usuario).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     if usuario.es_admin or usuario.username.lower() == "admin":
         raise HTTPException(status_code=400, detail="No se puede eliminar a un administrador")
     
+    nombre_usuario = usuario.username
     try:
+        db.query(models.Sesion).filter(models.Sesion.username == nombre_usuario).delete(synchronize_session=False)
         db.delete(usuario)
         db.commit()
-        return {"status": "exito", "mensaje": f"Usuario {usuario.username} eliminado correctamente"}
+        return {"status": "exito", "mensaje": f"Usuario {nombre_usuario} eliminado correctamente"}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se puede eliminar a {nombre_usuario} porque tiene expedientes registrados."
+        )
     except Exception as e:
         db.rollback()
+        print(f"ERROR al eliminar usuario: {e}")
         raise HTTPException(status_code=500, detail="Error al eliminar usuario.")
 
 
 @app.post("/api/admin/plantilla")
-async def actualizar_plantilla(file: UploadFile = File(...)):
-    if not file.filename.endswith(".docx"):
+async def actualizar_plantilla(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+    nombre_archivo = os.path.basename(file.filename.replace("\\", "/"))
+    if not nombre_archivo.endswith(".docx"):
         raise HTTPException(status_code=400, detail="El archivo debe ser un documento .docx")
     
     os.makedirs("templates", exist_ok=True)
-    ruta_plantilla = os.path.join("templates", file.filename)
+    ruta_plantilla = os.path.join("templates", nombre_archivo)
     
     with open(ruta_plantilla, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    return {"status": "exito", "mensaje": f"Plantilla '{file.filename}' subida correctamente"}
+    return {"status": "exito", "mensaje": f"Plantilla '{nombre_archivo}' subida correctamente"}
 
 
 @app.get("/api/admin/plantilla")
-def obtener_plantillas_admin():
+def obtener_plantillas_admin(admin: dict = Depends(require_admin)):
     if not os.path.exists("templates"):
         os.makedirs("templates", exist_ok=True)
         return {"plantillas": []}
@@ -980,10 +1020,11 @@ def obtener_plantillas_admin():
 @app.post("/api/expedientes/generar-manual")
 def generar_expediente_manual(
     payload: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user)
 ):
     try:
-        usuario = payload.get("usuario_propietario", "admin")
+        usuario = sesion["username"]
         plantilla = payload.get("plantilla") or payload.get("plantilla_seleccionada") or "plantilla_manera2.docx"
         
         num_credito = payload.get("numero_credito")
@@ -1032,10 +1073,12 @@ async def procesar_excel(
     usuario_propietario: Optional[str] = Form("admin"),
     plantilla: Optional[str] = Form("plantilla_manera2.docx"),
     indices_bloque: Optional[str] = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user)
 ):
     try:
         import json
+        usuario_propietario = sesion["username"]
 
         if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
             raise HTTPException(status_code=400, detail="El archivo debe ser un Excel o CSV válido.")
@@ -1149,7 +1192,7 @@ async def procesar_excel(
 
 
 @app.post("/api/expedientes/previsualizar-excel")
-async def previsualizar_excel(file: UploadFile = File(...)):
+async def previsualizar_excel(file: UploadFile = File(...), sesion: dict = Depends(require_user)):
     try:
         if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
             raise HTTPException(status_code=400, detail="El archivo debe ser un Excel o CSV válido.")

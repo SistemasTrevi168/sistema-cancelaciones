@@ -12,8 +12,11 @@ import {
 // Configuración producción / Railway
 axios.defaults.withCredentials = true;
 
+// Dirección única del backend (la misma que ya usa el login). Si cambia el dominio en Railway, solo se edita aquí.
+const API_BASE = 'https://sistema-cancelaciones-production-3c4b.up.railway.app';
+
 const api = axios.create({
-baseURL: 'https://sistema-cancelaciones-production-3c4b.up.railway.app/api',
+baseURL: `${API_BASE}/api`,
   withCredentials: true // <--- CRUCIAL para cookies
 });
 
@@ -524,8 +527,9 @@ const handlePreviewExcel = async (file) => {
   dataForm.append('file', file);
 
   try {
-    const res = await fetch('https://sistema-cancelaciones-production.up.railway.app/api/expedientes/previsualizar-excel', {
+    const res = await fetch(`${API_BASE}/api/expedientes/previsualizar-excel`, {
       method: 'POST',
+      credentials: 'include',
       body: dataForm
     });
     const data = await res.json();
@@ -549,7 +553,7 @@ const handlePreviewExcel = async (file) => {
   setCargando(true);
   
   try {
-    const API_URL = import.meta.env.VITE_API_URL || 'https://sistema-cancelaciones-production.up.railway.app';
+    const API_URL = API_BASE;
     
     // Usamos axios en lugar de fetch para mantener la consistencia con el resto de la app
     const response = await axios.post(`${API_URL}/api/expedientes/generar-manual`, {
@@ -628,41 +632,20 @@ const handlePreviewExcel = async (file) => {
       return;
     }
 
-    const token = localStorage.getItem('token');
-    if (!token) {
-      alert('Sesión no válida o expirada. Por favor, vuelve a iniciar sesión.');
-      return;
-    }
-
     try {
-      const response = await fetch(
-        `https://sistema-cancelaciones-production.up.railway.app/api/admin/usuarios/${usuarioId}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-
-      const data = await response.json();
-
-      if (response.status === 401) {
-        alert('Sesión no válida o expirada. Por favor, inicia sesión nuevamente.');
-        return;
-      }
-
-      if (!response.ok) {
-        alert(data.detail || 'Error al eliminar usuario');
-        return;
-      }
-
+      await api.delete(`/admin/usuarios/${usuarioId}`);
       alert('Usuario eliminado correctamente');
       cargarUsuarios();
     } catch (error) {
       console.error('Error al borrar usuario:', error);
-      alert('Error de conexión al eliminar usuario');
+      const status = error.response?.status;
+      if (status === 401) {
+        alert('Sesión no válida o expirada. Por favor, inicia sesión nuevamente.');
+      } else if (error.response?.data?.detail) {
+        alert(error.response.data.detail);
+      } else {
+        alert('Error de conexión al eliminar usuario');
+      }
     }
   };
 
@@ -1035,8 +1018,9 @@ const handleExcelSubmit = async (e) => {
       dataForm.append('usuario_propietario', currentUser?.username || 'admin');
       dataForm.append('indices_bloque', JSON.stringify([index]));
 
-      const res = await fetch('https://sistema-cancelaciones-production.up.railway.app/api/expedientes/procesar-excel', {
+      const res = await fetch(`${API_BASE}/api/expedientes/procesar-excel`, {
         method: 'POST',
+        credentials: 'include',
         body: dataForm
       });
       const data = await res.json();
@@ -1070,8 +1054,9 @@ const handleExcelSubmit = async (e) => {
 
     // 2. DISPARAR LA DESCARGA DEL ZIP USANDO TU ENDPOINT EXISTENTE
     if (idsCreados.length > 0) {
-      const resZip = await fetch('https://sistema-cancelaciones-production.up.railway.app/api/expedientes/descargar-zip', {
+      const resZip = await fetch(`${API_BASE}/api/expedientes/descargar-zip`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -2525,8 +2510,9 @@ const filteredHistorial = (historial || []).filter((item) => {
           // Recuperar token de autenticación si lo guardas en localStorage (para evitar el error 401)
           const token = localStorage.getItem('token') || '';
 
-          const res = await fetch('https://sistema-cancelaciones-production.up.railway.app/api/expedientes/generar-manual', {
+          const res = await fetch(`${API_BASE}/api/expedientes/generar-manual`, {
             method: 'POST',
+            credentials: 'include',
             headers: { 
               'Content-Type': 'application/json',
               ...(token ? { 'Authorization': `Bearer ${token}` } : {})

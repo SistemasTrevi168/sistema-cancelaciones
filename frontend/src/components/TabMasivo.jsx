@@ -1,10 +1,13 @@
 import {
-  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Download, Eye, FileArchive, FileText, FolderPlus, Loader2, Lock, Unlock,
+  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Download, Eye, FileArchive, FileText, FolderPlus, Loader2,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
+import CamposDatos from './CamposDatos';
 
 export default function TabMasivo() {
   const {
+    descargandoId,
+    descargandoZip,
     etiquetaCampo,
     faltantesPara,
     selectedPlantilla,
@@ -14,7 +17,6 @@ export default function TabMasivo() {
     batchPreviewIndex,
     batchPreviewRef,
     batchResults,
-    formatLabel,
     handleApplyTemplateToSelected,
     handleBatchFileChange,
     handleBatchInputChange,
@@ -25,7 +27,6 @@ export default function TabMasivo() {
     handleDropBatch,
     handleSelectAllBatch,
     handleToggleSelectBatch,
-    handleToggleUnlock,
     handleUploadBatch,
     openAccordion,
     progressBatch,
@@ -33,7 +34,6 @@ export default function TabMasivo() {
     setBatchPreviewIndex,
     theme,
     toggleAccordion,
-    unlockedFields
   } = useApp();
 
   return (
@@ -71,30 +71,6 @@ export default function TabMasivo() {
         box-sizing: border-box !important;
       }
     `}</style>
-
-    {/* CONTENEDOR DE TARJETAS DE ESTADO (TOASTS) EN LA ESQUINA INFERIOR DERECHA */}
-    <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 99999, display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
-      {window._batchToasts && window._batchToasts.map(toast => (
-        <div key={toast.id} style={{
-          pointerEvents: 'auto',
-          backgroundColor: toast.tipo === 'error' ? '#ef4444' : '#10b981',
-          color: '#fff',
-          padding: '12px 20px',
-          borderRadius: '10px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          fontSize: '13px',
-          fontWeight: '600',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          animation: 'fadeInOut 4s forwards',
-          transition: 'all 0.3s ease'
-        }}>
-          <span>{toast.tipo === 'error' ? '⚠️' : '✅'}</span>
-          <span>{toast.mensaje}</span>
-        </div>
-      ))}
-    </div>
 
     {/* SECCIÓN SUPERIOR: FORMULARIO DE CARGA */}
     <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}`, marginBottom: '24px' }}>
@@ -182,7 +158,7 @@ export default function TabMasivo() {
 
     {/* RESULTADOS DEL LOTE - DISEÑO GRID SEGURO CON MINMAX */}
     {batchResults.length > 0 && (
-      <div style={{ 
+      <div className="grid-masivo" style={{ 
         display: 'grid', 
         gridTemplateColumns: batchPreviewIndex !== null ? 'minmax(0, 1fr) 440px' : '1fr', 
         gap: '24px',
@@ -273,9 +249,10 @@ export default function TabMasivo() {
 
             <button
               onClick={handleDownloadZip}
+              disabled={descargandoZip}
               style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <Download size={16} /> Descargar Todo (ZIP)
+              {descargandoZip ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={16} />} Descargar Todo (ZIP)
             </button>
           </div>
 
@@ -432,64 +409,24 @@ export default function TabMasivo() {
                           e.stopPropagation();
                           handleDownloadWord(res.expediente_id, datosExtraidos);
                         }}
+                        disabled={descargandoId === res.expediente_id}
                         style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        <Download size={12} /> DOCX
+                        {descargandoId === res.expediente_id ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={12} />} DOCX
                       </button>
                       {isOpen ? <ChevronUp size={18} color={theme.textSecondary} /> : <ChevronDown size={18} color={theme.textSecondary} />}
                     </div>
                   </div>
 
                   {isOpen && (
-                    <div style={{ padding: '18px', backgroundColor: theme.cardBg, borderTop: `1px solid ${theme.border}`, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
-                      {Object.entries(datosExtraidos).map(([bKey, bVal]) => {
-                        const fieldKey = `batch_${idx}_${bKey}`;
-                        const isUnlocked = unlockedFields[fieldKey];
-                        const isMissing = !bVal || String(bVal).toUpperCase() === 'NO_ENCONTRADO' || String(bVal).trim() === '';
-
-                        return (
-                          <div key={bKey} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: '600', color: isMissing && !isUnlocked ? '#ef4444' : theme.textSecondary }}>
-                              {formatLabel(bKey)} {isMissing && !isUnlocked && '(No encontrado)'}
-                            </label>
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                              <input
-                                type="text"
-                                value={bVal || ''}
-                                disabled={!isUnlocked}
-                                onChange={(e) => handleBatchInputChange(idx, bKey, e.target.value)}
-                                style={{
-                                  flex: 1,
-                                  padding: '8px 10px',
-                                  borderRadius: '6px',
-                                  border: `1px solid ${isMissing && !isUnlocked ? '#ef4444' : theme.border}`,
-                                  backgroundColor: isMissing && !isUnlocked ? '#fef2f2' : (isUnlocked ? theme.inputBg : theme.subtleBg),
-                                  color: isMissing && !isUnlocked ? '#b91c1c' : theme.textPrimary,
-                                  fontSize: '12px',
-                                  opacity: isUnlocked ? 1 : 0.9
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleToggleUnlock(fieldKey)}
-                                style={{
-                                  padding: '8px',
-                                  borderRadius: '6px',
-                                  border: `1px solid ${theme.border}`,
-                                  backgroundColor: isUnlocked ? '#fef3c7' : theme.subtleBg,
-                                  color: isUnlocked ? '#d97706' : theme.textSecondary,
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center'
-                                }}
-                              >
-                                {isUnlocked ? <Unlock size={14} /> : <Lock size={14} />}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                    <div style={{ padding: '18px', backgroundColor: theme.cardBg, borderTop: `1px solid ${theme.border}` }}>
+                      <CamposDatos
+                        datos={datosExtraidos}
+                        prefijo={`batch_${idx}`}
+                        faltantes={faltanItem}
+                        onCambio={(campo, valor) => handleBatchInputChange(idx, campo, valor)}
+                        compacto
+                      />
                     </div>
                   )}
                 </div>

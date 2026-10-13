@@ -122,7 +122,7 @@ code {
 }
 
 .fade-in {
-  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes slideUp {
@@ -137,7 +137,7 @@ code {
 }
 
 .slide-up {
-  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes softPulse {
@@ -148,4 +148,184 @@ code {
 
 .pulse-hover:hover {
   animation: softPulse 0.3s ease-in-out;
+}
+/* =====================================================================
+   BOTONES Y CAMPOS: comportamiento uniforme en todo el sistema
+   (los colores siguen definidos en cada botón; aquí solo se agregan
+   los estados de mouse, clic, deshabilitado y foco con teclado)
+   ===================================================================== */
+button {
+  font-family: inherit;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    filter 0.15s ease, transform 0.08s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+}
+button:not(:disabled):hover {
+  filter: brightness(0.95);
+}
+.tema-oscuro button:not(:disabled):hover {
+  filter: brightness(1.2);
+}
+button:not(:disabled):active {
+  transform: scale(0.97);
+}
+button:disabled {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  filter: none !important;
+  transform: none !important;
+}
+input:disabled,
+textarea:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 2px;
+}
+
+/* =====================================================================
+   ANIMACIONES
+   ===================================================================== */
+.cambio-pestana {
+  animation: fadeIn 0.2s ease-out both;
+}
+
+@keyframes avisoEntrada {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes aparecerFondo {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Avisos flotantes (reemplazan a alert) */
+.avisos-flotantes {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.aviso-entrada {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: 0 10px 20px -6px rgba(0, 0, 0, 0.2);
+  animation: avisoEntrada 0.2s ease-out both;
+}
+
+/* Ventanas de confirmación (reemplazan a confirm) */
+.fondo-modal {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2100;
+  padding: 16px;
+  animation: aparecerFondo 0.15s ease-out both;
+}
+.modal-entrada {
+  animation: avisoEntrada 0.2s ease-out both;
+}
+
+/* Bloques grises mientras carga información */
+.esqueleto {
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.15) 25%, rgba(148, 163, 184, 0.32) 50%, rgba(148, 163, 184, 0.15) 75%);
+  background-size: 200% 100%;
+  animation: brillo 1.2s ease-in-out infinite;
+}
+@keyframes brillo {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* =====================================================================
+   PANTALLAS MÁS CHICAS
+   ===================================================================== */
+@media (max-width: 1280px) {
+  .grid-individual {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .grid-individual > :nth-child(3) {
+    grid-column: 1 / -1;
+  }
+  .grid-masivo {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .layout-app {
+    flex-direction: column !important;
+  }
+  .barra-lateral {
+    width: 100% !important;
+    height: auto !important;
+    position: static !important;
+    border-right: none !important;
+    padding: 16px !important;
+    gap: 12px;
+  }
+  .barra-lateral-nav {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+  }
+  .barra-lateral-nav button {
+    width: auto !important;
+  }
+  /* En pantalla chica se ocultan el separador y el título "Administración" */
+  .barra-lateral-nav > div,
+  .barra-lateral-nav > span {
+    display: none;
+  }
+  .contenido-principal,
+  .tarjeta-principal {
+    padding: 16px !important;
+  }
+  .grid-individual,
+  .grid-usuarios,
+  .grid-masivo {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .grid-formulario {
+    grid-template-columns: 1fr !important;
+  }
+  .avisos-flotantes {
+    right: 16px;
+    bottom: 16px;
+  }
+}
+
+/* Respeta la opción del sistema "reducir animaciones"
+   (los íconos de carga giratorios siguen funcionando) */
+@media (prefers-reduced-motion: reduce) {
+  *:not(svg):not(svg *),
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

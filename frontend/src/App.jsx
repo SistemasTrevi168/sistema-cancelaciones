@@ -5,6 +5,9 @@ import { AppContext } from './AppContext';
 import LoginScreen from './components/LoginScreen';
 import LogoutModal from './components/LogoutModal';
 import ModalPassword from './components/ModalPassword';
+import Notificaciones from './components/Notificaciones';
+import { avisar, confirmar } from './ui/notificaciones';
+import { etiquetaDe } from './camposExpediente';
 import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla } from './datosFaltantes';
 import Sidebar from './components/Sidebar';
 import TabExcel from './components/TabExcel';
@@ -37,7 +40,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     setShowExportMenu(false);
 
     if (filteredHistorial.length === 0) {
-      alert("No hay datos para exportar.");
+      avisar.aviso("No hay datos para exportar.");
       return;
     }
 
@@ -89,7 +92,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
       } catch (err) {
-        alert("Error al generar CSV: " + err.message);
+        avisar.error("Error al generar CSV: " + err.message);
       }
     }
 
@@ -99,7 +102,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         const html2canvas = (await import('html2canvas')).default;
         const element = document.getElementById('tabla-historial-export');
         if (!element) {
-          alert("No se encontró la tabla para captura.");
+          avisar.error("No se encontró la tabla para captura.");
           return;
         }
         const canvas = await html2canvas(element, { scale: 2 });
@@ -108,7 +111,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         link.href = canvas.toDataURL('image/png');
         link.click();
       } catch (err) {
-        alert("Para exportar a imagen, instala html2canvas con: npm install html2canvas");
+        avisar.error("Para exportar a imagen, instala html2canvas con: npm install html2canvas");
       }
     }
 
@@ -131,6 +134,11 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   // Ventana de contraseña: null, { modo: 'propio' } o { modo: 'reset', usuario }
   const [modalPassword, setModalPassword] = useState(null);
+  // Evitan doble clic mientras se descarga o guarda algo
+  const [descargandoId, setDescargandoId] = useState(null);
+  const [descargandoZip, setDescargandoZip] = useState(false);
+  const [creandoUsuario, setCreandoUsuario] = useState(false);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
   // Campos que usa cada plantilla (para avisar qué datos faltan)
   const [camposPorPlantilla, setCamposPorPlantilla] = useState({});
 
@@ -375,6 +383,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   };
 
   const cargarHistorialUsuario = async () => {
+    setCargandoHistorial(true);
     try {
       const res = await api.get('/expedientes', {
         params: { usuario: currentUser.username }
@@ -382,6 +391,9 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setHistorial(res.data || []);
     } catch (err) {
       console.error('Error al cargar historial:', err);
+      avisar.error('No se pudo cargar el historial.');
+    } finally {
+      setCargandoHistorial(false);
     }
   };
 
@@ -498,7 +510,7 @@ const handleDrop = (e) => {
     if (nombre.endsWith('.xlsx') || nombre.endsWith('.xls') || nombre.endsWith('.csv')) {
       setArchivoExcel(archivoArrastrado); // Asigna el archivo a tu estado (ej: setArchivoExcel)
     } else {
-      alert("Por favor, arrastra un archivo Excel o CSV válido.");
+      avisar.aviso("Por favor, arrastra un archivo Excel o CSV válido.");
     }
     
     e.dataTransfer.clearData();
@@ -523,11 +535,11 @@ const handlePreviewExcel = async (file) => {
       setFilasPreview(data.filas);
       setFilasSeleccionadas(data.filas.map(f => f.index)); // Seleccionados por defecto todos
     } else {
-      alert('Error al previsualizar: ' + (data.detail || 'Archivo inválido'));
+      avisar.error('Error al previsualizar: ' + (data.detail || 'Archivo inválido'));
     }
   } catch (err) {
     console.error(err);
-    alert('Error de conexión al leer el Excel.');
+    avisar.error('Error de conexión al leer el Excel.');
   } finally {
     setCargando(false);
   }
@@ -551,7 +563,7 @@ const handlePreviewExcel = async (file) => {
 
     const data = response.data;
     if (data.status === 'exito') {
-      alert('¡Expediente manual generado con éxito!');
+      avisar.exito('¡Expediente manual generado con éxito!');
       if (typeof setExpedientes === 'function' && Array.isArray(expedientes)) {
         setExpedientes([data, ...expedientes]);
       }
@@ -559,7 +571,7 @@ const handlePreviewExcel = async (file) => {
   } catch (err) {
     console.error(err);
     const mensajeError = err.response?.data?.detail || 'No se pudo generar el expediente';
-    alert('Error: ' + mensajeError);
+    avisar.error('Error: ' + mensajeError);
   } finally {
     setCargando(false);
   }
@@ -588,6 +600,7 @@ const handlePreviewExcel = async (file) => {
 
   const handleCrearUsuario = async (e) => {
     e.preventDefault();
+    setCreandoUsuario(true);
     try {
       const formDataObj = new FormData();
       formDataObj.append('username', nuevoUsuario.username);
@@ -597,8 +610,11 @@ const handlePreviewExcel = async (file) => {
       await api.post('/admin/usuarios', formDataObj);
       setNuevoUsuario({ username: '', password: '', role: 'operador', es_admin: false });
       cargarUsuarios();
+      avisar.exito(`Usuario ${nuevoUsuario.username} creado.`);
     } catch (err) {
-      alert(err.response?.data?.detail || 'Error al crear usuario.');
+      avisar.error(err.response?.data?.detail || 'Error al crear usuario.');
+    } finally {
+      setCreandoUsuario(false);
     }
   };
 
@@ -610,27 +626,27 @@ const handlePreviewExcel = async (file) => {
     const usuarioId = typeof param1 === 'string' ? param1 : param2;
 
     if (!usuarioId || typeof usuarioId !== 'string') {
-      alert('ID de usuario no válido');
+      avisar.error('ID de usuario no válido');
       return;
     }
 
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
+    if (!(await confirmar('Se eliminará este usuario. Esta acción no se puede deshacer.', { titulo: 'Eliminar usuario', textoConfirmar: 'Sí, eliminar', peligro: true }))) {
       return;
     }
 
     try {
       await api.delete(`/admin/usuarios/${usuarioId}`);
-      alert('Usuario eliminado correctamente');
+      avisar.exito('Usuario eliminado correctamente');
       cargarUsuarios();
     } catch (error) {
       console.error('Error al borrar usuario:', error);
       const status = error.response?.status;
       if (status === 401) {
-        alert('Sesión no válida o expirada. Por favor, inicia sesión nuevamente.');
+        avisar.error('Sesión no válida o expirada. Por favor, inicia sesión nuevamente.');
       } else if (error.response?.data?.detail) {
-        alert(error.response.data.detail);
+        avisar.error(error.response.data.detail);
       } else {
-        alert('Error de conexión al eliminar usuario');
+        avisar.error('Error de conexión al eliminar usuario');
       }
     }
   };
@@ -639,10 +655,10 @@ const handlePreviewExcel = async (file) => {
   const handleGuardarPassword = async (actual, nueva) => {
     if (modalPassword?.modo === 'reset') {
       await api.post(`/admin/usuarios/${modalPassword.usuario.id}/password`, { password_nueva: nueva });
-      alert(`Contraseña de ${modalPassword.usuario.username} actualizada. Sus sesiones abiertas se cerraron.`);
+      avisar.exito(`Contraseña de ${modalPassword.usuario.username} actualizada. Sus sesiones abiertas se cerraron.`);
     } else {
       await api.post('/auth/cambiar-password', { password_actual: actual, password_nueva: nueva });
-      alert('Tu contraseña se actualizó correctamente.');
+      avisar.exito('Tu contraseña se actualizó correctamente.');
     }
     setModalPassword(null);
   };
@@ -652,12 +668,12 @@ const handlePreviewExcel = async (file) => {
     const pregunta = activar
       ? `¿Activar de nuevo a ${usuario.username}? Podrá volver a entrar al sistema.`
       : `¿Desactivar a ${usuario.username}? No podrá entrar al sistema, pero su historial se conserva.`;
-    if (!window.confirm(pregunta)) return;
+    if (!(await confirmar(pregunta, { titulo: activar ? 'Activar usuario' : 'Desactivar usuario', textoConfirmar: activar ? 'Sí, activar' : 'Sí, desactivar', peligro: !activar }))) return;
     try {
       await api.put(`/admin/usuarios/${usuario.id}/activo`, { activo: activar });
       cargarUsuarios();
     } catch (err) {
-      alert(err.response?.data?.detail || 'No se pudo cambiar el estado del usuario.');
+      avisar.error(err.response?.data?.detail || 'No se pudo cambiar el estado del usuario.');
     }
   };
 
@@ -672,9 +688,9 @@ const handlePreviewExcel = async (file) => {
       await api.post('/admin/plantilla', formDataObj);
       setArchivoPlantilla(null);
       cargarPlantillas();
-      alert('Plantilla subida correctamente.');
+      avisar.exito('Plantilla subida correctamente.');
     } catch (err) {
-      alert(err.response?.data?.detail || 'Error al subir la plantilla.');
+      avisar.error(err.response?.data?.detail || 'Error al subir la plantilla.');
     }
   };
 
@@ -759,7 +775,7 @@ const handlePreviewExcel = async (file) => {
     if (e.target.files) {
       const filesArray = Array.from(e.target.files);
       if (filesArray.length > 2) {
-        alert("⚠️ Solo se permite un máximo de 2 archivos para el trámite individual.");
+        avisar.aviso("⚠️ Solo se permite un máximo de 2 archivos para el trámite individual.");
         e.target.value = "";
         return;
       }
@@ -798,9 +814,8 @@ const handlePreviewExcel = async (file) => {
       setTimeout(() => {
         setExpedienteId(res.data.expediente_id || res.data.id || null);
         const rawDatos = res.data.datos_extraidos || {};
+        // Antes se agregaban copias "acreditado" y "monto"; al editarlas no cambiaba el Word
         setDatos({
-          acreditado: rawDatos.acreditado || rawDatos.nombre_acreditado || '',
-          monto: rawDatos.monto || rawDatos.monto_credito || '',
           numero_credito: rawDatos.numero_credito || '',
           ...rawDatos
         });
@@ -918,8 +933,6 @@ const handleApplyTemplateToSelected = async (plantillaElegida) => {
             ...item,
             plantilla_seleccionada: selectedPlantilla,
             datos_extraidos: {
-              acreditado: raw.acreditado || raw.nombre_acreditado || '',
-              monto: raw.monto || raw.monto_credito || '',
               numero_credito: raw.numero_credito || '',
               ...raw
             }
@@ -954,14 +967,15 @@ const handleDownloadWord = async (expedienteId, datosParam = null) => {
   try {
     const idReal = expedienteId;
     if (!idReal) {
-      alert("Error: No se encontró un ID de expediente válido para la descarga.");
+      avisar.error("Error: No se encontró un ID de expediente válido para la descarga.");
       return;
     }
 
     // Aviso si faltan datos que la plantilla necesita
     const faltan = faltantesPara(datosParam || datos, selectedPlantilla);
-    if (faltan.length > 0 && !window.confirm(mensajeFaltantes(faltan))) return;
+    if (faltan.length > 0 && !(await confirmar(mensajeFaltantes(faltan), { titulo: 'Faltan datos', textoConfirmar: 'Generar de todas formas' }))) return;
 
+    setDescargandoId(idReal);
     const response = await api.post(
       `/expedientes/${idReal}/generar-word`,
       {
@@ -987,10 +1001,13 @@ const handleDownloadWord = async (expedienteId, datosParam = null) => {
     a.click();
     a.remove();
     window.URL.revokeObjectURL(downloadUrl);
+    avisar.exito(`Word del crédito ${numeroCredito} descargado.`);
 
   } catch (err) {
     console.error("Error al descargar el archivo Word:", err);
-    alert("No se pudo descargar el archivo Word desde el servidor.");
+    avisar.error("No se pudo descargar el archivo Word desde el servidor.");
+  } finally {
+    setDescargandoId(null);
   }
 };
 
@@ -998,9 +1015,9 @@ const handleDownloadWord = async (expedienteId, datosParam = null) => {
 
 const handleExcelSubmit = async (e) => {
   e.preventDefault();
-  if (!archivoExcel) return alert('Por favor selecciona un archivo Excel (.xlsx o .csv)');
+  if (!archivoExcel) return avisar.aviso('Por favor selecciona un archivo Excel (.xlsx o .csv)');
   if (!filasSeleccionadas || filasSeleccionadas.length === 0) {
-    return alert('Selecciona al menos una fila en la tabla para procesar.');
+    return avisar.aviso('Selecciona al menos una fila en la tabla para procesar.');
   }
 
   setCargando(true);
@@ -1124,7 +1141,7 @@ const handleExcelSubmit = async (e) => {
 
   } catch (err) {
     console.error(err);
-    alert('Error en lote: ' + err.message);
+    avisar.error('Error en lote: ' + err.message);
   } finally {
     setCargando(false);
   }
@@ -1135,11 +1152,12 @@ const handleExcelSubmit = async (e) => {
       r.datos_extraidos,
       r.plantilla_seleccionada || r.datos_extraidos?.plantilla_seleccionada || selectedPlantilla
     ).length > 0);
-    if (conFaltantes.length > 0 && !window.confirm(
+    if (conFaltantes.length > 0 && !await confirmar(
       `${conFaltantes.length} de ${batchResults.length} expediente(s) tienen datos faltantes (están marcados con ⚠ en la lista).\n\n¿Quieres descargar el ZIP de todas formas?`
-    )) return;
+    , { titulo: 'Expedientes incompletos', textoConfirmar: 'Descargar de todas formas' })) return;
 
     const ids = batchResults.map((r) => r.expediente_id);
+    setDescargandoZip(true);
     try {
       const res = await api.post('/expedientes/descargar-zip', ids, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -1149,12 +1167,15 @@ const handleExcelSubmit = async (e) => {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      avisar.exito('ZIP descargado.');
     } catch (err) {
       setError('Error al descargar el archivo ZIP.');
+    } finally {
+      setDescargandoZip(false);
     }
   };
 
-  const formatLabel = (key) => key.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  const formatLabel = (key) => etiquetaDe(key);
 
   const esAdmin = currentUser?.es_admin || currentUser?.role === 'admin';
   // --- CÁLCULOS DINÁMICOS DE FECHAS, SEMANAS Y DÍAS DEL MES ---
@@ -1290,6 +1311,11 @@ const filteredHistorial = (historial || []).filter((item) => {
 
   // Todo lo que las pantallas (components/) necesitan leer del estado de App
   const ctx = {
+    cargandoHistorial,
+    creandoUsuario,
+    descargandoId,
+    descargandoZip,
+    setUnlockedFields,
     mensajeFaltantesManual: (faltan) => mensajeFaltantes(faltan, 'generar el expediente'),
     etiquetaCampo,
     faltantesPara,
@@ -1403,7 +1429,7 @@ const filteredHistorial = (historial || []).filter((item) => {
 
   return (
     <AppContext.Provider value={ctx}>
-    <div style={{
+    <div className={isDarkMode ? 'tema-oscuro' : 'tema-claro'} style={{
       fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       backgroundColor: theme.bg,
       color: theme.textPrimary,
@@ -1426,7 +1452,7 @@ const filteredHistorial = (historial || []).filter((item) => {
       ) : !isAuthenticated ? (
         <LoginScreen />
       ) : (
-        <div className="fade-in" style={{ 
+        <div className="fade-in layout-app" style={{ 
           display: 'flex',
           minHeight: '100vh',
           width: '100%',
@@ -1437,7 +1463,7 @@ const filteredHistorial = (historial || []).filter((item) => {
           <Sidebar />
 
           {/* CONTENIDO PRINCIPAL */}
-          <main style={{ flex: 1, padding: '32px', boxSizing: 'border-box', overflowY: 'auto' }}>
+          <main className="contenido-principal" style={{ flex: 1, minWidth: 0, padding: '32px', boxSizing: 'border-box', overflowY: 'auto' }}>
             
             {/* NOTIFICACIÓN DE ERROR */}
             {error && (
@@ -1448,13 +1474,16 @@ const filteredHistorial = (historial || []).filter((item) => {
             )}
 
             {/* CONTENEDOR DE TARJETA PRINCIPAL: cada pestaña vive en src/components/ */}
-            <div style={{ backgroundColor: theme.cardBg, borderRadius: '16px', border: `1px solid ${theme.border}`, padding: '32px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+            <div className="tarjeta-principal" style={{ backgroundColor: theme.cardBg, borderRadius: '16px', border: `1px solid ${theme.border}`, padding: '32px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+              {/* key: al cambiar de pestaña se reinicia la animación de entrada */}
+              <div key={activeTab} className="cambio-pestana">
               {activeTab === 'single' && <TabIndividual />}
               {activeTab === 'batch' && <TabMasivo />}
               {activeTab === 'manual' && <TabManual />}
               {activeTab === 'excel' && <TabExcel />}
               {activeTab === 'history' && <TabHistorial />}
               {activeTab === 'users' && esAdmin && <TabUsuarios />}
+              </div>
             </div>
 
           </main>
@@ -1463,6 +1492,9 @@ const filteredHistorial = (historial || []).filter((item) => {
 
       {/* MODAL DE CIERRE DE SESIÓN */}
       {showLogoutModal && <LogoutModal />}
+
+      {/* AVISOS FLOTANTES Y CONFIRMACIONES */}
+      <Notificaciones />
 
       {/* VENTANA DE CONTRASEÑA */}
       {modalPassword && (

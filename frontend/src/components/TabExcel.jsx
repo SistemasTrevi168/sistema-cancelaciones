@@ -1,5 +1,6 @@
 import { FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../AppContext';
+import { avisar } from '../ui/notificaciones';
 
 export default function TabExcel() {
   const {
@@ -100,7 +101,7 @@ export default function TabExcel() {
                 await handlePreviewExcel(archivoArrastrado);
                 setPaginaActual(1);
               } else {
-                alert("Por favor, arrastra un archivo Excel o CSV válido (.xlsx, .xls, .csv)");
+                avisar.aviso("Por favor, arrastra un archivo Excel o CSV válido (.xlsx, .xls, .csv)");
               }
             }
           }}

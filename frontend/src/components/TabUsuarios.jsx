@@ -3,6 +3,7 @@ import { useApp } from '../AppContext';
 
 export default function TabUsuarios() {
   const {
+    creandoUsuario,
     currentUser,
     handleCambiarActivo,
     setModalPassword,
@@ -16,7 +17,7 @@ export default function TabUsuarios() {
   } = useApp();
 
   return (
-<div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
+<div className="grid-usuarios" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
               {/* Formulario Crear Usuario */}
               <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}` }}>
                 <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -57,9 +58,10 @@ export default function TabUsuarios() {
 
                   <button
                     type="submit"
+                    disabled={creandoUsuario}
                     style={{ width: '100%', backgroundColor: theme.accent, color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}
                   >
-                    Guardar Usuario
+                    {creandoUsuario ? 'Guardando...' : 'Guardar Usuario'}
                   </button>
                 </form>
               </div>
@@ -73,6 +75,7 @@ export default function TabUsuarios() {
                 {loadingUsuarios ? (
                   <div style={{ textAlign: 'center', padding: '20px' }}><Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} /></div>
                 ) : (
+                  <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textSecondary }}>
@@ -126,6 +129,7 @@ export default function TabUsuarios() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
             </div>

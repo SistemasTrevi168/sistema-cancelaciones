@@ -1,5 +1,6 @@
 import { API_BASE } from '../api';
 import { useApp } from '../AppContext';
+import { avisar, confirmar } from '../ui/notificaciones';
 
 export default function TabManual() {
   const {
@@ -27,7 +28,7 @@ export default function TabManual() {
       <form onSubmit={async (e) => {
         e.preventDefault();
         const faltan = faltantesPara(formData, selectedPlantilla || 'CDMX_AP_H_SOLTERO');
-        if (faltan.length > 0 && !window.confirm(mensajeFaltantesManual(faltan))) return;
+        if (faltan.length > 0 && !(await confirmar(mensajeFaltantesManual(faltan), { titulo: 'Faltan datos', textoConfirmar: 'Generar de todas formas' }))) return;
         setCargando(true);
         try {
           // Recuperar token de autenticación si lo guardas en localStorage (para evitar el error 401)
@@ -44,7 +45,7 @@ export default function TabManual() {
           });
           const data = await res.json();
           if (res.ok && data.status === 'exito') {
-            alert('¡Expediente manual generado con éxito, revisa tu Historial!');
+            avisar.exito('Expediente generado. Lo encuentras en Mi Historial.');
             
             if (data.archivo_base64 && manualPreviewRef.current) {
               const binaryString = window.atob(data.archivo_base64);
@@ -65,15 +66,15 @@ export default function TabManual() {
               setExpedientes([data, ...expedientes]);
             }
           } else {
-            alert('Error: ' + (data.detail || 'No se pudo generar'));
+            avisar.error('Error: ' + (data.detail || 'No se pudo generar'));
           }
         } catch (err) {
           console.error(err);
-          alert('Error de conexión con el servidor.');
+          avisar.error('Error de conexión con el servidor.');
         } finally {
           setCargando(false);
         }
-      }} style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+      }} className="grid-formulario" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
         
         {/* SELECTOR DE PLANTILLA NOTARIAL 2026 (Ocupa todo el ancho) */}
         <div style={{ gridColumn: '1 / -1', marginBottom: '4px' }}>

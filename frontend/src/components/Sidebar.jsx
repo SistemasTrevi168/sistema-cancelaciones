@@ -17,7 +17,7 @@ export default function Sidebar() {
   } = useApp();
 
   return (
-<aside style={{
+<aside className="barra-lateral" style={{
             width: '280px',
             backgroundColor: theme.cardBg,
             borderRight: `1px solid ${theme.border}`,
@@ -48,7 +48,7 @@ export default function Sidebar() {
               </div>
 
               {/* NAVEGACIÓN VERTICAL (TABS) */}
-              <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <nav className="barra-lateral-nav" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <button
                   onClick={() => setActiveTab('single')}
                   className="pulse-hover"

@@ -1,8 +1,12 @@
-import { ArrowUpDown, Download, Filter, History, Search } from 'lucide-react';
+import {
+  ArrowUpDown, Download, Filter, History, Loader2, Search,
+} from 'lucide-react';
 import { useApp } from '../AppContext';
 
 export default function TabHistorial() {
   const {
+    cargandoHistorial,
+    descargandoId,
     filterPeriod,
     filteredHistorial,
     handleDownloadWord,
@@ -162,7 +166,13 @@ export default function TabHistorial() {
                 </div>
               </div>
               
-              {filteredHistorial.length === 0 ? (
+              {cargandoHistorial && filteredHistorial.length === 0 ? (
+                <div aria-busy="true" style={{ padding: '8px' }}>
+                  {[0, 1, 2, 3, 4].map((n) => (
+                    <div key={n} className="esqueleto" style={{ height: '44px', borderRadius: '8px', marginBottom: '10px', opacity: 1 - n * 0.15 }} />
+                  ))}
+                </div>
+              ) : filteredHistorial.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: theme.textSecondary, fontSize: '14px' }}>
                   No se encontraron expedientes con los criterios seleccionados.
                 </div>
@@ -194,9 +204,10 @@ export default function TabHistorial() {
                             <td style={{ padding: '12px', textAlign: 'right' }}>
                               <button
                                 onClick={() => handleDownloadWord(item.id || item.expediente_id, dExtra)}
+                                disabled={descargandoId === (item.id || item.expediente_id)}
                                 style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, border: `1px solid ${theme.border}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                               >
-                                <Download size={12} /> Descargar DOCX
+                                {descargandoId === (item.id || item.expediente_id) ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={12} />} Descargar DOCX
                               </button>
                             </td>
                           </tr>

@@ -1,23 +1,24 @@
 import {
-  AlertTriangle, CheckCircle, Download, Eye, FileText, Loader2, Lock, Unlock, Upload,
+  AlertTriangle, CheckCircle, Download, Eye, FileText, Loader2, Upload,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
+import CamposDatos from './CamposDatos';
 
 export default function TabIndividual() {
   const {
+    isDarkMode,
+    descargandoId,
     etiquetaCampo,
     faltantesPara,
     cargandoPreview,
     datos,
     expedienteId,
-    formatLabel,
     handleDownloadWord,
     handleDragOver,
     handleDropSingle,
     handleGenerarVistaPrevia,
     handleInputChange,
     handleSingleFileChange,
-    handleToggleUnlock,
     handleUploadSingle,
     loading,
     mostrarVistaPrevia,
@@ -28,11 +29,10 @@ export default function TabIndividual() {
     setSelectedPlantilla,
     singleFiles,
     theme,
-    unlockedFields
   } = useApp();
 
   return (
-<div style={{ 
+<div className="grid-individual" style={{ 
     display: 'grid', 
     gridTemplateColumns: datos ? (mostrarVistaPrevia ? '1fr 1fr 1.2fr' : '1fr 1fr') : '1fr', 
     gap: '24px',
@@ -211,9 +211,10 @@ export default function TabIndividual() {
             {/* BOTÓN DESCARGAR WORD */}
             <button
               onClick={() => handleDownloadWord(expedienteId, datos)}
+              disabled={descargandoId === expedienteId}
               style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              <Download size={14} /> Descargar Word
+              {descargandoId === expedienteId ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={14} />} Descargar Word
             </button>
           </div>
         </div>
@@ -221,12 +222,12 @@ export default function TabIndividual() {
         {(() => {
           const faltan = faltantesPara(datos, selectedPlantilla);
           if (faltan.length === 0) return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '10px 12px', borderRadius: '8px', fontSize: '12px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: isDarkMode ? '#052e16' : '#ecfdf5', color: isDarkMode ? '#86efac' : '#065f46', border: `1px solid ${isDarkMode ? '#166534' : '#a7f3d0'}`, padding: '10px 12px', borderRadius: '8px', fontSize: '12px', marginBottom: '14px' }}>
               <CheckCircle size={16} /> Están completos todos los datos que usa la plantilla seleccionada.
             </div>
           );
           return (
-            <div style={{ display: 'flex', gap: '10px', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fcd34d', padding: '12px', borderRadius: '8px', fontSize: '12px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', gap: '10px', backgroundColor: isDarkMode ? '#422006' : '#fffbeb', color: isDarkMode ? '#fcd34d' : '#92400e', border: `1px solid ${isDarkMode ? '#a16207' : '#fcd34d'}`, padding: '12px', borderRadius: '8px', fontSize: '12px', marginBottom: '14px' }}>
               <AlertTriangle size={18} style={{ flexShrink: 0 }} />
               <div>
                 <strong>Faltan {faltan.length} dato(s) que usa la plantilla:</strong> {faltan.map(etiquetaCampo).join(', ')}.
@@ -236,55 +237,13 @@ export default function TabIndividual() {
           );
         })()}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '500px', overflowY: 'auto', paddingRight: '4px' }}>
-          {Object.entries(datos).map(([key, val]) => {
-            if (key === 'datos_inmueble') return null;
-            const falta = val === "NO_ENCONTRADO" || faltantesPara(datos, selectedPlantilla).includes(key);
-            const isUnlocked = unlockedFields[`single_${key}`];
-            return (
-              <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: theme.textSecondary }}>
-                  {formatLabel(key)} {falta && <span style={{ color: '#dc3545' }}>(falta)</span>}
-                </label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    value={val || ''}
-                    disabled={!isUnlocked}
-                    onChange={(e) => handleInputChange(key, e.target.value)}
-                    style={{
-                      flex: 1,
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: falta ? '1px solid #dc3545' : `1px solid ${theme.border}`,
-                      backgroundColor: falta ? '#fff8f8' : (isUnlocked ? theme.inputBg : theme.subtleBg),
-                      color: falta ? '#dc3545' : theme.textPrimary,
-                      fontSize: '13px',
-                      fontWeight: falta ? '600' : 'normal',
-                      opacity: isUnlocked ? 1 : 0.8
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleToggleUnlock(`single_${key}`)}
-                    style={{
-                      padding: '10px',
-                      borderRadius: '8px',
-                      border: `1px solid ${theme.border}`,
-                      backgroundColor: isUnlocked ? '#fef3c7' : theme.subtleBg,
-                      color: isUnlocked ? '#d97706' : theme.textSecondary,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    {isUnlocked ? <Unlock size={16} /> : <Lock size={16} />}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+        <div style={{ maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
+          <CamposDatos
+            datos={datos}
+            prefijo="single"
+            faltantes={faltantesPara(datos, selectedPlantilla)}
+            onCambio={handleInputChange}
+          />
         </div>
       </div>
     )}

@@ -153,7 +153,7 @@ export default function LoginScreen() {
             <button
               type="submit"
               disabled={isLoggingIn}
-              className={`login-boton login-entrada ${loginUser && loginPassword ? 'listo' : ''} ${isLoggingIn ? 'cargando' : ''}`}
+              className={`login-boton login-entrada ${isLoggingIn ? 'cargando' : ''}`}
               style={{ animationDelay: '0.32s', '--fondo-boton': isDarkMode ? '#1e293b' : '#eff6ff' }}
             >
               {isLoggingIn ? (

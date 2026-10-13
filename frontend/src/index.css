@@ -783,13 +783,11 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
 }
 .login-boton:not(:disabled):hover::before,
 .login-boton:focus-visible::before,
-.login-boton.listo::before,
 .login-boton.cargando::before {
   transform: scaleX(1);
 }
 .login-boton:not(:disabled):hover,
 .login-boton:focus-visible,
-.login-boton.listo,
 .login-boton.cargando {
   color: #fff;
   box-shadow: 0 12px 26px -10px rgba(37, 99, 235, 0.85);

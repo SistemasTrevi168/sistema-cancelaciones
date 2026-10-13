@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { api, API_BASE } from './api';
+import { api, API_BASE, alExpirarSesion, encabezadosSesion, guardarToken } from './api';
 import { AppContext } from './AppContext';
 import LoginScreen from './components/LoginScreen';
 import LogoutModal from './components/LogoutModal';
@@ -408,6 +408,17 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     setActiveTab(pestana);
   };
 
+  // Si cualquier llamada responde "sesión no válida", se regresa al login con un aviso
+  useEffect(() => {
+    alExpirarSesion(() => {
+      if (!navegador.auth) return;
+      navegador.auth = false;
+      avisar.aviso('Tu sesión expiró o se cerró. Vuelve a ingresar.');
+      navegador.alSalir?.();
+    });
+    return () => alExpirarSesion(null);
+  }, []);
+
   // Datos y funciones actuales para los eventos del navegador
   useEffect(() => {
     navegador.auth = isAuthenticated;
@@ -485,6 +496,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         setCurrentUser(res.data.user);
         setIsAuthenticated(true);
       } else {
+        guardarToken(null);
         setIsAuthenticated(false);
         setCurrentUser(null);
       }
@@ -509,6 +521,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       });
 
       if (res.data?.status === 'ok') {
+        guardarToken(res.data.token);
         setCurrentUser(res.data.user);
         setIsAuthenticated(true);
         navegador.auth = true;
@@ -535,6 +548,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
 
   const handleConfirmLogout = async () => {
     cerrarVistaPrevia();
+    // (el token se borra después de avisar al servidor)
     navegador.auth = false;
     navegador.guardia = false;
     window.history.replaceState(null, '');
@@ -543,9 +557,11 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     } catch (err) {
       console.error('Error al cerrar sesión:', err);
     } finally {
+      guardarToken(null);
       setIsAuthenticated(false);
       setCurrentUser(null);
       setShowLogoutModal(false);
+      setError('');
       setLoginUser('');
       setLoginPassword('');
       setDatos(null);
@@ -613,6 +629,7 @@ const handlePreviewExcel = async (file) => {
     const res = await fetch(`${API_BASE}/api/expedientes/previsualizar-excel`, {
       method: 'POST',
       credentials: 'include',
+      headers: encabezadosSesion(),
       body: dataForm
     });
     const data = await res.json();
@@ -1123,6 +1140,7 @@ const handleExcelSubmit = async (e) => {
       const res = await fetch(`${API_BASE}/api/expedientes/procesar-excel`, {
         method: 'POST',
         credentials: 'include',
+        headers: encabezadosSesion(),
         body: dataForm
       });
       const data = await res.json();
@@ -1159,9 +1177,7 @@ const handleExcelSubmit = async (e) => {
       const resZip = await fetch(`${API_BASE}/api/expedientes/descargar-zip`, {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: encabezadosSesion({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(idsCreados),
       });
 

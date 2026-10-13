@@ -6,6 +6,7 @@ import IconoArchivo from './IconoArchivo';
 
 export default function TabHistorial() {
   const {
+    isDarkMode,
     formatearMonto,
     abrirVistaPrevia,
     selectedPlantilla,
@@ -201,7 +202,7 @@ export default function TabHistorial() {
                           <tr key={idx} className="fila-historial" style={{ borderBottom: `1px solid ${theme.border}` }}>
                             <td style={{ padding: '12px', fontWeight: '600', color: theme.textPrimary }}>{nombre}</td>
                             <td style={{ padding: '12px', color: theme.textSecondary }}>{numCred}</td>
-                            <td style={{ padding: '12px', color: theme.textPrimary, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{montoStr}</td>
+                            <td style={{ padding: '12px', color: montoStr === '—' ? theme.textSecondary : (isDarkMode ? '#34d399' : '#059669'), fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{montoStr}</td>
                             <td style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{fechaStr}</td>
                             <td style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{horaStr}</td>
                             <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>

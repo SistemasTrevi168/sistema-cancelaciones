@@ -1227,7 +1227,7 @@ def restablecer_password(
     auth.validar_password_nueva(data.password_nueva)
     usuario.password_hash = auth.hash_password(data.password_nueva)
     # Se cierran las sesiones abiertas de ese usuario (menos la del admin que hace el cambio)
-    auth.cerrar_sesiones_de(db, usuario.username, excepto=request.cookies.get("session_id"))
+    auth.cerrar_sesiones_de(db, usuario.username, excepto=auth.session_id_de(request))
     db.commit()
     return {"status": "exito", "mensaje": f"Contraseña de {usuario.username} actualizada."}
 

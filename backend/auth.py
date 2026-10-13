@@ -106,8 +106,24 @@ def inicializar_usuarios_default(db: Session):
 
 # --- DEPENDENCIAS DE SEGURIDAD (usar con Depends en los endpoints) ---
 
+def session_id_de(request: Request):
+    """
+    Identificador de la sesión: de la cookie o del encabezado "Authorization: Bearer ...".
+    El encabezado es necesario en iPhone/Safari, que bloquea las cookies entre
+    sitios distintos (el frontend está en vercel.app y el backend en railway.app).
+    """
+    cookie = request.cookies.get("session_id")
+    if cookie:
+        return cookie
+    encabezado = request.headers.get("authorization") or ""
+    if encabezado.lower().startswith("bearer "):
+        token = encabezado[7:].strip()
+        return token or None
+    return None
+
+
 def obtener_sesion(request: Request, db: Session) -> dict:
-    session_id = request.cookies.get("session_id")
+    session_id = session_id_de(request)
     if not session_id:
         raise HTTPException(status_code=401, detail="Sesión no válida o expirada")
 
@@ -194,6 +210,8 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
 
     return {
         "status": "ok",
+        # El frontend lo guarda y lo manda en "Authorization" (para iPhone/Safari)
+        "token": session_id,
         "user": {
             "id": str(user.id),
             "username": user.username,
@@ -222,7 +240,7 @@ def estado_sesion(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
-    session_id = request.cookies.get("session_id")
+    session_id = session_id_de(request)
     if session_id:
         db.query(Sesion).filter(Sesion.id == session_id).delete(synchronize_session=False)
         db.commit()
@@ -262,6 +280,6 @@ def cambiar_password(
 
     user_db.password_hash = hash_password(data.password_nueva)
     # Por seguridad se cierran sus otras sesiones abiertas (otras computadoras)
-    cerrar_sesiones_de(db, user_db.username, excepto=request.cookies.get("session_id"))
+    cerrar_sesiones_de(db, user_db.username, excepto=session_id_de(request))
     db.commit()
     return {"status": "exito", "mensaje": "Contraseña actualizada correctamente."}

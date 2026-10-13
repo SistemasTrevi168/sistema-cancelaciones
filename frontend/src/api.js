@@ -22,3 +22,49 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ---------- Sesión por encabezado (necesario en iPhone/Safari) ----------
+// Safari bloquea las cookies entre sitios distintos (vercel.app ↔ railway.app),
+// así que además de la cookie se manda el identificador de sesión en "Authorization".
+const CLAVE_TOKEN = 'sesion_token';
+
+export function guardarToken(token) {
+  try {
+    if (token) localStorage.setItem(CLAVE_TOKEN, token);
+    else localStorage.removeItem(CLAVE_TOKEN);
+  } catch { /* navegación privada sin almacenamiento */ }
+}
+
+export function leerToken() {
+  try {
+    return localStorage.getItem(CLAVE_TOKEN);
+  } catch {
+    return null;
+  }
+}
+
+// Encabezados para las llamadas hechas con fetch()
+export function encabezadosSesion(extra = {}) {
+  const token = leerToken();
+  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+}
+
+api.interceptors.request.use((config) => {
+  const token = leerToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// Si el servidor dice que la sesión ya no es válida, la app regresa al login
+let alExpirar = null;
+export function alExpirarSesion(fn) {
+  alExpirar = fn;
+}
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const url = error.config?.url || '';
+    if (error.response?.status === 401 && !url.includes('/auth/login') && alExpirar) alExpirar();
+    return Promise.reject(error);
+  }
+);

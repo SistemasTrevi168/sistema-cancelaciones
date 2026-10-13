@@ -1,5 +1,5 @@
 import { Eye } from 'lucide-react';
-import { API_BASE } from '../api';
+import { API_BASE, encabezadosSesion } from '../api';
 import { useApp } from '../AppContext';
 import { avisar, confirmar } from '../ui/notificaciones';
 import OpcionesPlantilla from './OpcionesPlantilla';
@@ -35,16 +35,11 @@ export default function TabManual() {
         if (faltan.length > 0 && !(await confirmar(mensajeFaltantesManual(faltan), { titulo: 'Faltan datos', textoConfirmar: 'Generar de todas formas' }))) return;
         setCargando(true);
         try {
-          // Recuperar token de autenticación si lo guardas en localStorage (para evitar el error 401)
-          const token = localStorage.getItem('token') || '';
 
           const res = await fetch(`${API_BASE}/api/expedientes/generar-manual`, {
             method: 'POST',
             credentials: 'include',
-            headers: { 
-              'Content-Type': 'application/json',
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            },
+            headers: encabezadosSesion({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ ...formData, plantilla: selectedPlantilla || 'CDMX_AP_H_SOLTERO' })
           });
           const data = await res.json();

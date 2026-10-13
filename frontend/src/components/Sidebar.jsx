@@ -233,30 +233,6 @@ export default function Sidebar() {
                     >
                       <Users size={18} /> Usuarios
                     </button>
-
-                    <button
-                      onClick={() => setActiveTab('templates')}
-                  data-tab="templates"
-                  aria-current={activeTab === 'templates' ? 'page' : undefined}
-                  className="nav-item"
-                      style={{
-                        width: '100%',
-                        padding: '12px 14px',
-                        borderRadius: '10px',
-                        border: 'none',
-                        backgroundColor: 'transparent',
-                        color: activeTab === 'templates' ? '#fff' : theme.textSecondary,
-                        fontWeight: '600',
-                        fontSize: '14px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        textAlign: 'left',
-                        transition: 'color 0.25s ease', position: 'relative', zIndex: 1
-                      }}
-                    >
-                    </button>
                   </>
                 )}
               </nav>

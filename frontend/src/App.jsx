@@ -7,6 +7,7 @@ import LogoutModal from './components/LogoutModal';
 import ModalPassword from './components/ModalPassword';
 import Notificaciones from './components/Notificaciones';
 import PanelVistaPrevia from './components/PanelVistaPrevia';
+import PantallaCarga from './components/PantallaCarga';
 import { avisar, confirmar } from './ui/notificaciones';
 import { instalarEfectoOnda } from './ui/efectoOnda';
 import { etiquetaDe } from './camposExpediente';
@@ -19,7 +20,10 @@ import TabManual from './components/TabManual';
 import TabMasivo from './components/TabMasivo';
 import TabUsuarios from './components/TabUsuarios';
 import { renderAsync } from 'docx-preview';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
+
+// Estado de los botones atrás/adelante del navegador (fuera de React: solo lo usan los eventos del navegador)
+const navegador = { guardia: false, auth: false, tab: 'single', alSalir: null, alVolverPestana: null, alRevisar: null };
 
 export default function App() {
   // --- TEMA (CLARO / OSCURO) ---
@@ -127,6 +131,8 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  // Pantalla de bienvenida después de iniciar sesión: null o { nombre, saliendo }
+  const [bienvenida, setBienvenida] = useState(null);
 
   // --- 2. ESTADOS DE AUTENTICACIÓN / LOGIN ---
   const [loginUser, setLoginUser] = useState('');
@@ -356,25 +362,72 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // Al cambiar de pestaña se cierra la vista previa
   const cambiarPestana = (pestana) => {
     cerrarVistaPrevia();
+    if (pestana !== activeTab && navegador.guardia) {
+      window.history.pushState({ app: 'cancelaciones', tipo: 'tab', tab: pestana }, '');
+    }
     setActiveTab(pestana);
   };
 
-  // Neutralizar navegación por historial del navegador
+  // Datos y funciones actuales para los eventos del navegador
   useEffect(() => {
-    if (isAuthenticated) {
-      window.history.replaceState(null, "", window.location.href);
-      window.history.pushState(null, "", window.location.href);
+    navegador.auth = isAuthenticated;
+    navegador.tab = activeTab;
+    navegador.alSalir = handleConfirmLogout;
+    navegador.alRevisar = verificarSesion;
+    navegador.alVolverPestana = (pestana) => {
+      cerrarVistaPrevia();
+      setActiveTab(pestana);
+    };
+  });
 
-      const handlePopState = (e) => {
-        window.history.pushState(null, "", window.location.href);
-      };
+  // ---------- BOTONES ATRÁS / ADELANTE DEL NAVEGADOR ----------
+  // Cada pestaña queda en el historial del navegador: "atrás" regresa a la pestaña anterior
+  // en lugar de salir del sistema. Debajo de todas hay una entrada "base": si el usuario
+  // llega a ella, se le pregunta si quiere cerrar sesión (y se cierra de verdad).
 
-      window.addEventListener("popstate", handlePopState);
-      return () => {
-        window.removeEventListener("popstate", handlePopState);
-      };
-    }
-  }, [isAuthenticated]);
+  const crearGuardiaHistorial = () => {
+    if (navegador.guardia) return;
+    window.history.replaceState({ app: 'cancelaciones', tipo: 'base' }, '');
+    window.history.pushState({ app: 'cancelaciones', tipo: 'tab', tab: navegador.tab }, '');
+    navegador.guardia = true;
+  };
+
+  useEffect(() => {
+    const alNavegar = async (e) => {
+      const n = navegador;
+      if (!n.auth) return; // en el login, atrás/adelante no hacen nada especial
+      const estado = e.state;
+      if (estado?.app === 'cancelaciones' && estado.tipo === 'tab') {
+        n.alVolverPestana?.(estado.tab);
+        return;
+      }
+      // Llegó a la entrada base (o salió del sistema): se vuelve a poner la pestaña actual
+      window.history.pushState({ app: 'cancelaciones', tipo: 'tab', tab: n.tab }, '');
+      const salir = await confirmar('Si sales, se cerrará tu sesión y tendrás que volver a ingresar.', {
+        titulo: '¿Salir del sistema?',
+        textoConfirmar: 'Sí, cerrar sesión',
+        textoCancelar: 'Seguir aquí',
+        peligro: true,
+      });
+      if (salir) n.alSalir?.();
+    };
+    // Si el navegador regresa la página desde su memoria (botón adelante), se revisa
+    // con el servidor que la sesión siga siendo válida
+    const alMostrar = (e) => { if (e.persisted) navegador.alRevisar?.(); };
+    // Si la sesión se recuperó al recargar, la entrada base se crea con la primera interacción
+    // (los navegadores ignoran las entradas creadas sin que el usuario haya hecho clic)
+    const alInteractuar = () => { if (navegador.auth) crearGuardiaHistorial(); };
+    window.addEventListener('popstate', alNavegar);
+    window.addEventListener('pageshow', alMostrar);
+    window.addEventListener('pointerdown', alInteractuar, true);
+    window.addEventListener('keydown', alInteractuar, true);
+    return () => {
+      window.removeEventListener('popstate', alNavegar);
+      window.removeEventListener('pageshow', alMostrar);
+      window.removeEventListener('pointerdown', alInteractuar, true);
+      window.removeEventListener('keydown', alInteractuar, true);
+    };
+  }, []);
 
 
 
@@ -418,7 +471,12 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       if (res.data?.status === 'ok') {
         setCurrentUser(res.data.user);
         setIsAuthenticated(true);
-        window.history.replaceState(null, "", window.location.href);
+        navegador.auth = true;
+        crearGuardiaHistorial();
+        // Presentación de bienvenida (se va sola)
+        setBienvenida({ nombre: res.data.user?.username, saliendo: false });
+        setTimeout(() => setBienvenida((b) => (b ? { ...b, saliendo: true } : b)), 1700);
+        setTimeout(() => setBienvenida(null), 2100);
         setLoginPassword('');
         setSingleFiles([]);
         setDatos(null);
@@ -433,6 +491,9 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
 
   const handleConfirmLogout = async () => {
     cerrarVistaPrevia();
+    navegador.auth = false;
+    navegador.guardia = false;
+    window.history.replaceState(null, '');
     try {
       await api.post('/auth/logout');
     } catch (err) {
@@ -1420,12 +1481,7 @@ const filteredHistorial = (historial || []).filter((item) => {
     }}>
 
       {isCheckingAuth ? (
-        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg }}>
-          <div style={{ textAlign: 'center' }}>
-            <Loader2 size={48} color={theme.accent} style={{ animation: 'spin 1s linear infinite' }} />
-            <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-          </div>
-        </div>
+        <PantallaCarga isDarkMode={isDarkMode} />
       ) : !isAuthenticated ? (
         <LoginScreen />
       ) : (
@@ -1469,6 +1525,11 @@ const filteredHistorial = (historial || []).filter((item) => {
 
       {/* MODAL DE CIERRE DE SESIÓN */}
       {showLogoutModal && <LogoutModal />}
+
+      {/* PRESENTACIÓN DESPUÉS DE INICIAR SESIÓN */}
+      {isAuthenticated && bienvenida && (
+        <PantallaCarga isDarkMode={isDarkMode} nombre={bienvenida.nombre} saliendo={bienvenida.saliendo} />
+      )}
 
       {/* VISTA PREVIA FLOTANTE */}
       {isAuthenticated && <PanelVistaPrevia />}

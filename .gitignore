@@ -1,0 +1,18 @@
+# Dependencias y archivos compilados
+node_modules/
+dist/
+__pycache__/
+*.pyc
+
+# Archivos que genera el sistema (contienen datos personales)
+backend/uploads/
+
+# Temporales de Word/Office
+~$*
+
+# Respaldos locales y salidas de Claude
+_respaldo_*/
+Claude outputs/
+
+# Variables de entorno
+.env

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, String, Boolean, DateTime, JSON, ForeignKey, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from database import Base
@@ -38,3 +38,13 @@ class Sesion(Base):
     role = Column(String, default="operador")
     creada_en = Column(DateTime(timezone=True), server_default=func.now())
     expira_en = Column(DateTime(timezone=True), nullable=False)
+
+
+class PlantillaSubida(Base):
+    """Copia de las plantillas .docx subidas desde el panel de admin (para que no se pierdan al redesplegar)."""
+    __tablename__ = "plantillas_subidas"
+
+    nombre = Column(String, primary_key=True)
+    contenido = Column(LargeBinary, nullable=False)
+    subida_por = Column(String, nullable=True)
+    actualizada_en = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

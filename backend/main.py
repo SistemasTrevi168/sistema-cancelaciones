@@ -79,6 +79,77 @@ def obtener_expediente_autorizado(db: Session, expediente_id: str, usuario: dict
     return expediente
 
 
+# --- MANEJO DE ARCHIVOS: nombres únicos para que nunca se pisen entre usuarios ---
+UPLOADS_DIR = "uploads"
+GENERADOS_DIR = os.path.join("uploads", "generados")
+ZIPS_DIR = os.path.join("uploads", "zips")
+
+
+def nombre_seguro(texto: str, defecto: str = "archivo") -> str:
+    """Deja solo caracteres válidos para un nombre de archivo."""
+    limpio = re.sub(r'[^\w\-. ()]', '_', str(texto or "")).strip(" .")
+    return limpio or defecto
+
+
+def guardar_upload(file: UploadFile) -> tuple:
+    """Guarda el archivo subido con un prefijo único. Regresa (ruta_en_disco, nombre_original)."""
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    nombre_original = os.path.basename((file.filename or "archivo").replace("\\", "/"))
+    ruta = os.path.join(UPLOADS_DIR, f"{uuid.uuid4().hex[:12]}_{nombre_seguro(nombre_original)}")
+    with open(ruta, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return ruta, nombre_original
+
+
+def ruta_word_unica(num_credito: str) -> str:
+    """Ruta única para un Word generado (el nombre de descarga sigue siendo Cancelacion_<credito>.docx)."""
+    os.makedirs(GENERADOS_DIR, exist_ok=True)
+    return os.path.join(GENERADOS_DIR, f"Cancelacion_{nombre_seguro(num_credito, 'SIN_CREDITO')}_{uuid.uuid4().hex[:8]}.docx")
+
+
+def borrar_archivos(rutas):
+    """Borra archivos temporales sin interrumpir el proceso si alguno falla."""
+    for ruta in rutas or []:
+        try:
+            if ruta and os.path.isfile(ruta):
+                os.remove(ruta)
+        except Exception as e:
+            print(f"No se pudo borrar {ruta}: {e}")
+
+
+def reemplazar_word_anterior(ruta_anterior: Optional[str], ruta_nueva: str):
+    """Al regenerar un Word, borra la versión anterior de ese mismo expediente."""
+    if ruta_anterior and ruta_anterior != ruta_nueva and os.path.abspath(ruta_anterior).startswith(os.path.abspath(GENERADOS_DIR)):
+        borrar_archivos([ruta_anterior])
+
+
+def asegurar_word(expediente, db: Session) -> Optional[str]:
+    """
+    Regresa la ruta del Word del expediente. Si el archivo ya no existe
+    (por ejemplo, Railway borró el disco al redesplegar), lo vuelve a generar
+    a partir de los datos guardados en la base de datos.
+    """
+    if expediente.ruta_word_generado and os.path.exists(expediente.ruta_word_generado):
+        return expediente.ruta_word_generado
+
+    datos = dict(expediente.datos_extraidos or {})
+    if not datos:
+        return None
+    num_credito = datos.get("numero_credito") or expediente.numero_credito
+    nombre_plantilla = datos.get("plantilla_seleccionada") or datos.get("plantilla") or "plantilla_manera2.docx"
+    ruta_salida = ruta_word_unica(num_credito)
+    try:
+        exito = services.generar_word_cancelacion(resolver_ruta_plantilla(nombre_plantilla), datos, ruta_salida)
+    except Exception as e:
+        print(f"No se pudo regenerar el Word de {expediente.id}: {e}")
+        return None
+    if not exito or not os.path.exists(ruta_salida):
+        return None
+    expediente.ruta_word_generado = ruta_salida
+    db.commit()
+    return ruta_salida
+
+
 def eliminar_archivo_temporal(ruta: str):
     """Elimina el archivo ZIP del servidor de manera segura después de la descarga."""
     if os.path.exists(ruta):
@@ -94,8 +165,10 @@ def descargar_zip(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_user)
 ):
-    os.makedirs("uploads/zips", exist_ok=True)
-    ruta_zip = "uploads/zips/Cancelaciones_Lote.zip"
+    os.makedirs(ZIPS_DIR, exist_ok=True)
+    # Nombre único por descarga: dos personas descargando a la vez ya no se mezclan
+    ruta_zip = os.path.join(ZIPS_DIR, f"Cancelaciones_Lote_{uuid.uuid4().hex}.zip")
+    nombres_usados = set()
     
     with zipfile.ZipFile(ruta_zip, 'w') as zipf:
         for exp_id in expediente_ids:
@@ -107,9 +180,18 @@ def descargar_zip(
             exp = db.query(models.Expediente).filter(models.Expediente.id == uuid_val).first()
             if exp and not es_admin(usuario) and exp.usuario_propietario != usuario["username"]:
                 continue
-            if exp and exp.ruta_word_generado and os.path.exists(exp.ruta_word_generado):
-                nombre_archivo = os.path.basename(exp.ruta_word_generado)
-                zipf.write(exp.ruta_word_generado, arcname=nombre_archivo)
+            if not exp:
+                continue
+            ruta_word = asegurar_word(exp, db)
+            if ruta_word:
+                base = f"Cancelacion_{nombre_seguro(exp.numero_credito, 'SIN_CREDITO')}"
+                nombre_archivo = f"{base}.docx"
+                contador = 2
+                while nombre_archivo in nombres_usados:
+                    nombre_archivo = f"{base} ({contador}).docx"
+                    contador += 1
+                nombres_usados.add(nombre_archivo)
+                zipf.write(ruta_word, arcname=nombre_archivo)
 
     if background_tasks:
         background_tasks.add_task(eliminar_archivo_temporal, ruta_zip)
@@ -525,6 +607,23 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     return resultado
 
 @app.on_event("startup")
+def restaurar_plantillas_subidas():
+    """Vuelve a escribir en disco las plantillas que el admin subió (Railway borra el disco al redesplegar)."""
+    db = SessionLocal()
+    try:
+        os.makedirs(TEMPLATES_DIR, exist_ok=True)
+        for p in db.query(models.PlantillaSubida).all():
+            nombre = os.path.basename(p.nombre)
+            with open(os.path.join(TEMPLATES_DIR, nombre), "wb") as f:
+                f.write(p.contenido)
+            print(f"--> Plantilla restaurada: {nombre}")
+    except Exception as e:
+        print(f"Error al restaurar plantillas: {e}")
+    finally:
+        db.close()
+
+
+@app.on_event("startup")
 def crear_usuario_admin_defecto():
     db = SessionLocal()
     try:
@@ -656,18 +755,17 @@ async def procesar_documento(
         # El propietario siempre es el usuario de la sesión
         propietario_final = sesion["username"]
 
-        os.makedirs("uploads", exist_ok=True)
         datos_extraidos_lista = []
         rutas_guardadas = []
+        nombres_originales = []
 
         for file in files:
-            ruta_guardado = os.path.join("uploads", file.filename)
-            with open(ruta_guardado, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            
+            ruta_guardado, nombre_original = guardar_upload(file)
+            rutas_guardadas.append(ruta_guardado)
+            nombres_originales.append(nombre_original)
+
             datos = services.extraer_datos_pdf(ruta_guardado)
             datos_extraidos_lista.append(datos)
-            rutas_guardadas.append(ruta_guardado)
 
         datos_combinados = services.combinar_datos_pareja(datos_extraidos_lista)
         num_credito = datos_combinados.get("numero_credito", "SIN_CREDITO")
@@ -681,7 +779,8 @@ async def procesar_documento(
             usuario_propietario=propietario_final,
             numero_credito=num_credito,
             datos_extraidos=datos_limpios,
-            ruta_pdf_constancia=";".join(rutas_guardadas)
+            # Se guarda el nombre original como referencia; el PDF se borra tras extraer los datos
+            ruta_pdf_constancia=";".join(nombres_originales)
         )
         db.add(nuevo_expediente)
         db.commit()
@@ -696,6 +795,9 @@ async def procesar_documento(
     except Exception as e:
         print(f"ERROR EN /procesar: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Los PDFs solo se necesitan para extraer los datos (que ya quedaron en la BD)
+        borrar_archivos(locals().get("rutas_guardadas"))
 
 
 @app.post("/api/expedientes/procesar-masivo")
@@ -709,21 +811,16 @@ async def procesar_masivo(
     try:
         propietario_final = sesion["username"]
 
-        os.makedirs("uploads", exist_ok=True)
-        os.makedirs("uploads/generados", exist_ok=True)
-        
         ruta_plantilla = resolver_ruta_plantilla(plantilla)
         archivos_procesados = []
 
         for file in files:
-            nombre_limpio_archivo = file.filename.replace('\\', '/').split('/')[-1]
+            nombre_limpio_archivo = (file.filename or "").replace('\\', '/').split('/')[-1]
 
             if not nombre_limpio_archivo.lower().endswith('.pdf'):
                 continue
                 
-            ruta_guardado = os.path.join("uploads", nombre_limpio_archivo)
-            with open(ruta_guardado, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            ruta_guardado, nombre_limpio_archivo = guardar_upload(file)
 
             try:
                 datos = services.extraer_datos_pdf(ruta_guardado)
@@ -763,7 +860,7 @@ async def procesar_masivo(
             if credito_key not in agrupados_por_credito:
                 agrupados_por_credito[credito_key] = []
             
-            agrupados_por_credito[credito_key].append((ruta, datos))
+            agrupados_por_credito[credito_key].append((ruta, datos, nombre))
 
         resultados = []
         for prefijo, grupo in agrupados_por_credito.items():
@@ -788,11 +885,13 @@ async def procesar_masivo(
                         num_credito = prefijo
                 
                 datos_finales = limpiar_datos_para_plantilla(datos_raw, num_credito)
+                # Se recuerda la plantilla usada, para poder regenerar el Word igual después
+                datos_finales["plantilla_seleccionada"] = plantilla
 
-                ruta_salida = f"uploads/generados/Cancelacion_{num_credito}.docx"
+                ruta_salida = ruta_word_unica(num_credito)
                 services.generar_word_cancelacion(ruta_plantilla, datos_finales, ruta_salida)
 
-                rutas_pdf = ";".join([item[0] for item in grupo])
+                rutas_pdf = ";".join([item[2] for item in grupo])
                 nuevo_expediente = models.Expediente(
                     usuario_propietario=propietario_final,
                     numero_credito=num_credito,
@@ -824,6 +923,8 @@ async def procesar_masivo(
         return {"status": "exito", "procesados": len([r for r in resultados if "error" not in r]), "detalles": resultados}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        borrar_archivos([item["ruta"] for item in locals().get("archivos_procesados", [])])
 
 
 @app.put("/api/expedientes/{expediente_id}/actualizar")
@@ -880,7 +981,6 @@ def generar_word(
         )
         
         ruta_plantilla = resolver_ruta_plantilla(nombre_plantilla)
-        os.makedirs("uploads/generados", exist_ok=True)
         
         num_credito = datos_actuales.get("numero_credito") or expediente.numero_credito
         datos_finales = limpiar_datos_para_plantilla(datos_actuales, num_credito)
@@ -890,12 +990,13 @@ def generar_word(
         expediente.numero_credito = num_credito
         flag_modified(expediente, "datos_extraidos")
 
-        ruta_salida = f"uploads/generados/Cancelacion_{num_credito}.docx"
+        ruta_salida = ruta_word_unica(num_credito)
         exito = services.generar_word_cancelacion(ruta_plantilla, datos_finales, ruta_salida)
         
         if not exito or not os.path.exists(ruta_salida):
             raise HTTPException(status_code=500, detail="Error al reescribir la plantilla Word")
         
+        reemplazar_word_anterior(expediente.ruta_word_generado, ruta_salida)
         expediente.ruta_word_generado = ruta_salida
         db.commit()
         db.refresh(expediente)
@@ -990,7 +1091,11 @@ def eliminar_usuario(
 
 
 @app.post("/api/admin/plantilla")
-async def actualizar_plantilla(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+async def actualizar_plantilla(
+    file: UploadFile = File(...),
+    admin: dict = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
     nombre_archivo = os.path.basename(file.filename.replace("\\", "/"))
     if not nombre_archivo.endswith(".docx"):
         raise HTTPException(status_code=400, detail="El archivo debe ser un documento .docx")
@@ -998,8 +1103,21 @@ async def actualizar_plantilla(file: UploadFile = File(...), admin: dict = Depen
     os.makedirs("templates", exist_ok=True)
     ruta_plantilla = os.path.join("templates", nombre_archivo)
     
+    contenido = await file.read()
+    if not contenido:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+
     with open(ruta_plantilla, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(contenido)
+
+    # Copia en la base de datos para que la plantilla no se pierda al redesplegar en Railway
+    existente = db.query(models.PlantillaSubida).filter(models.PlantillaSubida.nombre == nombre_archivo).first()
+    if existente:
+        existente.contenido = contenido
+        existente.subida_por = admin["username"]
+    else:
+        db.add(models.PlantillaSubida(nombre=nombre_archivo, contenido=contenido, subida_por=admin["username"]))
+    db.commit()
         
     return {"status": "exito", "mensaje": f"Plantilla '{nombre_archivo}' subida correctamente"}
 
@@ -1035,8 +1153,7 @@ def generar_expediente_manual(
         datos_limpios["plantilla_seleccionada"] = plantilla
 
         ruta_plantilla = resolver_ruta_plantilla(plantilla)
-        os.makedirs("uploads/generados", exist_ok=True)
-        ruta_salida = f"uploads/generados/Cancelacion_{num_credito}.docx"
+        ruta_salida = ruta_word_unica(num_credito)
         
         exito = services.generar_word_cancelacion(ruta_plantilla, datos_limpios, ruta_salida)
         if not exito:
@@ -1083,17 +1200,14 @@ async def procesar_excel(
         if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
             raise HTTPException(status_code=400, detail="El archivo debe ser un Excel o CSV válido.")
 
-        os.makedirs("uploads", exist_ok=True)
-        os.makedirs("uploads/generados", exist_ok=True)
-        
-        ruta_temp = os.path.join("uploads", file.filename)
-        with open(ruta_temp, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        if file.filename.lower().endswith('.csv'):
-            df = pd.read_csv(ruta_temp)
-        else:
-            df = pd.read_excel(ruta_temp)
+        ruta_temp, _ = guardar_upload(file)
+        try:
+            if file.filename.lower().endswith('.csv'):
+                df = pd.read_csv(ruta_temp)
+            else:
+                df = pd.read_excel(ruta_temp)
+        finally:
+            borrar_archivos([ruta_temp])
 
         ruta_plantilla = resolver_ruta_plantilla(plantilla)
         indices_a_procesar = json.loads(indices_bloque) if indices_bloque else list(df.index)
@@ -1147,7 +1261,7 @@ async def procesar_excel(
                 datos_finales = limpiar_datos_para_plantilla(datos_brutos, num_credito)
                 datos_finales["plantilla_seleccionada"] = plantilla
 
-                ruta_salida = f"uploads/generados/Cancelacion_{num_credito}.docx"
+                ruta_salida = ruta_word_unica(num_credito)
                 exito = services.generar_word_cancelacion(ruta_plantilla, datos_finales, ruta_salida)
                 
                 if not exito:
@@ -1197,15 +1311,14 @@ async def previsualizar_excel(file: UploadFile = File(...), sesion: dict = Depen
         if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
             raise HTTPException(status_code=400, detail="El archivo debe ser un Excel o CSV válido.")
 
-        os.makedirs("uploads", exist_ok=True)
-        ruta_temp = os.path.join("uploads", file.filename)
-        with open(ruta_temp, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        if file.filename.lower().endswith('.csv'):
-            df = pd.read_csv(ruta_temp)
-        else:
-            df = pd.read_excel(ruta_temp)
+        ruta_temp, _ = guardar_upload(file)
+        try:
+            if file.filename.lower().endswith('.csv'):
+                df = pd.read_csv(ruta_temp)
+            else:
+                df = pd.read_excel(ruta_temp)
+        finally:
+            borrar_archivos([ruta_temp])
 
         filas_preview = []
         for index, row in df.iterrows():

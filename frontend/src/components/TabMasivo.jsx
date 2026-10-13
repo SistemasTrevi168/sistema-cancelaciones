@@ -3,19 +3,21 @@ import {
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import CamposDatos from './CamposDatos';
+import OpcionesPlantilla from './OpcionesPlantilla';
+import { nombrePlantilla } from '../plantillasCatalogo';
 
 export default function TabMasivo() {
   const {
+    setSelectedPlantilla,
+    abrirVistaPrevia,
     descargandoId,
     descargandoZip,
     etiquetaCampo,
     faltantesPara,
     selectedPlantilla,
-    actualizarVistaPreviaMasivaTiempoReal,
     batchFiles,
     batchLoading,
     batchPreviewIndex,
-    batchPreviewRef,
     batchResults,
     handleApplyTemplateToSelected,
     handleBatchFileChange,
@@ -31,7 +33,6 @@ export default function TabMasivo() {
     openAccordion,
     progressBatch,
     selectedBatchIndices,
-    setBatchPreviewIndex,
     theme,
     toggleAccordion,
   } = useApp();
@@ -130,6 +131,23 @@ export default function TabMasivo() {
         </div>
       )}
 
+      <div style={{ marginBottom: '16px' }}>
+        <label htmlFor="plantilla-lote" style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: theme.textPrimary, marginBottom: '8px' }}>
+          Plantilla para este lote
+        </label>
+        <select
+          id="plantilla-lote"
+          value={selectedPlantilla}
+          onChange={(e) => setSelectedPlantilla(e.target.value)}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+        >
+          <OpcionesPlantilla />
+        </select>
+        <p style={{ fontSize: '12px', color: theme.textSecondary, margin: '6px 0 0 0' }}>
+          Después puedes cambiar la plantilla de cada expediente en la lista de resultados.
+        </p>
+      </div>
+
       <button
         onClick={() => {
           handleUploadBatch();
@@ -160,7 +178,7 @@ export default function TabMasivo() {
     {batchResults.length > 0 && (
       <div className="grid-masivo" style={{ 
         display: 'grid', 
-        gridTemplateColumns: batchPreviewIndex !== null ? 'minmax(0, 1fr) 440px' : '1fr', 
+        gridTemplateColumns: '1fr', 
         gap: '24px',
         alignItems: 'start',
         width: '100%',
@@ -184,67 +202,22 @@ export default function TabMasivo() {
                 Resultados del Lote ({batchResults.length})
               </h2>
 
-              {/* SELECTOR GLOBAL (CORREGIDO Y SIN LA VARIABLE 'res') */}
-              {selectedBatchIndices.length > 0 && (
-                <select
-                  defaultValue=""
-                  onChange={(e) => {
-                    const plantillaElegida = e.target.value;
-                    if (plantillaElegida) {
-                      handleApplyTemplateToSelected(plantillaElegida);
-                      e.target.value = ""; 
-                    }
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    border: `1px solid ${theme.border}`,
-                    backgroundColor: theme.inputBg,
-                    color: theme.textPrimary,
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    outline: 'none'
-                  }}
-                >
-                  <option value="" disabled>Aplicar a seleccionados ({selectedBatchIndices.length})...</option>
-                  
-                  <optgroup label="CDMX - APERTURA DE CRÉDITO">
-                    <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-                    <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-                    <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-                    <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-                  </optgroup>
-
-                  <optgroup label="CONTRATO DE MUTUO (CDMX)">
-                    <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-                    <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-                    <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-                    <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-                  </optgroup>
-
-                  <optgroup label="MODELOS COACREDITADOS">
-                    <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
-                    <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
-                    <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
-                    <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
-                  </optgroup>
-
-                  <optgroup label="EDOMEX - APERTURA DE CRÉDITO">
-                    <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-                    <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-                    <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-                    <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-                  </optgroup>
-
-                  <optgroup label="CONTRATO DE MUTUO (EDOMEX)">
-                    <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-                    <option value="EDOMEX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-                    <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-                    <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-                  </optgroup>
-                </select>
-              )}
+              {/* SELECTOR GLOBAL: cambia la plantilla de los expedientes marcados */}
+              <select
+                value=""
+                disabled={selectedBatchIndices.length === 0}
+                onChange={(e) => handleApplyTemplateToSelected(e.target.value)}
+                className="selector-plantilla"
+                title={selectedBatchIndices.length === 0 ? 'Marca uno o más expedientes con la casilla para cambiar su plantilla' : ''}
+                style={{ padding: '6px 12px', borderRadius: '6px', border: `1px solid ${selectedBatchIndices.length ? theme.accent : theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                <option value="" disabled>
+                  {selectedBatchIndices.length === 0
+                    ? 'Marca expedientes para cambiar su plantilla'
+                    : `Aplicar plantilla a ${selectedBatchIndices.length} seleccionado(s)...`}
+                </option>
+                <OpcionesPlantilla />
+              </select>
             </div>
 
             <button
@@ -279,7 +252,7 @@ export default function TabMasivo() {
               const faltanItem = faltantesPara(datosExtraidos, res.plantilla_seleccionada || datosExtraidos.plantilla_seleccionada || selectedPlantilla);
 
               return (
-                <div key={idx} style={{ border: `1px solid ${isPreviewingThis ? theme.accent : theme.border}`, borderRadius: '10px', overflow: 'hidden', transition: 'border-color 0.2s ease' }}>
+                <div key={idx} className="entrada-escalonada" style={{ animationDelay: `${Math.min(idx, 12) * 40}ms`, border: `1px solid ${isPreviewingThis ? theme.accent : theme.border}`, borderRadius: '10px', overflow: 'hidden', transition: 'border-color 0.2s ease' }}>
                   <div 
                     onClick={() => toggleAccordion(idx)}
                     style={{ padding: '14px 18px', backgroundColor: theme.subtleBg, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', flexWrap: 'wrap', gap: '8px' }}
@@ -315,76 +288,22 @@ export default function TabMasivo() {
                     
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       {/* SELECTOR INDIVIDUAL CARGA MASIVA*/}
-              {selectedBatchIndices.length > 0 && (
-                <select
-  value={res.plantilla_seleccionada || ""}
-  onChange={(e) => {
-    const nuevaPlantilla = e.target.value;
-    handleBatchPlantillaChange(idx, nuevaPlantilla);
-    if (batchPreviewIndex === idx) {
-      setTimeout(() => {
-        actualizarVistaPreviaMasivaTiempoReal(idx);
-      }, 50);
-    }
-  }}
-  onClick={(e) => e.stopPropagation()}
-  style={{
-    padding: '6px 8px',
-    borderRadius: '6px',
-    border: `1px solid ${theme.border}`,
-    backgroundColor: theme.inputBg,
-    color: theme.textPrimary,
-    fontSize: '12px',
-    outline: 'none',
-    cursor: 'pointer',
-    maxWidth: '200px'
-  }}
-  title="Seleccionar plantilla para este expediente"
->
-  <option value="" disabled>Seleccionar plantilla...</option>
-  
-  <optgroup label="CDMX - APERTURA DE CRÉDITO">
-    <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-    <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-    <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-    <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-  </optgroup>
-
-  <optgroup label="CONTRATO DE MUTUO (CDMX)">
-    <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-    <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-    <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-    <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-  </optgroup>
-
-  <optgroup label="MODELOS COACREDITADOS">
-    <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
-    <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
-    <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
-    <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
-  </optgroup>
-
-  <optgroup label="EDOMEX - APERTURA DE CRÉDITO">
-    <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-    <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-    <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-    <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-  </optgroup>
-
-  <optgroup label="CONTRATO DE MUTUO (EDOMEX)">
-    <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-    <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
-    <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-    <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-  </optgroup>
-</select>
-              )}
+              <select
+                value={res.plantilla_seleccionada || ''}
+                onChange={(e) => handleBatchPlantillaChange(idx, e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className="selector-plantilla"
+                style={{ padding: '6px 8px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '12px', cursor: 'pointer', maxWidth: '230px' }}
+                title={`Plantilla de este expediente: ${nombrePlantilla(res.plantilla_seleccionada)}`}
+              >
+                <option value="" disabled>Seleccionar plantilla...</option>
+                <OpcionesPlantilla />
+              </select>
 
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setBatchPreviewIndex(idx);
-                          actualizarVistaPreviaMasivaTiempoReal(idx);
+                          abrirVistaPrevia({ origen: 'batch', index: idx });
                         }}
                         style={{ 
                           backgroundColor: isPreviewingThis ? theme.accent : theme.cardBg, 
@@ -407,7 +326,7 @@ export default function TabMasivo() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDownloadWord(res.expediente_id, datosExtraidos);
+                          handleDownloadWord(res.expediente_id, datosExtraidos, res.plantilla_seleccionada || selectedPlantilla);
                         }}
                         disabled={descargandoId === res.expediente_id}
                         style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -434,72 +353,6 @@ export default function TabMasivo() {
             })}
           </div>
         </div>
-
-        {/* COLUMNA DERECHA: PANEL DE VISTA PREVIA MASIVA (ANCHO FIJO ESTABLE 440px) */}
-        {batchPreviewIndex !== null && (
-          <div style={{ 
-            backgroundColor: theme.cardBg, 
-            borderRadius: '16px', 
-            border: `1px solid ${theme.border}`,
-            height: '650px',
-            maxHeight: '650px',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            position: 'sticky',
-            top: '24px',
-            width: '440px',
-            flexShrink: 0,
-            boxSizing: 'border-box'
-          }}>
-            <div style={{ 
-              padding: '16px 20px', 
-              borderBottom: `1px solid ${theme.border}`, 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              backgroundColor: theme.subtleBg
-            }}>
-              <h2 style={{ fontSize: '15px', fontWeight: '700', margin: 0, color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                <Eye size={18} color={theme.accent} /> 
-                Previa ({batchResults[batchPreviewIndex]?.datos_extraidos?.acreditado || 'Expediente'})
-              </h2>
-
-              <button
-                onClick={() => {
-                  if (batchPreviewRef.current) {
-                    batchPreviewRef.current.innerHTML = "";
-                  }
-                  setBatchPreviewIndex(null);
-                }}
-                style={{ 
-                  backgroundColor: '#ef4444', 
-                  color: '#ffffff', 
-                  border: 'none', 
-                  padding: '5px 12px', 
-                  borderRadius: '20px', 
-                  fontWeight: '600', 
-                  fontSize: '12px', 
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  flexShrink: 0
-                }}
-              >
-                <span>Cerrar</span>
-                <span style={{ fontSize: '13px', fontWeight: 'bold', marginLeft: '2px' }}>✕</span>
-              </button>
-            </div>
-
-            <div style={{ flex: 1, padding: '12px', overflow: 'hidden', backgroundColor: theme.dropzoneBg }}>
-              <div 
-                ref={batchPreviewRef} 
-                className="docx-container-scroll"
-              />
-            </div>
-          </div>
-        )}
 
       </div>
     )}

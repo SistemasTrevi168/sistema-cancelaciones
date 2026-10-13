@@ -7,7 +7,7 @@ import uuid
 from typing import Optional, Dict, Any, List
 from fastapi import FastAPI, UploadFile, BackgroundTasks, File, Form, Depends, HTTPException, Body, Query, Header, Request
 from pydantic import BaseModel
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -169,7 +169,7 @@ def eliminar_archivo_temporal(ruta: str):
 
 @app.post("/api/expedientes/descargar-zip")
 def descargar_zip(
-    expediente_ids: List[str] = Body(...), 
+    expediente_ids: List[Any] = Body(...), 
     background_tasks: BackgroundTasks = None, 
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_user)
@@ -180,7 +180,11 @@ def descargar_zip(
     nombres_usados = set()
     
     with zipfile.ZipFile(ruta_zip, 'w') as zipf:
-        for exp_id in expediente_ids:
+        for entrada in expediente_ids:
+            # Cada entrada puede ser solo el id, o {id, datos, plantilla} con los cambios
+            # hechos en pantalla (plantilla elegida o datos editados) que aún no se guardaban
+            cambios = entrada if isinstance(entrada, dict) else None
+            exp_id = (cambios or {}).get("id") if cambios else entrada
             try:
                 uuid_val = uuid.UUID(str(exp_id))
             except ValueError:
@@ -191,7 +195,15 @@ def descargar_zip(
                 continue
             if not exp:
                 continue
-            ruta_word = asegurar_word(exp, db)
+            ruta_word = None
+            if cambios and (cambios.get("datos") or cambios.get("plantilla")):
+                try:
+                    ruta_word, _ = regenerar_word_expediente(exp, {"datos": cambios.get("datos") or {}, "plantilla": cambios.get("plantilla")}, db)
+                except Exception as e:
+                    db.rollback()
+                    print(f"No se pudo regenerar {exp.id} para el ZIP: {e}")
+            if not ruta_word:
+                ruta_word = asegurar_word(exp, db)
             if ruta_word:
                 base = f"Cancelacion_{nombre_seguro(exp.numero_credito, 'SIN_CREDITO')}"
                 nombre_archivo = f"{base}.docx"
@@ -1003,6 +1015,84 @@ def actualizar_datos_expediente(
     }
 
 
+def regenerar_word_expediente(expediente, datos_payload: Optional[Dict[str, Any]], db: Session):
+    """
+    Aplica los datos/plantilla recibidos al expediente, lo guarda y genera su Word.
+    Regresa (ruta_del_word, numero_de_credito).
+    """
+    datos_payload = datos_payload or {}
+    datos_modificados = datos_payload.get("datos", datos_payload)
+
+    datos_actuales = dict(expediente.datos_extraidos or {})
+    if isinstance(datos_modificados, dict):
+        datos_actuales.update(datos_modificados)
+
+    nombre_plantilla = (
+        datos_payload.get("plantilla")
+        or datos_actuales.get("plantilla_seleccionada")
+        or datos_actuales.get("plantilla")
+        or "plantilla_manera2.docx"
+    )
+
+    ruta_plantilla = resolver_ruta_plantilla(nombre_plantilla)
+
+    num_credito = datos_actuales.get("numero_credito") or expediente.numero_credito
+    datos_finales = limpiar_datos_para_plantilla(datos_actuales, num_credito)
+    datos_finales["plantilla_seleccionada"] = nombre_plantilla
+
+    expediente.datos_extraidos = datos_finales
+    expediente.numero_credito = num_credito
+    flag_modified(expediente, "datos_extraidos")
+
+    ruta_salida = ruta_word_unica(num_credito)
+    exito = services.generar_word_cancelacion(ruta_plantilla, datos_finales, ruta_salida)
+
+    if not exito or not os.path.exists(ruta_salida):
+        raise HTTPException(status_code=500, detail="Error al reescribir la plantilla Word")
+
+    reemplazar_word_anterior(expediente.ruta_word_generado, ruta_salida)
+    expediente.ruta_word_generado = ruta_salida
+    db.commit()
+    db.refresh(expediente)
+    return ruta_salida, num_credito
+
+
+@app.post("/api/expedientes/vista-previa")
+def vista_previa(
+    payload: Dict[str, Any] = Body(...),
+    sesion: dict = Depends(require_user)
+):
+    """
+    Genera el Word con los datos y la plantilla recibidos SIN guardar nada.
+    Lo usa la ventana de vista previa mientras el usuario edita.
+    """
+    datos = dict(payload.get("datos") or {})
+    nombre_plantilla = payload.get("plantilla") or datos.get("plantilla_seleccionada") or "plantilla_manera2.docx"
+    num_credito = datos.get("numero_credito") or ""
+    datos_finales = limpiar_datos_para_plantilla(datos, num_credito)
+
+    os.makedirs(GENERADOS_DIR, exist_ok=True)
+    ruta_temp = os.path.join(GENERADOS_DIR, f"previa_{uuid.uuid4().hex}.docx")
+    try:
+        exito = services.generar_word_cancelacion(resolver_ruta_plantilla(nombre_plantilla), datos_finales, ruta_temp)
+        if not exito or not os.path.exists(ruta_temp):
+            raise HTTPException(status_code=500, detail="No se pudo generar la vista previa con esa plantilla.")
+        with open(ruta_temp, "rb") as f:
+            contenido = f.read()
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR EN /vista-previa: {e}")
+        raise HTTPException(status_code=500, detail=f"No se pudo generar la vista previa: {e}")
+    finally:
+        borrar_archivos([ruta_temp])
+
+    return Response(
+        content=contenido,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
 @app.post("/api/expedientes/{expediente_id}/generar-word")
 def generar_word(
     expediente_id: str, 
@@ -1012,41 +1102,7 @@ def generar_word(
 ):
     try:
         expediente = obtener_expediente_autorizado(db, expediente_id, sesion)
-        
-        datos_payload = datos_payload or {}
-        datos_modificados = datos_payload.get("datos", datos_payload)
-        
-        datos_actuales = dict(expediente.datos_extraidos or {})
-        if isinstance(datos_modificados, dict):
-            datos_actuales.update(datos_modificados)
-
-        nombre_plantilla = (
-            datos_payload.get("plantilla") 
-            or datos_actuales.get("plantilla_seleccionada") 
-            or datos_actuales.get("plantilla")
-            or "plantilla_manera2.docx"
-        )
-        
-        ruta_plantilla = resolver_ruta_plantilla(nombre_plantilla)
-        
-        num_credito = datos_actuales.get("numero_credito") or expediente.numero_credito
-        datos_finales = limpiar_datos_para_plantilla(datos_actuales, num_credito)
-        datos_finales["plantilla_seleccionada"] = nombre_plantilla
-
-        expediente.datos_extraidos = datos_finales
-        expediente.numero_credito = num_credito
-        flag_modified(expediente, "datos_extraidos")
-
-        ruta_salida = ruta_word_unica(num_credito)
-        exito = services.generar_word_cancelacion(ruta_plantilla, datos_finales, ruta_salida)
-        
-        if not exito or not os.path.exists(ruta_salida):
-            raise HTTPException(status_code=500, detail="Error al reescribir la plantilla Word")
-        
-        reemplazar_word_anterior(expediente.ruta_word_generado, ruta_salida)
-        expediente.ruta_word_generado = ruta_salida
-        db.commit()
-        db.refresh(expediente)
+        ruta_salida, num_credito = regenerar_word_expediente(expediente, datos_payload, db)
         
         return FileResponse(
             path=ruta_salida,

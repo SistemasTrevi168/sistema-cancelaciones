@@ -6,7 +6,9 @@ import LoginScreen from './components/LoginScreen';
 import LogoutModal from './components/LogoutModal';
 import ModalPassword from './components/ModalPassword';
 import Notificaciones from './components/Notificaciones';
+import PanelVistaPrevia from './components/PanelVistaPrevia';
 import { avisar, confirmar } from './ui/notificaciones';
+import { instalarEfectoOnda } from './ui/efectoOnda';
 import { etiquetaDe } from './camposExpediente';
 import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla } from './datosFaltantes';
 import Sidebar from './components/Sidebar';
@@ -145,16 +147,14 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // --- 3. NAVEGACIÓN Y TABS ---
   const [activeTab, setActiveTab] = useState('single');
 
-  // --- 4. REFS Y VISTAS PREVIAS ---
-  const previewContainerRef = useRef(null);
-  const [mostrarVistaPrevia, setMostrarVistaPrevia] = useState(false);
-  const [cargandoPreview, setCargandoPreview] = useState(false);
-
-  const [batchPreviewIndex, setBatchPreviewIndex] = useState(null);
-  const batchPreviewRef = useRef(null);
-
-  const [manualPreviewActive, setManualPreviewActive] = useState(false);
-  const [cargandoManualPreview, setCargandoManualPreview] = useState(false);
+  // --- 4. VISTA PREVIA FLOTANTE (una sola para todo el sistema) ---
+  // vistaPrevia: null o { origen: 'single' | 'batch' | 'manual' | 'historial', index?, datos?, plantilla?, titulo?, lado }
+  const [vistaPrevia, setVistaPrevia] = useState(null);
+  const [resultadoPrevia, setResultadoPrevia] = useState({ clave: null, error: '' }); // última respuesta recibida
+  const [documentoPrevia, setDocumentoPrevia] = useState(null); // documento ya dibujado (nodo HTML)
+  const [versionPrevia, setVersionPrevia] = useState(0);        // para el botón "volver a generar"
+  const turnoPrevia = useRef(0);                                // descarta respuestas viejas
+  const hayDocumentoPrevia = useRef(false);
   const manualPreviewRef = useRef(null);
 
   // --- 5. MAPA DE DESBLOQUEO ---
@@ -239,6 +239,9 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // --- EFECTOS (USEEFFECT) ---
   // ==========================================
 
+  // Efecto de onda al hacer clic en los botones
+  useEffect(() => instalarEfectoOnda(), []);
+
   // Validar sesión activa al recargar la página (F5), una sola vez
   useEffect(() => {
     verificarSesion();
@@ -263,23 +266,98 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     }
   }, [activeTab, isAuthenticated, currentUser]);
 
-  // Actualización en tiempo real con debounce al editar datos individuales
-  useEffect(() => {
-    if (!mostrarVistaPrevia || !datos || !expedienteId) return;
-    const timer = setTimeout(() => {
-      actualizarVistaPreviaTiempoReal();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [datos, mostrarVistaPrevia]);
+  // ---------- VISTA PREVIA: qué documento se debe mostrar ----------
+  const solicitudPrevia = (() => {
+    if (!vistaPrevia) return null;
+    if (vistaPrevia.origen === 'single') {
+      return datos ? { datos, plantilla: selectedPlantilla, titulo: datos.nombre_acreditado } : null;
+    }
+    if (vistaPrevia.origen === 'batch') {
+      const item = batchResults[vistaPrevia.index];
+      if (!item || item.error) return null;
+      return {
+        datos: item.datos_extraidos,
+        plantilla: item.plantilla_seleccionada || selectedPlantilla,
+        titulo: item.datos_extraidos?.nombre_acreditado,
+      };
+    }
+    if (vistaPrevia.origen === 'manual') {
+      return { datos: formData, plantilla: selectedPlantilla || 'CDMX_AP_H_SOLTERO', titulo: formData.nombre_acreditado || 'Captura manual' };
+    }
+    return { datos: vistaPrevia.datos, plantilla: vistaPrevia.plantilla, titulo: vistaPrevia.titulo };
+  })();
+  const clavePrevia = solicitudPrevia
+    ? JSON.stringify([solicitudPrevia.datos, solicitudPrevia.plantilla, versionPrevia])
+    : null;
 
-  // Hook para actualización en tiempo real cuando se modifican los datos del lote
+  // Cada vez que cambian los datos o la plantilla se vuelve a generar (con una pausa
+  // para no pedirlo en cada tecla). Si llegan respuestas viejas, se ignoran.
   useEffect(() => {
-    if (batchPreviewIndex === null || !batchResults[batchPreviewIndex]) return;
-    const timer = setTimeout(() => {
-      actualizarVistaPreviaMasivaTiempoReal(batchPreviewIndex);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [batchResults, batchPreviewIndex]);
+    if (!clavePrevia) return;
+    const [datosPrevia, plantillaPrevia] = JSON.parse(clavePrevia);
+    const miTurno = ++turnoPrevia.current;
+    const espera = setTimeout(async () => {
+      try {
+        const res = await api.post(
+          '/expedientes/vista-previa',
+          { datos: datosPrevia, plantilla: plantillaPrevia },
+          { responseType: 'arraybuffer' }
+        );
+        if (miTurno !== turnoPrevia.current) return;
+        const nodo = document.createElement('div');
+        await renderAsync(res.data, nodo);
+        if (miTurno !== turnoPrevia.current) return;
+        hayDocumentoPrevia.current = true;
+        setDocumentoPrevia(nodo);
+        setResultadoPrevia({ clave: clavePrevia, error: '' });
+      } catch (err) {
+        if (miTurno !== turnoPrevia.current) return;
+        let mensaje = 'No se pudo generar la vista previa.';
+        try {
+          mensaje = JSON.parse(new TextDecoder().decode(err.response?.data))?.detail || mensaje;
+        } catch { /* respuesta sin detalle */ }
+        setResultadoPrevia({ clave: clavePrevia, error: mensaje });
+      }
+    }, hayDocumentoPrevia.current ? 600 : 0);
+    return () => clearTimeout(espera);
+  }, [clavePrevia]);
+
+  const estadoPrevia = {
+    cargando: !!clavePrevia && resultadoPrevia.clave !== clavePrevia,
+    error: resultadoPrevia.clave === clavePrevia ? resultadoPrevia.error : '',
+    plantilla: solicitudPrevia?.plantilla || '',
+  };
+
+  const cerrarVistaPrevia = () => {
+    turnoPrevia.current++;
+    hayDocumentoPrevia.current = false;
+    setVistaPrevia(null);
+    setDocumentoPrevia(null);
+    setResultadoPrevia({ clave: null, error: '' });
+  };
+
+  const abrirVistaPrevia = (config) => {
+    const mismo = vistaPrevia && vistaPrevia.origen === config.origen && vistaPrevia.index === config.index
+      && (config.origen !== 'historial' || vistaPrevia.id === config.id);
+    if (!mismo) {
+      hayDocumentoPrevia.current = false;
+      setDocumentoPrevia(null);
+    }
+    // Por defecto se abre del lado donde estorba menos
+    const lado = vistaPrevia?.lado || config.lado || (config.origen === 'single' ? 'izquierda' : 'derecha');
+    setVistaPrevia({ ...config, lado });
+    if (mismo) setVersionPrevia((v) => v + 1);
+  };
+
+  const refrescarVistaPrevia = () => setVersionPrevia((v) => v + 1);
+  const cambiarLadoPrevia = () =>
+    setVistaPrevia((v) => (v ? { ...v, lado: v.lado === 'derecha' ? 'izquierda' : 'derecha' } : v));
+
+  // Al cambiar de pestaña se cierra la vista previa
+  const cambiarPestana = (pestana) => {
+    cerrarVistaPrevia();
+    setActiveTab(pestana);
+  };
 
   // Neutralizar navegación por historial del navegador
   useEffect(() => {
@@ -354,6 +432,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   };
 
   const handleConfirmLogout = async () => {
+    cerrarVistaPrevia();
     try {
       await api.post('/auth/logout');
     } catch (err) {
@@ -396,105 +475,6 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setCargandoHistorial(false);
     }
   };
-
-  const handleGenerarVistaPrevia = async () => {
-  if (!expedienteId || !datos) return; // 👈 Evita peticiones vacías
-  
-  setCargandoPreview(true);
-  setMostrarVistaPrevia(true);
-
-  try {
-    const response = await api.post(
-      `/expedientes/${expedienteId}/generar-word`, 
-      {
-        plantilla: selectedPlantilla,
-        datos: datos
-      },
-      { responseType: 'arraybuffer' }
-    );
-
-    const contentType = response.headers?.['content-type'] || '';
-    if (contentType.includes('application/json') || contentType.includes('text/html') || response.data.byteLength < 500) {
-      console.error("El servidor no pudo generar el Word correctamente.");
-      setCargandoPreview(false);
-      return;
-    }
-
-    const arrayBuffer = response.data;
-    setCargandoPreview(false);
-
-    setTimeout(async () => {
-      if (previewContainerRef.current) {
-        previewContainerRef.current.innerHTML = ""; 
-        await renderAsync(arrayBuffer, previewContainerRef.current);
-      }
-    }, 50);
-
-  } catch (error) {
-    console.error("Error al renderizar vista previa:", error);
-    setCargandoPreview(false);
-  }
-};
-
-const actualizarVistaPreviaTiempoReal = async () => {
-  if (!expedienteId) return; // 👈 Candado vital para evitar el error 404
-  try {
-    const response = await api.post(
-      `/expedientes/${expedienteId}/generar-word`,
-      {
-        plantilla: selectedPlantilla,
-        datos: datos
-      },
-      { responseType: 'arraybuffer' }
-    );
-
-    const contentType = response.headers?.['content-type'] || '';
-    if (contentType.includes('application/json') || contentType.includes('text/html') || response.data.byteLength < 500) {
-      return;
-    }
-
-    if (previewContainerRef.current) {
-      const tempContainer = document.createElement('div');
-      tempContainer.className = "docx-container-scroll";
-
-      await renderAsync(response.data, tempContainer);
-      previewContainerRef.current.innerHTML = tempContainer.innerHTML;
-    }
-  } catch (error) {
-    console.error("Error al actualizar la vista previa en tiempo real:", error);
-  }
-};
-
-const actualizarVistaPreviaMasivaTiempoReal = async (index) => {
-  try {
-    const item = batchResults[index];
-    if (!item || !item.expediente_id) return; // 👈 Candado para la carga masiva
-
-    const response = await api.post(
-      `/expedientes/${item.expediente_id}/generar-word`,
-      {
-        plantilla: item.plantilla_seleccionada || selectedPlantilla, 
-        datos: item.datos_extraidos
-      },
-      { responseType: 'arraybuffer' }
-    );
-
-    const contentType = response.headers?.['content-type'] || '';
-    if (contentType.includes('application/json') || contentType.includes('text/html') || response.data.byteLength < 500) {
-      return;
-    }
-
-    if (batchPreviewRef.current) {
-      const tempContainer = document.createElement('div');
-      tempContainer.className = "docx-container-scroll";
-
-      await renderAsync(response.data, tempContainer);
-      batchPreviewRef.current.innerHTML = tempContainer.innerHTML;
-    }
-  } catch (error) {
-    console.error("Error al actualizar la vista previa masiva:", error);
-  }
-};
 
   // 1. Funciones para manejar el arrastre y soltado correctamente
 
@@ -794,6 +774,7 @@ const handlePreviewExcel = async (file) => {
 
   const handleUploadSingle = async () => {
     if (singleFiles.length === 0) return;
+    cerrarVistaPrevia();
     setLoading(true);
     setProgressSingle(10);
     setError('');
@@ -829,32 +810,15 @@ const handlePreviewExcel = async (file) => {
     }
   };
 
-const handleApplyTemplateToSelected = async (plantillaElegida) => {
+const handleApplyTemplateToSelected = (plantillaElegida) => {
   if (!plantillaElegida || selectedBatchIndices.length === 0) return;
-
-  // 1. Actualizamos el estado local de golpe
-  let expedientesActualizados = [];
-  setBatchResults(prev => {
-    expedientesActualizados = prev.map((item, idx) => {
-      if (selectedBatchIndices.includes(idx)) {
-        return {
-          ...item,
-          plantilla_seleccionada: plantillaElegida
-        };
-      }
-      return item;
-    });
-    return expedientesActualizados;
-  });
-
-  // 2. Actualizamos la vista previa de los seleccionados enviando la plantilla explícitamente
-  for (const index of selectedBatchIndices) {
-    if (expedientesActualizados[index]) {
-      await actualizarVistaPreviaMasivaTiempoReal(index, plantillaElegida);
-    }
-  }
-
+  const cantidad = selectedBatchIndices.length;
+  setBatchResults((prev) => prev.map((item, idx) => (
+    selectedBatchIndices.includes(idx) ? { ...item, plantilla_seleccionada: plantillaElegida } : item
+  )));
   setSelectedBatchIndices([]);
+  avisar.exito(`Plantilla aplicada a ${cantidad} expediente(s).`);
+  // Si alguno de ellos está en la vista previa, se actualiza solo
 };
 
   const handleSelectAllBatch = (e) => {
@@ -899,13 +863,11 @@ const handleApplyTemplateToSelected = async (plantillaElegida) => {
       };
       return updated;
     });
-
-    if (batchPreviewIndex === index) {
-      actualizarVistaPreviaMasivaTiempoReal(index);
-    }
+    // La vista previa (si está abierta para este expediente) se actualiza sola
   };
 
   const handleUploadBatch = async () => {
+    cerrarVistaPrevia();
     if (batchFiles.length === 0) return;
     setBatchLoading(true);
     setProgressBatch(5);
@@ -963,7 +925,7 @@ const handleApplyTemplateToSelected = async (plantillaElegida) => {
   };
 
 // 📥 Función de descarga con el nombre basado en el Número de Crédito
-const handleDownloadWord = async (expedienteId, datosParam = null) => {
+const handleDownloadWord = async (expedienteId, datosParam = null, plantillaParam = null) => {
   try {
     const idReal = expedienteId;
     if (!idReal) {
@@ -972,14 +934,16 @@ const handleDownloadWord = async (expedienteId, datosParam = null) => {
     }
 
     // Aviso si faltan datos que la plantilla necesita
-    const faltan = faltantesPara(datosParam || datos, selectedPlantilla);
+    // Cada expediente usa su propia plantilla (lote/historial); si no trae, la seleccionada
+    const plantillaUsar = plantillaParam || selectedPlantilla;
+    const faltan = faltantesPara(datosParam || datos, plantillaUsar);
     if (faltan.length > 0 && !(await confirmar(mensajeFaltantes(faltan), { titulo: 'Faltan datos', textoConfirmar: 'Generar de todas formas' }))) return;
 
     setDescargandoId(idReal);
     const response = await api.post(
       `/expedientes/${idReal}/generar-word`,
       {
-        plantilla: selectedPlantilla,
+        plantilla: plantillaUsar,
         datos: datosParam || datos 
       },
       { responseType: 'blob' }
@@ -1156,7 +1120,13 @@ const handleExcelSubmit = async (e) => {
       `${conFaltantes.length} de ${batchResults.length} expediente(s) tienen datos faltantes (están marcados con ⚠ en la lista).\n\n¿Quieres descargar el ZIP de todas formas?`
     , { titulo: 'Expedientes incompletos', textoConfirmar: 'Descargar de todas formas' })) return;
 
-    const ids = batchResults.map((r) => r.expediente_id);
+    // Se mandan la plantilla y los datos actuales de cada expediente,
+    // para que el ZIP incluya los cambios hechos en pantalla
+    const ids = batchResults.filter((r) => !r.error).map((r) => ({
+      id: r.expediente_id,
+      plantilla: r.plantilla_seleccionada || selectedPlantilla,
+      datos: r.datos_extraidos,
+    }));
     setDescargandoZip(true);
     try {
       const res = await api.post('/expedientes/descargar-zip', ids, { responseType: 'blob' });
@@ -1311,6 +1281,15 @@ const filteredHistorial = (historial || []).filter((item) => {
 
   // Todo lo que las pantallas (components/) necesitan leer del estado de App
   const ctx = {
+    abrirVistaPrevia,
+    batchPreviewIndex: vistaPrevia?.origen === 'batch' ? vistaPrevia.index : null,
+    cerrarVistaPrevia,
+    documentoPrevia,
+    estadoPrevia,
+    refrescarVistaPrevia,
+    // Solo se muestra si lo que se pidió ver todavía existe
+    vistaPrevia: vistaPrevia && solicitudPrevia ? { ...vistaPrevia, titulo: solicitudPrevia.titulo || vistaPrevia.titulo } : null,
+    cambiarLadoPrevia,
     cargandoHistorial,
     creandoUsuario,
     descargandoId,
@@ -1322,15 +1301,11 @@ const filteredHistorial = (historial || []).filter((item) => {
     handleCambiarActivo,
     setModalPassword,
     activeTab,
-    actualizarVistaPreviaMasivaTiempoReal,
     archivoExcel,
     batchFiles,
     batchLoading,
-    batchPreviewIndex,
-    batchPreviewRef,
     batchResults,
     cargando,
-    cargandoPreview,
     contadoresRemosion,
     currentUser,
     datos,
@@ -1358,7 +1333,6 @@ const filteredHistorial = (historial || []).filter((item) => {
     handleEliminarUsuario,
     handleExcelSubmit,
     handleExport,
-    handleGenerarVistaPrevia,
     handleInputChange,
     handleLogin,
     handlePreviewExcel,
@@ -1377,13 +1351,11 @@ const filteredHistorial = (historial || []).filter((item) => {
     loginUser,
     manualPreviewRef,
     mesesNombres,
-    mostrarVistaPrevia,
     nuevoUsuario,
     openAccordion,
     paginaActual,
     parsearFechaExpediente,
     plantillasFilas,
-    previewContainerRef,
     progreso,
     progressBatch,
     progressSingle,
@@ -1393,9 +1365,8 @@ const filteredHistorial = (historial || []).filter((item) => {
     selectedMonth,
     selectedPlantilla,
     selectedYear,
-    setActiveTab,
+    setActiveTab: cambiarPestana,
     setArchivoExcel,
-    setBatchPreviewIndex,
     setCargando,
     setExpedientes,
     setFilasPreview,
@@ -1404,7 +1375,6 @@ const filteredHistorial = (historial || []).filter((item) => {
     setFormData,
     setLoginPassword,
     setLoginUser,
-    setMostrarVistaPrevia,
     setNuevoUsuario,
     setPaginaActual,
     setPlantillasFilas,
@@ -1429,7 +1399,14 @@ const filteredHistorial = (historial || []).filter((item) => {
 
   return (
     <AppContext.Provider value={ctx}>
-    <div className={isDarkMode ? 'tema-oscuro' : 'tema-claro'} style={{
+    <div
+      className={[
+        isDarkMode ? 'tema-oscuro' : 'tema-claro',
+        // En lote, captura manual e historial la vista previa reserva su espacio
+        // (la lista se acomoda a un lado); en caso individual flota encima de la carga de archivos
+        vistaPrevia && solicitudPrevia && vistaPrevia.origen !== 'single' ? `con-previa-${vistaPrevia.lado}` : '',
+      ].join(' ')}
+      style={{
       fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       backgroundColor: theme.bg,
       color: theme.textPrimary,
@@ -1492,6 +1469,9 @@ const filteredHistorial = (historial || []).filter((item) => {
 
       {/* MODAL DE CIERRE DE SESIÓN */}
       {showLogoutModal && <LogoutModal />}
+
+      {/* VISTA PREVIA FLOTANTE */}
+      {isAuthenticated && <PanelVistaPrevia />}
 
       {/* AVISOS FLOTANTES Y CONFIRMACIONES */}
       <Notificaciones />

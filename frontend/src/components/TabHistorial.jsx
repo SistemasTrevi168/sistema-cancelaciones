@@ -1,10 +1,13 @@
 import {
-  ArrowUpDown, Download, Filter, History, Loader2, Search,
+  ArrowUpDown, Download, Eye, Filter, History, Loader2, Search,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 
 export default function TabHistorial() {
   const {
+    abrirVistaPrevia,
+    selectedPlantilla,
+    vistaPrevia,
     cargandoHistorial,
     descargandoId,
     filterPeriod,
@@ -201,9 +204,23 @@ export default function TabHistorial() {
                             <td style={{ padding: '12px', fontWeight: '600', color: theme.textPrimary }}>{nombre}</td>
                             <td style={{ padding: '12px', color: theme.textSecondary }}>{numCred}</td>
                             <td style={{ padding: '12px', color: theme.textSecondary }}>{fechaStr}</td>
-                            <td style={{ padding: '12px', textAlign: 'right' }}>
+                            <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               <button
-                                onClick={() => handleDownloadWord(item.id || item.expediente_id, dExtra)}
+                                onClick={() => abrirVistaPrevia({
+                                  origen: 'historial',
+                                  id: item.id || item.expediente_id,
+                                  datos: dExtra,
+                                  plantilla: dExtra.plantilla_seleccionada || dExtra.plantilla || selectedPlantilla,
+                                  titulo: nombre,
+                                })}
+                                title="Vista previa"
+                                aria-label={`Vista previa de ${nombre}`}
+                                style={{ backgroundColor: vistaPrevia?.id === (item.id || item.expediente_id) ? theme.accent : theme.subtleBg, color: vistaPrevia?.id === (item.id || item.expediente_id) ? '#fff' : theme.textPrimary, border: `1px solid ${theme.border}`, padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', marginRight: '6px', verticalAlign: 'middle' }}
+                              >
+                                <Eye size={13} />
+                              </button>
+                              <button
+                                onClick={() => handleDownloadWord(item.id || item.expediente_id, dExtra, dExtra.plantilla_seleccionada || dExtra.plantilla)}
                                 disabled={descargandoId === (item.id || item.expediente_id)}
                                 style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, border: `1px solid ${theme.border}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                               >

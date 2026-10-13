@@ -3,29 +3,27 @@ import {
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import CamposDatos from './CamposDatos';
+import OpcionesPlantilla from './OpcionesPlantilla';
 
 export default function TabIndividual() {
   const {
+    abrirVistaPrevia,
+    vistaPrevia,
     isDarkMode,
     descargandoId,
     etiquetaCampo,
     faltantesPara,
-    cargandoPreview,
     datos,
     expedienteId,
     handleDownloadWord,
     handleDragOver,
     handleDropSingle,
-    handleGenerarVistaPrevia,
     handleInputChange,
     handleSingleFileChange,
     handleUploadSingle,
     loading,
-    mostrarVistaPrevia,
-    previewContainerRef,
     progressSingle,
     selectedPlantilla,
-    setMostrarVistaPrevia,
     setSelectedPlantilla,
     singleFiles,
     theme,
@@ -34,7 +32,7 @@ export default function TabIndividual() {
   return (
 <div className="grid-individual" style={{ 
     display: 'grid', 
-    gridTemplateColumns: datos ? (mostrarVistaPrevia ? '1fr 1fr 1.2fr' : '1fr 1fr') : '1fr', 
+    gridTemplateColumns: datos ? '1fr 1fr' : '1fr', 
     gap: '24px',
     transition: 'all 0.3s ease',
     alignItems: 'start'
@@ -65,40 +63,7 @@ export default function TabIndividual() {
             cursor: 'pointer'
           }}
         >
-          <optgroup label="CDMX - APERTURA DE CRÉDITO">
-            <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-            <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-            <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-            <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-          </optgroup>
-
-          <optgroup label="CONTRATO DE MUTUO">
-            <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-            <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-            <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-            <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-          </optgroup>
-
-          <optgroup label="MODELOS COACREDITADOS">
-            <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
-            <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
-            <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
-            <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
-          </optgroup>
-
-          <optgroup label="EDOMEX - APERTURA DE CRÉDITO">
-            <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-            <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-            <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-            <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-          </optgroup>
-
-          <optgroup label="CONTRATO DE MUTUO">
-            <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-            <option value="EDOMEX_MUTUO_H_CASADO"> C. Mutuo - Hombre Casado</option>
-            <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-            <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-          </optgroup>
+          <OpcionesPlantilla />
         </select>
       </div>
 
@@ -188,24 +153,23 @@ export default function TabIndividual() {
           <div style={{ display: 'flex', gap: '8px' }}>
             {/* BOTÓN DE VISTA PREVIA */}
             <button
-              onClick={handleGenerarVistaPrevia}
-              disabled={cargandoPreview}
+              onClick={() => abrirVistaPrevia({ origen: 'single' })}
               style={{ 
-                backgroundColor: theme.subtleBg, 
-                color: theme.textPrimary, 
+                backgroundColor: vistaPrevia?.origen === 'single' ? theme.accent : theme.subtleBg, 
+                color: vistaPrevia?.origen === 'single' ? '#fff' : theme.textPrimary, 
                 border: `1px solid ${theme.border}`, 
                 padding: '8px 12px', 
                 borderRadius: '8px', 
                 fontWeight: '600', 
                 fontSize: '13px', 
-                cursor: cargandoPreview ? 'wait' : 'pointer', 
+                cursor: 'pointer', 
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: '6px' 
               }}
             >
-              {cargandoPreview ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Eye size={14} color={theme.accent} />} 
-              {mostrarVistaPrevia ? 'Actualizar Previa' : 'Vista Previa'}
+              <Eye size={14} color={vistaPrevia?.origen === 'single' ? '#fff' : theme.accent} />
+              Vista Previa
             </button>
 
             {/* BOTÓN DESCARGAR WORD */}
@@ -248,120 +212,6 @@ export default function TabIndividual() {
       </div>
     )}
 
-    {/* COLUMNA 3: VISTA PREVIA (CON ENCABEZADO CORREGIDO) */}
-    {mostrarVistaPrevia && (
-      <div style={{ 
-        backgroundColor: theme.cardBg, 
-        borderRadius: '16px', 
-        border: `1px solid ${theme.border}`,
-        height: '650px',
-        maxHeight: '650px',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        position: 'relative'
-      }}>
-        
-        {/* Reglas CSS para docx-preview */}
-        <style>{`
-          .docx-container-scroll {
-            height: 100% !important;
-            max-height: 100% !important;
-            overflow-y: auto !important;
-          }
-          .docx-container-scroll .docx-wrapper {
-            background-color: transparent !important;
-            padding: 12px 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            gap: 16px !important;
-          }
-          .docx-container-scroll .docx-wrapper > section {
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
-            border-radius: 6px !important;
-            margin-bottom: 0 !important;
-            background-color: #ffffff !important;
-            border: 1px solid #e2e8f0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            padding: 16px !important;
-            box-sizing: border-box !important;
-          }
-          .docx-container-scroll::-webkit-scrollbar {
-            width: 6px;
-          }
-          .docx-container-scroll::-webkit-scrollbar-thumb {
-            background-color: rgba(156, 163, 175, 0.5);
-            border-radius: 8px;
-          }
-        `}</style>
-
-        {/* Encabezado Vista Previa con el botón alineado a la derecha extrema */}
-<div style={{ 
-  padding: '14px 16px', 
-  borderBottom: `1px solid ${theme.border}`, 
-  display: 'flex', 
-  flexDirection: 'row',
-  justifyContent: 'space-between', 
-  alignItems: 'center',
-  width: '100%',
-  boxSizing: 'border-box',
-  backgroundColor: theme.subtleBg
-}}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-    <Eye size={18} color={theme.accent} />
-    <span style={{ fontSize: '15px', fontWeight: '700', color: theme.textPrimary }}>
-      Vista Previa
-    </span>
-  </div>
-
-  <button
-    onClick={() => {
-      if (previewContainerRef.current) {
-        previewContainerRef.current.innerHTML = "";
-      }
-      setMostrarVistaPrevia(false);
-    }}
-    style={{ 
-      backgroundColor: '#ef4444', 
-      color: '#ffffff', 
-      border: 'none', 
-      padding: '5px 12px', 
-      borderRadius: '20px', 
-      fontWeight: '600', 
-      fontSize: '12px', 
-      cursor: 'pointer',
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '4px',
-      boxShadow: '0 2px 4px rgba(239, 68, 68, 0.2)',
-      marginLeft: 'auto'
-    }}
-    title="Cerrar vista previa"
-  >
-    <span>Cerrar</span>
-    <span style={{ fontSize: '12px', fontWeight: 'bold' }}>✕</span>
-  </button>
-</div>
-
-        {/* Visor de documento con scroll */}
-        <div style={{ flex: 1, padding: '12px', overflow: 'hidden', backgroundColor: theme.dropzoneBg }}>
-          {cargandoPreview ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '8px', color: theme.textSecondary }}>
-              <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
-              <span style={{ fontSize: '13px', fontWeight: '500' }}>Cargando vista previa...</span>
-            </div>
-          ) : (
-            <div 
-              ref={previewContainerRef} 
-              className="docx-container-scroll"
-            />
-          )}
-        </div>
-
-      </div>
-    )}
   </div>
   );
 }

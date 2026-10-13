@@ -1,9 +1,12 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import {
   Edit3, FileSpreadsheet, FileText, FolderPlus, History, KeyRound, LogOut, Moon, Sun, Users,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 
 export default function Sidebar() {
+  const navRef = useRef(null);
+  const [indicador, setIndicador] = useState({ x: 0, y: 0, w: 0, h: 0 });
   const {
     setModalPassword,
     activeTab,
@@ -15,6 +18,21 @@ export default function Sidebar() {
     theme,
     toggleTheme
   } = useApp();
+
+  // Mide la pestaña activa para mover el indicador
+  useLayoutEffect(() => {
+    const medir = () => {
+      const nav = navRef.current;
+      const activo = nav?.querySelector(`[data-tab="${activeTab}"]`);
+      if (!nav || !activo) return setIndicador((i) => ({ ...i, w: 0 }));
+      setIndicador({ x: activo.offsetLeft, y: activo.offsetTop, w: activo.offsetWidth, h: activo.offsetHeight });
+    };
+    medir();
+    const obs = new ResizeObserver(medir);
+    if (navRef.current) obs.observe(navRef.current);
+    window.addEventListener('resize', medir);
+    return () => { obs.disconnect(); window.removeEventListener('resize', medir); };
+  }, [activeTab]);
 
   return (
 <aside className="barra-lateral" style={{
@@ -48,16 +66,30 @@ export default function Sidebar() {
               </div>
 
               {/* NAVEGACIÓN VERTICAL (TABS) */}
-              <nav className="barra-lateral-nav" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <nav ref={navRef} className="barra-lateral-nav" style={{ display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative' }}>
+                {/* Fondo azul que se desliza hasta la pestaña activa */}
+                <span
+                  aria-hidden="true"
+                  className="nav-indicador"
+                  style={{
+                    backgroundColor: theme.accent,
+                    transform: `translate(${indicador.x}px, ${indicador.y}px)`,
+                    width: `${indicador.w}px`,
+                    height: `${indicador.h}px`,
+                    opacity: indicador.w ? 1 : 0,
+                  }}
+                />
                 <button
                   onClick={() => setActiveTab('single')}
-                  className="pulse-hover"
+                  data-tab="single"
+                  aria-current={activeTab === 'single' ? 'page' : undefined}
+                  className="nav-item"
                   style={{
                     width: '100%',
                     padding: '12px 14px',
                     borderRadius: '10px',
                     border: 'none',
-                    backgroundColor: activeTab === 'single' ? theme.accent : 'transparent',
+                    backgroundColor: 'transparent',
                     color: activeTab === 'single' ? '#fff' : theme.textSecondary,
                     fontWeight: '600',
                     fontSize: '14px',
@@ -66,7 +98,7 @@ export default function Sidebar() {
                     alignItems: 'center',
                     gap: '12px',
                     textAlign: 'left',
-                    transition: 'background-color 0.2s ease, color 0.2s ease'
+                    transition: 'color 0.25s ease', position: 'relative', zIndex: 1
                   }}
                 >
                   <FileText size={18} /> Caso Individual
@@ -74,13 +106,15 @@ export default function Sidebar() {
 
                 <button
                   onClick={() => setActiveTab('batch')}
-                  className="pulse-hover"
+                  data-tab="batch"
+                  aria-current={activeTab === 'batch' ? 'page' : undefined}
+                  className="nav-item"
                   style={{
                     width: '100%',
                     padding: '12px 14px',
                     borderRadius: '10px',
                     border: 'none',
-                    backgroundColor: activeTab === 'batch' ? theme.accent : 'transparent',
+                    backgroundColor: 'transparent',
                     color: activeTab === 'batch' ? '#fff' : theme.textSecondary,
                     fontWeight: '600',
                     fontSize: '14px',
@@ -89,7 +123,7 @@ export default function Sidebar() {
                     alignItems: 'center',
                     gap: '12px',
                     textAlign: 'left',
-                    transition: 'background-color 0.2s ease, color 0.2s ease'
+                    transition: 'color 0.25s ease', position: 'relative', zIndex: 1
                   }}
                 >
                   <FolderPlus size={18} /> Carga Masiva (PDFs)
@@ -97,13 +131,15 @@ export default function Sidebar() {
 
                 <button
                   onClick={() => setActiveTab('manual')}
-                  className="pulse-hover"
+                  data-tab="manual"
+                  aria-current={activeTab === 'manual' ? 'page' : undefined}
+                  className="nav-item"
                   style={{
                     width: '100%',
                     padding: '12px 14px',
                     borderRadius: '10px',
                     border: 'none',
-                    backgroundColor: activeTab === 'manual' ? theme.accent : 'transparent',
+                    backgroundColor: 'transparent',
                     color: activeTab === 'manual' ? '#fff' : theme.textSecondary,
                     fontWeight: '600',
                     fontSize: '14px',
@@ -112,7 +148,7 @@ export default function Sidebar() {
                     alignItems: 'center',
                     gap: '12px',
                     textAlign: 'left',
-                    transition: 'background-color 0.2s ease, color 0.2s ease'
+                    transition: 'color 0.25s ease', position: 'relative', zIndex: 1
                   }}
                 >
                   <Edit3 size={18} /> Captura Manual
@@ -120,13 +156,15 @@ export default function Sidebar() {
 
                 <button
                   onClick={() => setActiveTab('excel')}
-                  className="pulse-hover"
+                  data-tab="excel"
+                  aria-current={activeTab === 'excel' ? 'page' : undefined}
+                  className="nav-item"
                   style={{
                     width: '100%',
                     padding: '12px 14px',
                     borderRadius: '10px',
                     border: 'none',
-                    backgroundColor: activeTab === 'excel' ? theme.accent : 'transparent',
+                    backgroundColor: 'transparent',
                     color: activeTab === 'excel' ? '#fff' : theme.textSecondary,
                     fontWeight: '600',
                     fontSize: '14px',
@@ -135,7 +173,7 @@ export default function Sidebar() {
                     alignItems: 'center',
                     gap: '12px',
                     textAlign: 'left',
-                    transition: 'background-color 0.2s ease, color 0.2s ease'
+                    transition: 'color 0.25s ease', position: 'relative', zIndex: 1
                   }}
                 >
                   <FileSpreadsheet size={18} /> Carga Excel / Lote
@@ -143,13 +181,15 @@ export default function Sidebar() {
 
                 <button
                   onClick={() => setActiveTab('history')}
-                  className="pulse-hover"
+                  data-tab="history"
+                  aria-current={activeTab === 'history' ? 'page' : undefined}
+                  className="nav-item"
                   style={{
                     width: '100%',
                     padding: '12px 14px',
                     borderRadius: '10px',
                     border: 'none',
-                    backgroundColor: activeTab === 'history' ? theme.accent : 'transparent',
+                    backgroundColor: 'transparent',
                     color: activeTab === 'history' ? '#fff' : theme.textSecondary,
                     fontWeight: '600',
                     fontSize: '14px',
@@ -158,7 +198,7 @@ export default function Sidebar() {
                     alignItems: 'center',
                     gap: '12px',
                     textAlign: 'left',
-                    transition: 'background-color 0.2s ease, color 0.2s ease'
+                    transition: 'color 0.25s ease', position: 'relative', zIndex: 1
                   }}
                 >
                   <History size={18} /> Mi Historial
@@ -171,13 +211,15 @@ export default function Sidebar() {
                     
                     <button
                       onClick={() => setActiveTab('users')}
-                      className="pulse-hover"
+                  data-tab="users"
+                  aria-current={activeTab === 'users' ? 'page' : undefined}
+                  className="nav-item"
                       style={{
                         width: '100%',
                         padding: '12px 14px',
                         borderRadius: '10px',
                         border: 'none',
-                        backgroundColor: activeTab === 'users' ? theme.accent : 'transparent',
+                        backgroundColor: 'transparent',
                         color: activeTab === 'users' ? '#fff' : theme.textSecondary,
                         fontWeight: '600',
                         fontSize: '14px',
@@ -186,7 +228,7 @@ export default function Sidebar() {
                         alignItems: 'center',
                         gap: '12px',
                         textAlign: 'left',
-                        transition: 'background-color 0.2s ease, color 0.2s ease'
+                        transition: 'color 0.25s ease', position: 'relative', zIndex: 1
                       }}
                     >
                       <Users size={18} /> Usuarios
@@ -194,13 +236,15 @@ export default function Sidebar() {
 
                     <button
                       onClick={() => setActiveTab('templates')}
-                      className="pulse-hover"
+                  data-tab="templates"
+                  aria-current={activeTab === 'templates' ? 'page' : undefined}
+                  className="nav-item"
                       style={{
                         width: '100%',
                         padding: '12px 14px',
                         borderRadius: '10px',
                         border: 'none',
-                        backgroundColor: activeTab === 'templates' ? theme.accent : 'transparent',
+                        backgroundColor: 'transparent',
                         color: activeTab === 'templates' ? '#fff' : theme.textSecondary,
                         fontWeight: '600',
                         fontSize: '14px',
@@ -209,7 +253,7 @@ export default function Sidebar() {
                         alignItems: 'center',
                         gap: '12px',
                         textAlign: 'left',
-                        transition: 'background-color 0.2s ease, color 0.2s ease'
+                        transition: 'color 0.25s ease', position: 'relative', zIndex: 1
                       }}
                     >
                     </button>

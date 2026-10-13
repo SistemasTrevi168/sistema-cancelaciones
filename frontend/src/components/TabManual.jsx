@@ -1,9 +1,13 @@
+import { Eye } from 'lucide-react';
 import { API_BASE } from '../api';
 import { useApp } from '../AppContext';
 import { avisar, confirmar } from '../ui/notificaciones';
+import OpcionesPlantilla from './OpcionesPlantilla';
 
 export default function TabManual() {
   const {
+    abrirVistaPrevia,
+    vistaPrevia,
     faltantesPara,
     mensajeFaltantesManual,
     cargando,
@@ -97,36 +101,7 @@ export default function TabManual() {
               outline: 'none'
             }}
           >
-            <optgroup label="CDMX - APERTURA DE CRÉDITO">
-              <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-              <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-              <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-              <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-            </optgroup>
-            <optgroup label="CONTRATO DE MUTUO">
-              <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-              <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-              <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-              <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-            </optgroup>
-            <optgroup label="MODELOS COACREDITADOS">
-              <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
-              <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
-              <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
-              <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
-            </optgroup>
-            <optgroup label="EDOMEX - APERTURA DE CRÉDITO">
-              <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-              <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-              <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-              <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-            </optgroup>
-            <optgroup label="EDOMEX - CONTRATO DE MUTUO">
-              <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-              <option value="EDOMEX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-              <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-              <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-            </optgroup>
+            <OpcionesPlantilla />
           </select>
         </div>
 
@@ -278,11 +253,18 @@ export default function TabManual() {
           />
         </div>
 
-        <div style={{ gridColumn: '1 / -1', marginTop: '10px' }}>
+        <div style={{ gridColumn: '1 / -1', marginTop: '10px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => abrirVistaPrevia({ origen: 'manual' })}
+            style={{ flex: '0 0 auto', padding: '12px 18px', backgroundColor: vistaPrevia?.origen === 'manual' ? theme.accent : theme.subtleBg, color: vistaPrevia?.origen === 'manual' ? '#fff' : theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            <Eye size={16} /> Vista previa
+          </button>
           <button
             type="submit"
             disabled={cargando}
-            style={{ width: '100%', padding: '12px', backgroundColor: theme.accent, color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+            style={{ flex: 1, minWidth: '220px', padding: '12px', backgroundColor: theme.accent, color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
           >
             {cargando ? 'Generando Documento...' : 'Generar documento en Mi Historial'}
           </button>

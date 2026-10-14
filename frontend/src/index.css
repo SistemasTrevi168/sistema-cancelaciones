@@ -546,6 +546,61 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   margin: 0;
   line-height: 1.35;
 }
+.sugerencia-plantilla {
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: -6px 0 20px 0;
+  animation: aparecerMenuCampo 0.25s ease-out both;
+}
+.boton-usar-sugerencia {
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+.boton-usar-sugerencia:hover {
+  background: #6d28d9;
+  transform: translateY(-1px);
+}
+.chip-sugerida {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #c4b5fd;
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip-sugerida:hover {
+  background: #ede9fe;
+}
+.chip-sugerida-ok {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+  cursor: default;
+}
+.tema-oscuro .chip-sugerida {
+  background: #1e1b4b;
+  border-color: #4c1d95;
+  color: #c4b5fd;
+}
+.tema-oscuro .chip-sugerida-ok {
+  background: #052e16;
+  border-color: #166534;
+  color: #86efac;
+}
 .chip-acto {
   display: inline-flex;
   align-items: center;
@@ -1044,12 +1099,6 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
    PANTALLAS MÁS CHICAS
    ===================================================================== */
 @media (max-width: 1280px) {
-  .grid-individual {
-    grid-template-columns: 1fr 1fr !important;
-  }
-  .grid-individual > :nth-child(3) {
-    grid-column: 1 / -1;
-  }
   .grid-masivo {
     grid-template-columns: 1fr !important;
   }

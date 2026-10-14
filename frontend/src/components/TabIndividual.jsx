@@ -5,12 +5,15 @@ import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
 import CamposDatos from './CamposDatos';
 import OpcionesPlantilla from './OpcionesPlantilla';
+import SugerenciaPlantilla from './SugerenciaPlantilla';
 
 export default function TabIndividual() {
   const {
     abrirVistaPrevia,
     vistaPrevia,
     abrirVisorDocs,
+    sugerenciaSingle,
+    usarPlantillaSugerida,
     visorDocs,
     actosSingle,
     isDarkMode,
@@ -70,6 +73,11 @@ export default function TabIndividual() {
           <OpcionesPlantilla />
         </select>
       </div>
+
+      {/* PLANTILLA SUGERIDA SEGÚN LOS DOCUMENTOS */}
+      {datos && sugerenciaSingle && (
+        <SugerenciaPlantilla sugerencia={sugerenciaSingle} actual={selectedPlantilla} onUsar={usarPlantillaSugerida} />
+      )}
 
       <div 
         onDragOver={handleDragOver}

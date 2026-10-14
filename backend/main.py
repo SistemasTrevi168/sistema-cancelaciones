@@ -19,6 +19,7 @@ import models, services
 from database import get_db, SessionLocal, engine
 import auth
 import actos_ifrem
+import plantilla_sugerida
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -175,6 +176,15 @@ def reunir_actos(lista_datos: List[Dict[str, Any]], nombres: Optional[List[str]]
             acto["datos"] = actos_ifrem.datos_de_acto(acto, services)
             actos.append(acto)
     return actos
+
+
+def sugerir_plantilla_seguro(datos, actos, lista_datos):
+    """La sugerencia nunca debe impedir procesar el expediente."""
+    try:
+        return plantilla_sugerida.sugerir_plantilla(datos, actos, lista_datos)
+    except Exception as e:
+        print(f"No se pudo sugerir plantilla: {e}")
+        return None
 
 
 def _fecha_acto(acto):
@@ -681,6 +691,8 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     notario_completo = corregir_numeros_compuestos(str(datos_origen.get("notario_origen_completo") or ""))
     conyuge = datos_origen.get("tiene_conyuge") or "No"
     nombre_conyuge = corregir_numeros_compuestos(str(datos_origen.get("nombre_conyuge") or datos_origen.get("nombre_conyugue") or ""))
+    if nombre_conyuge.strip().upper() == "NO_ENCONTRADO":
+        nombre_conyuge = ""  # Si es soltero(a) no debe marcarse como dato faltante
 
     monto_letras = numero_a_letras(monto)
 
@@ -908,6 +920,7 @@ async def procesar_documento(
         actos = reunir_actos(datos_extraidos_lista, nombres_originales)
         datos_combinados = services.combinar_datos_pareja(datos_extraidos_lista)
         aplicar_acto_elegido(datos_combinados, actos)
+        sugerencia = sugerir_plantilla_seguro(datos_combinados, actos, datos_extraidos_lista)
         num_credito = datos_combinados.get("numero_credito", "SIN_CREDITO")
         
         datos_limpios = limpiar_datos_para_plantilla(datos_combinados, num_credito)
@@ -933,6 +946,8 @@ async def procesar_documento(
             "datos_extraidos": datos_limpios,
             # Actos encontrados en la constancia, para elegir otro desde la pantalla
             "actos": actos,
+            # Plantilla que parece corresponder según los documentos (el usuario decide)
+            "plantilla_sugerida": sugerencia,
         }
     except Exception as e:
         print(f"ERROR EN /procesar: {e}")
@@ -1020,6 +1035,7 @@ async def procesar_masivo(
                 actos = reunir_actos(lista_datos_validos, nombres_grupo)
                 datos_raw = services.combinar_datos_pareja(lista_datos_validos)
                 aplicar_acto_elegido(datos_raw, actos)
+                sugerencia = sugerir_plantilla_seguro(datos_raw, actos, lista_datos_validos)
                 
                 num_credito = datos_raw.get("numero_credito")
                 if not num_credito or num_credito == "NO_ENCONTRADO":
@@ -1058,6 +1074,7 @@ async def procesar_masivo(
                     "plantilla_seleccionada": plantilla,
                     "archivos": [item[2] for item in grupo],
                     "actos": actos,
+                    "plantilla_sugerida": sugerencia,
                 })
             except Exception as e_grupo:
                 db.rollback()

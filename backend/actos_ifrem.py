@@ -150,7 +150,11 @@ def parece_constancia_ifrem(texto):
     t = texto.upper()
     if "CARTA DE INSTRUCCI" in t:  # la carta del INFONAVIT/FOVISSSTE nunca es una constancia
         return False
-    return ("FOLIO REAL" in t or "IFREM" in t) and ("GRAV" in t or "INSCRIPCIONES DE PROPIEDAD" in t)
+    # Solo la constancia de folio real del IFREM (Estado de México) tiene esta estructura de actos;
+    # los antecedentes de la CDMX (escrituras) también dicen "folio real" y "gravamen", pero no son constancias.
+    if "IFREM" in t or "FUNCIÓN REGISTRAL" in t or "FUNCION REGISTRAL" in t:
+        return True
+    return "FOLIO REAL ELECTR" in t and "INSCRIPCIONES DE PROPIEDAD" in t and bool(re.search(r"GRAV[AÁ]MENES,?\s+HIPOTECAS", t))
 
 
 _NUMS = {
@@ -254,6 +258,10 @@ def datos_de_acto(acto, services):
     personas = personas_de_texto(texto)
     if personas:
         datos["personas"] = personas
+    if re.search(r"\bMUTUO\b", texto, re.I):
+        datos["tipo_credito"] = "MUTUO"
+    elif re.search(r"APERTURA\s+DE\s+CR[EÉ]DITO", texto, re.I):
+        datos["tipo_credito"] = "AP"
     return datos
 
 

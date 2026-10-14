@@ -848,9 +848,13 @@ def tipo_documento(texto_completo, nombre_archivo=""):
 CAMPOS_DE_CARTA = {
     "fecha_expedicion", "numero_carta", "fecha_liquidacion", "numero_credito", "numero_credito_letras",
     "entidad_financiera",
+    # El nombre se toma primero de la carta solo como respaldo: si la constancia del IFREM trae
+    # el acto (deudor / comprador) o la tabla de propietarios, ese nombre lo reemplaza (main.aplicar_acto_elegido).
+    # En antecedentes que no son del IFREM (escrituras escaneadas) el texto libre da nombres equivocados.
+    "nombre_acreditado",
 }
 CAMPOS_DE_CONSTANCIA = {
-    "nombre_acreditado", "monto_credito", "monto_credito_letras", "credito_a_salario", "datos_inmueble",
+    "monto_credito", "monto_credito_letras", "credito_a_salario", "datos_inmueble",
     "folio_real", "oficina_registral", "tiene_conyuge", "nombre_conyuge", "numero_escritura",
     "fecha_escritura", "notario_origen_completo", "estado_civil",
 }

@@ -12,6 +12,8 @@ import VisorDocumentos from './components/VisorDocumentos';
 import { avisar, confirmar } from './ui/notificaciones';
 import { instalarEfectoOnda } from './ui/efectoOnda';
 import { CAMPOS_DEL_ACTO, etiquetaDe } from './camposExpediente';
+import { sugerenciaActual } from './sugerenciaPlantilla';
+import { nombrePlantilla } from './plantillasCatalogo';
 import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla } from './datosFaltantes';
 import Sidebar from './components/Sidebar';
 import TabExcel from './components/TabExcel';
@@ -203,6 +205,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // Visor de los PDF subidos: null o { origen: 'single' | 'batch', index? }
   const [visorDocs, setVisorDocs] = useState(null);
   const [actosSingle, setActosSingle] = useState([]); // actos de la constancia (caso individual)
+  const [sugerenciaBase, setSugerenciaBase] = useState(null); // plantilla sugerida según los documentos
   const turnoPrevia = useRef(0);                                // descarta respuestas viejas
   const hayDocumentoPrevia = useRef(false);
   const manualPreviewRef = useRef(null);
@@ -543,7 +546,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         setTimeout(() => setAnimarEntrada(false), 3000);
         setLoginPassword('');
         setSingleFiles([]);
-        setDatos(null); setActosSingle([]); setVisorDocs(null);
+        setDatos(null); setActosSingle([]); setSugerenciaBase(null); setVisorDocs(null);
         setBatchResults([]); setVisorDocs(null);
       }
     } catch (err) {
@@ -571,7 +574,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setError('');
       setLoginUser('');
       setLoginPassword('');
-      setDatos(null); setActosSingle([]); setVisorDocs(null);
+      setDatos(null); setActosSingle([]); setSugerenciaBase(null); setVisorDocs(null);
       setBatchResults([]); setVisorDocs(null);
       setHistorial([]);
 
@@ -844,7 +847,7 @@ const handlePreviewExcel = async (file) => {
       const files = Array.from(e.dataTransfer.files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
       if (files.length > 0) {
         setSingleFiles(files);
-        setDatos(null); setActosSingle([]); setVisorDocs(null);
+        setDatos(null); setActosSingle([]); setSugerenciaBase(null); setVisorDocs(null);
       }
     }
   };
@@ -889,7 +892,7 @@ const handlePreviewExcel = async (file) => {
         return;
       }
       setSingleFiles(filesArray);
-      setDatos(null); setActosSingle([]); setVisorDocs(null);
+      setDatos(null); setActosSingle([]); setSugerenciaBase(null); setVisorDocs(null);
     }
   };
 
@@ -931,6 +934,7 @@ const handlePreviewExcel = async (file) => {
           ...rawDatos
         });
         setActosSingle(res.data.actos || []);
+        setSugerenciaBase(res.data.plantilla_sugerida || null);
         setUnlockedFields({});
         setLoading(false);
       }, 400);
@@ -1497,8 +1501,31 @@ const filteredHistorial = (historial || []).filter((item) => {
       + (faltan.length ? ` No trae ${faltan.join(', ').toLowerCase()}; se dejó lo que ya tenías.` : ''));
   };
 
+  // ---- PLANTILLA SUGERIDA ----
+  const sugerenciaSingle = sugerenciaActual(sugerenciaBase, datos, actosSingle);
+  const sugerenciaDeLote = (item) => sugerenciaActual(item?.plantilla_sugerida, item?.datos_extraidos, item?.actos);
+  const usarPlantillaSugerida = (plantilla) => {
+    setSelectedPlantilla(plantilla);
+    avisar.exito(`Plantilla seleccionada: ${nombrePlantilla(plantilla)}`);
+  };
+  const usarSugeridasEnLote = () => {
+    let cambiadas = 0;
+    const nuevos = batchResults.map((item) => {
+      const sug = sugerenciaDeLote(item);
+      if (item.error || !sug?.plantilla || sug.plantilla === item.plantilla_seleccionada) return item;
+      cambiadas++;
+      return { ...item, plantilla_seleccionada: sug.plantilla };
+    });
+    setBatchResults(nuevos);
+    avisar.exito(cambiadas ? `Se aplicó la plantilla sugerida a ${cambiadas} expediente(s).` : 'Todos los expedientes ya tienen su plantilla sugerida.');
+  };
+
   // Todo lo que las pantallas (components/) necesitan leer del estado de App
   const ctx = {
+    sugerenciaSingle,
+    sugerenciaDeLote,
+    usarPlantillaSugerida,
+    usarSugeridasEnLote,
     visorDocs,
     documentosVisor,
     actosVisor,

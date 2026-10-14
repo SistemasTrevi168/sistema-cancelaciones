@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Eye, FileArchive, FileSearch, FolderPlus, Layers, Loader2,
+  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Eye, FileArchive, FileSearch, FolderPlus, Layers, Loader2, Sparkles,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
@@ -12,6 +12,8 @@ export default function TabMasivo() {
     setSelectedPlantilla,
     abrirVistaPrevia,
     abrirVisorDocs,
+    sugerenciaDeLote,
+    usarSugeridasEnLote,
     batchVisorIndex,
     descargandoId,
     descargandoZip,
@@ -221,6 +223,13 @@ export default function TabMasivo() {
                 </option>
                 <OpcionesPlantilla />
               </select>
+
+              {/* Usar en todos la plantilla que corresponde según sus documentos */}
+              {batchResults.some((r) => !r.error && sugerenciaDeLote(r)?.plantilla) && (
+                <button type="button" onClick={usarSugeridasEnLote} className="chip-sugerida" style={{ padding: '6px 12px', fontSize: '12px' }} title="Pone a cada expediente la plantilla que le corresponde según sus documentos">
+                  <Sparkles size={13} /> Usar las plantillas sugeridas
+                </button>
+              )}
             </div>
 
             <button
@@ -302,6 +311,26 @@ export default function TabMasivo() {
                 <option value="" disabled>Seleccionar plantilla...</option>
                 <OpcionesPlantilla />
               </select>
+
+              {/* PLANTILLA SUGERIDA PARA ESTE EXPEDIENTE */}
+              {(() => {
+                const sug = sugerenciaDeLote(res);
+                if (!sug?.plantilla) return null;
+                const enUso = sug.plantilla === res.plantilla_seleccionada;
+                const titulo = `${enUso ? 'Usa la plantilla sugerida' : 'Plantilla sugerida'}: ${nombrePlantilla(sug.plantilla)}\n\n${sug.razones.join('\n')}${sug.dudas.length ? `\n\nRevisar: ${sug.dudas.join('. ')}` : ''}`;
+                return enUso ? (
+                  <span title={titulo} className="chip-sugerida chip-sugerida-ok"><CheckCircle size={12} /> Sugerida</span>
+                ) : (
+                  <button
+                    type="button"
+                    title={titulo}
+                    className="chip-sugerida"
+                    onClick={(e) => { e.stopPropagation(); handleBatchPlantillaChange(idx, sug.plantilla); }}
+                  >
+                    <Sparkles size={12} /> Usar sugerida
+                  </button>
+                );
+              })()}
 
                       {(res.archivos || []).some((n) => batchFiles.some((f) => f.name === n && /\.pdf$/i.test(n))) && (
                         <button

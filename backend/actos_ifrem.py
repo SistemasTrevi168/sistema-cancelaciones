@@ -148,6 +148,8 @@ def dividir_actos(paginas_texto):
 
 def parece_constancia_ifrem(texto):
     t = texto.upper()
+    if "CARTA DE INSTRUCCI" in t:  # la carta del INFONAVIT/FOVISSSTE nunca es una constancia
+        return False
     return ("FOLIO REAL" in t or "IFREM" in t) and ("GRAV" in t or "INSCRIPCIONES DE PROPIEDAD" in t)
 
 

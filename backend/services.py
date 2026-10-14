@@ -417,21 +417,46 @@ def armar_ubicacion_inmueble(texto_completo):
     resultado_ubicacion = ", ".join(elementos)
     return convertir_inmueble_a_letras(resultado_ubicacion)
 
+# Nombres de mujer que no terminan en "A" y nombres de hombre que sí terminan en "A"
+NOMBRES_FEMENINOS = {
+    "ISABEL", "RAQUEL", "BEATRIZ", "CARMEN", "ROCIO", "LUZ", "ESTHER", "ESTER", "INES", "PILAR", "MARIBEL",
+    "ARACELI", "ARACELY", "NOEMI", "RUTH", "SOLEDAD", "MERCEDES", "DOLORES", "CONSUELO", "ROSARIO", "GUADALUPE",
+    "MARISOL", "ANABEL", "YAZMIN", "JAZMIN", "YASMIN", "ITZEL", "NAYELI", "ARELI", "ARELY", "ANAHI", "BELEN",
+    "MIRIAM", "MIRYAM", "CARIDAD", "LOURDES", "IRAIS", "NANCY", "KAREN", "LIZBETH", "ELIZABETH", "IVONNE",
+    "YVONNE", "LILIAN", "LILIANA", "MONSERRAT", "MONTSERRAT", "ABIGAIL", "CONCEPCION", "ASUNCION", "SOCORRO",
+    "AMPARO", "MARILU", "ZOE", "INGRID", "EDITH", "JUDITH", "RUBI", "SARAHI", "DULCE", "ARIADNE", "BRISEIDA",
+    "NOHEMI", "MABEL", "MAYTE", "MARIBETH", "JANET", "JANETH", "LIZ", "GISEL", "GISELLE", "MICHELLE", "NICOLE",
+    "ESTEFANI", "STEPHANIE", "ARIEL", "MAGALI", "MAGALY", "NELLY", "ANEL", "YARELI", "DENISSE", "DENISE",
+    "BERENICE", "LEONOR", "AURORA", "MARIA", "MA", "MA.", "MARÍA", "ROSAURA", "ENCARNACION", "TRINIDAD",
+}
+NOMBRES_MASCULINOS = {"BAUTISTA", "LUCA", "JOSHUA", "ELISEA", "JOSE", "JUAN", "J."}
+
+
+def genero_por_nombre(nombre):
+    """FEMENINO / MASCULINO según el primer nombre del acreditado ('' si no hay nombre)."""
+    limpio = str(nombre or "").upper().translate(str.maketrans("ÁÉÍÓÚÜ", "AEIOUU"))
+    partes = [p for p in re.split(r"\s+", limpio) if p and p not in ("NO_ENCONTRADO", "C.", "LA", "EL", "SR.", "SRA.")]
+    if not partes:
+        return ""
+    primero = partes[0]
+    if primero in NOMBRES_MASCULINOS:
+        return "MASCULINO"
+    if primero in NOMBRES_FEMENINOS or primero.endswith("A"):
+        return "FEMENINO"
+    return "MASCULINO"
+
+
 def determinar_genero_y_estado_civil(texto_completo, nombre_acreditado=""):
     texto_upper = texto_completo.upper()
-    nombre_upper = str(nombre_acreditado).upper()
-    
-    if re.search(r'\bLA\s+ACREDITADA\b|\bSEÑORA\b|\bA\s+FAVOR\s+DE\s+LA\b|\bCIUDADANA\b', texto_upper):
-        genero = "FEMENINO"
-    elif re.search(r'\bEL\s+ACREDITADO\b|\bSEÑOR\b|\bA\s+FAVOR\s+DEL\b|\bCIUDADANO\b', texto_upper):
-        genero = "MASCULINO"
-    else:
-        partes_nombre = nombre_upper.split()
-        primer_nombre = partes_nombre[0] if partes_nombre else ""
-        if primer_nombre.endswith(('A', 'IA', 'IS')):
+
+    # Se decide por el nombre del acreditado. Frases como "a favor del trabajador" o
+    # "el acreditado" vienen igual en todas las cartas, así que no sirven para saberlo.
+    genero = genero_por_nombre(nombre_acreditado)
+    if not genero:
+        if re.search(r'\bLA\s+ACREDITADA\b|\bLA\s+TRABAJADORA\b|\bSEÑORA\b|\bCIUDADANA\b', texto_upper):
             genero = "FEMENINO"
         else:
-            genero = "MASCULINO"
+            genero = "NO_ENCONTRADO"
 
     if re.search(r'\bCASAD[AO]\b|\bSOCIEDAD\s+CONYUGAL\b|\bSEPARACION\s+DE\s+BIENES\b|\bESTADO\s+CIVIL\s*:\s*CASAD', texto_upper):
         estado_civil = "CASADO"
@@ -604,7 +629,7 @@ def extraer_datos_pdf(ruta_pdf):
     texto_limpio = " ".join(texto_completo.split())
 
     # 1. NÚMERO DE CRÉDITO
-    match_credito = re.search(r'(?:Crédito|Cuenta|Finiquito|Contrato)[:\s#]*(\d{8,12})', texto_limpio, re.IGNORECASE)
+    match_credito = re.search(r'(?:Crédito|Cuenta|Finiquito|Contrato)(?:\s+con)?(?:\s+n[uú]mero)?[:\s#]*(\d{8,12})', texto_limpio, re.IGNORECASE)
     raw_credito = None
     if match_credito:
         raw_credito = match_credito.group(1).strip()
@@ -790,6 +815,8 @@ def extraer_datos_pdf(ruta_pdf):
         import actos_ifrem
         if actos_ifrem.parece_constancia_ifrem(texto_completo):
             datos["_actos"] = actos_ifrem.dividir_actos(paginas_texto)
+            # La fecha de expedición es la de la carta; la de la constancia es solo la fecha de consulta
+            datos["fecha_expedicion"] = "NO_ENCONTRADO"
     except Exception as e:
         print(f"No se pudieron separar los actos de {ruta_pdf}: {e}")
 
@@ -822,7 +849,16 @@ def combinar_datos_pareja(datos_lista):
             if val != "NO_ENCONTRADO" and val.lower() not in ['de', 'sreales', 'folio', 'carta', 'real']:
                 if datos_finales.get(k) == "" or datos_finales.get(k) == "NO_ENCONTRADO" or len(val) > len(str(datos_finales.get(k, ""))):
                     datos_finales[k] = val
-                
+
+    # El género sale del nombre del acreditado ya combinado (antes ganaba el texto más largo: "MASCULINO")
+    genero = genero_por_nombre(datos_finales.get("nombre_acreditado"))
+    if genero:
+        datos_finales["genero"] = genero
+    # Si algún documento dice que está casado(a), eso pesa más que el "soltero" por omisión
+    civiles = [str(d.get("estado_civil", "")).upper() for d in datos_lista]
+    if "CASADO" in civiles:
+        datos_finales["estado_civil"] = "CASADO"
+
     return datos_finales
 
 def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
@@ -890,4 +926,4 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         os.makedirs(directorio_salida, exist_ok=True)
         
     doc.save(ruta_salida)
-    return True
+    return True

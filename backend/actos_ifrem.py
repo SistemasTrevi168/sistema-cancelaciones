@@ -251,7 +251,88 @@ def datos_de_acto(acto, services):
         datos["acreedor"] = " ".join(acreedor.group(1).split())
     if deudor:
         datos["deudor"] = " ".join(deudor.group(1).split())
+    personas = personas_de_texto(texto)
+    if personas:
+        datos["personas"] = personas
     return datos
+
+
+# ---- Personas (acreditado y cónyuge) ----
+_ETIQUETA_PERSONAS = re.compile(
+    r"(?:DEUDOR(?:ES|A)?|PARTE\s+DEUDORA|ACREDITAD[OA]S?|COMPRADOR(?:ES|A)?|ADQUIRENTES?|PROPIETARI[OA]S?)"
+    r"\s*(?:\((?:ES|S|A)\))?\s*:\s*", re.I)
+_FIN_PERSONAS = re.compile(
+    r"\b(?:MONTO|PLAZO|ACREEDOR|VALOR|DESTINO|GARANT|SU\s+ANTECEDENTE|VOLANTE|CALIFICADOR|ANALISTA|OBSERVACION|"
+    r"TIPO\s+DE|VENDEDOR|INTER[EÉ]S|TASA|IMPORTE|CANTIDAD|SUPERFICIE|R\.?F\.?C|CURP)\b|\.\s|\.$", re.I)
+_NO_ES_PERSONA = re.compile(
+    r"INFONAVIT|FOVISSSTE|SOCIEDAD|\bS\.?\s?A\.?\b|BANCO|INSTITUTO|FINANCIERA|GOBIERNO|NO\s+CONSTA|CREDITO|HIPOTECA|"
+    r"\bDE\s+C\.?\s?V\b|FIDEICOMISO|ASOCIACI", re.I)
+
+
+def separar_personas(texto):
+    """'JUAN PEREZ LOPEZ Y MARIA RUIZ SOTO' -> ['JUAN PEREZ LOPEZ', 'MARIA RUIZ SOTO']."""
+    t = re.sub(r"[\"“”'«»]", " ", str(texto or "").upper())
+    t = re.sub(r"\bY\s*/\s*O\b", ",", t)
+    t = re.sub(r"\(\s*(?:SU\s+)?C[OÓ]NYUGE\s*\)", ",", t)
+    partes = re.split(r"\s*[,;]\s*|\s+Y\s+|\s+E\s+(?=[A-ZÁÉÍÓÚÑ])", t)
+    personas = []
+    for p in partes:
+        p = re.sub(r"^(?:C\.|SR\.?|SRA\.?|SE[ÑN]OR(?:A)?|LIC\.?|EL|LA|LOS|SUS?)\s+", "", p.strip())
+        p = " ".join(re.sub(r"[^A-ZÁÉÍÓÚÑÜ\.\s]", " ", p).split()).strip(" .")
+        if len(p.split()) >= 2 and len(p) <= 70 and not _NO_ES_PERSONA.search(p) and p not in personas:
+            personas.append(p)
+    return personas
+
+
+def personas_de_texto(texto):
+    """Personas que aparecen como deudor / acreditado / comprador / propietario en el texto de un acto."""
+    personas = []
+    for m in _ETIQUETA_PERSONAS.finditer(texto or ""):
+        resto = texto[m.end():m.end() + 250]
+        fin = _FIN_PERSONAS.search(resto)
+        bloque = resto[:fin.start()] if fin else resto
+        for p in separar_personas(bloque):
+            if p not in personas:
+                personas.append(p)
+    return personas
+
+
+def propietarios_primera_pagina(texto):
+    """Nombres en la tabla 'PROPIETARIO(S)' de la primera hoja de la constancia."""
+    m = re.search(r"PROPIETARIO\(?S?\)?\s*\n(.*?)(?:\nFOLIO\s+REAL|\nDATOS\s+DE\s+IDENTIFICACI|\nDENOMINACI)", texto or "", re.S | re.I)
+    if not m:
+        return []
+    nombres = []
+    for linea in m.group(1).splitlines():
+        l = linea.strip().upper()
+        if not l or l in ("NOMBRE", "R.F.C.", "RFC", "IFE", "CURP", "INE") or re.fullmatch(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{0,3}", l):
+            continue
+        for p in separar_personas(l):
+            if p not in nombres:
+                nombres.append(p)
+    return nombres
+
+
+def _parecido(a, b):
+    pa = {w for w in _sin_acentos(a).split() if len(w) > 2}
+    pb = {w for w in _sin_acentos(b).split() if len(w) > 2}
+    return len(pa & pb)
+
+
+def acreditado_y_conyuge(personas, nombre_referencia=""):
+    """
+    De las personas de un acto, cuál es el acreditado y cuál su cónyuge.
+    Si hay un nombre de referencia (el de la carta) se toma como acreditado al que más se le parece.
+    """
+    if not personas:
+        return "", ""
+    acreditado = personas[0]
+    if nombre_referencia:
+        mejor = max(personas, key=lambda p: _parecido(p, nombre_referencia))
+        if _parecido(mejor, nombre_referencia) > 0:
+            acreditado = mejor
+    otros = [p for p in personas if p != acreditado]
+    return acreditado, (otros[0] if otros else "")
 
 
 def elegir_acto(actos, nombre_acreditado="", entidad=""):

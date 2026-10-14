@@ -27,6 +27,7 @@ const ETIQUETAS = {
   notario_origen_completo: 'Notario de origen',
   oficina_registral: 'Oficina registral',
   entidad_financiera: 'Entidad financiera',
+  nombre_conyuge: 'Nombre del cónyuge',
 };
 
 const VALORES_VACIOS = ['', 'NO_ENCONTRADO', 'N/A', 'NULL', 'NONE', 'UNDEFINED'];

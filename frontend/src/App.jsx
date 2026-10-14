@@ -22,7 +22,7 @@ import TabMasivo from './components/TabMasivo';
 import TabUsuarios from './components/TabUsuarios';
 import { renderAsync } from 'docx-preview';
 import { AlertCircle } from 'lucide-react';
-
+
 // Estado de los botones atrás/adelante del navegador (fuera de React: solo lo usan los eventos del navegador)
 const navegador = { guardia: false, auth: false, tab: 'single', alSalir: null, alVolverPestana: null, alRevisar: null };
 
@@ -261,7 +261,8 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     credito_a_salario: '',
     numero_escritura: '',
     fecha_escritura: '',
-    notario_origen_completo: ''
+    notario_origen_completo: '',
+    nombre_conyuge: ''
   });
 
   // --- 11. ESTADOS - Paginación ---
@@ -1463,12 +1464,17 @@ const filteredHistorial = (historial || []).filter((item) => {
   const usarActo = async (acto) => {
     if (!visorDocs || !acto?.datos) return;
     if (!CAMPOS_DEL_ACTO.some((c) => acto.datos[c])) {
-      avisar.aviso('Este acto no trae escritura, fecha, notario ni monto. Puedes seleccionar el texto en el PDF y usarlo en el dato que quieras.');
+      avisar.aviso('Este acto no trae acreditado, escritura, fecha, notario ni monto. Puedes seleccionar el texto en el PDF y usarlo en el dato que quieras.');
       return;
     }
     const marcar = (lista) => (lista || []).map((a) => ({ ...a, elegido: a.id === acto.id }));
     const cambios = {};
     CAMPOS_DEL_ACTO.forEach((c) => { if (acto.datos[c]) cambios[c] = acto.datos[c]; });
+    // El acreditado y su cónyuge son los de este acto (si el acto trae personas)
+    if (acto.datos.nombre_acreditado) {
+      cambios.nombre_conyuge = acto.datos.nombre_conyuge || '';
+      if (acto.datos.nombre_conyuge) cambios.tiene_conyuge = 'Sí';
+    }
     if (cambios.monto_credito) {
       // El monto en letras que se ve en pantalla también se actualiza
       const { extra } = await normalizarCampo('monto_credito', cambios.monto_credito);
@@ -1486,7 +1492,7 @@ const filteredHistorial = (historial || []).filter((item) => {
       })));
     }
     const tomados = CAMPOS_DEL_ACTO.filter((c) => acto.datos[c]).map(etiquetaDe);
-    const faltan = CAMPOS_DEL_ACTO.filter((c) => !acto.datos[c]).map(etiquetaDe);
+    const faltan = CAMPOS_DEL_ACTO.filter((c) => !acto.datos[c] && !(c === 'nombre_conyuge' && acto.datos.nombre_acreditado)).map(etiquetaDe);
     avisar.exito(`Acto ${acto.clave || ''} (pág. ${acto.pagina}): se tomó ${tomados.join(', ').toLowerCase()}.`
       + (faltan.length ? ` No trae ${faltan.join(', ').toLowerCase()}; se dejó lo que ya tenías.` : ''));
   };

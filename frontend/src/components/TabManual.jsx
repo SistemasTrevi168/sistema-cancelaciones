@@ -126,6 +126,17 @@ export default function TabManual() {
         </div>
 
         <div>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: theme.textSecondary, marginBottom: '6px' }}>Nombre del Cónyuge <span style={{ fontWeight: 400 }}>(plantillas de casados)</span></label>
+          <input
+            type="text"
+            placeholder="Ej. JOSE LUIS MARTINEZ ROJAS"
+            value={formData.nombre_conyuge || ''}
+            onChange={e => setFormData({...formData, nombre_conyuge: e.target.value})}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg || '#fff', color: theme.textPrimary, outline: 'none' }}
+          />
+        </div>
+
+        <div>
           <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: theme.textSecondary, marginBottom: '6px' }}>Monto del Crédito</label>
           <input
             type="text"

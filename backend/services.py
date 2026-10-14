@@ -810,19 +810,69 @@ def extraer_datos_pdf(ruta_pdf):
     tiene_conyuge_match = bool(re.search(r'(C[ÓO]NYUGE|SOCIEDAD\s+CONYUGAL|CASAD[AO]\s+EN\s+SOCIEDAD|EN\s+COPROPIEDAD)', texto_limpio, re.IGNORECASE))
     datos["tiene_conyuge"] = "Sí" if tiene_conyuge_match else "No"
 
+    # Qué documento es (cada dato se toma solo del documento que le corresponde)
+    datos["_tipo_documento"] = tipo_documento(texto_completo, nombre_archivo)
+
     # Actos de la constancia del IFREM (para tomar los datos del acto correcto)
     try:
         import actos_ifrem
-        if actos_ifrem.parece_constancia_ifrem(texto_completo):
+        if datos["_tipo_documento"] == "constancia" and actos_ifrem.parece_constancia_ifrem(texto_completo):
             datos["_actos"] = actos_ifrem.dividir_actos(paginas_texto)
-            # La fecha de expedición es la de la carta; la de la constancia es solo la fecha de consulta
-            datos["fecha_expedicion"] = "NO_ENCONTRADO"
+            datos["_propietarios"] = actos_ifrem.propietarios_primera_pagina(paginas_texto[0] if paginas_texto else "")
     except Exception as e:
         print(f"No se pudieron separar los actos de {ruta_pdf}: {e}")
 
     return datos
 
+
+def tipo_documento(texto_completo, nombre_archivo=""):
+    """'carta' (carta de instrucción) o 'constancia' (constancia de folio / antecedente)."""
+    t = str(texto_completo or "").upper()
+    n = str(nombre_archivo or "").upper()
+    try:
+        import actos_ifrem
+        if actos_ifrem.parece_constancia_ifrem(texto_completo):
+            return "constancia"
+    except Exception:
+        pass
+    if "CARTA DE INSTRUCCI" in t or re.search(r"N[UÚ]MERO\s+DE\s+CARTA", t):
+        return "carta"
+    if "CONSTANCIA" in n or "ANTECEDENTE" in n or "FOLIO" in n:
+        return "constancia"
+    if "CARTA" in n:
+        return "carta"
+    return "constancia"
+
+
+# De qué documento sale cada dato
+CAMPOS_DE_CARTA = {
+    "fecha_expedicion", "numero_carta", "fecha_liquidacion", "numero_credito", "numero_credito_letras",
+    "entidad_financiera",
+}
+CAMPOS_DE_CONSTANCIA = {
+    "nombre_acreditado", "monto_credito", "monto_credito_letras", "credito_a_salario", "datos_inmueble",
+    "folio_real", "oficina_registral", "tiene_conyuge", "nombre_conyuge", "numero_escritura",
+    "fecha_escritura", "notario_origen_completo", "estado_civil",
+}
+# Si no vienen en su documento, se pueden tomar del otro (son el mismo dato en los dos)
+CAMPOS_CON_RESPALDO = {"numero_credito", "numero_credito_letras", "entidad_financiera", "nombre_acreditado"}
+
 def combinar_datos_pareja(datos_lista):
+    """
+    Junta los datos de la carta y de la constancia. Cada dato se toma SOLO de su documento:
+    de la carta: fecha de expedición, número de carta, fecha de liquidación, número de crédito y entidad;
+    de la constancia: todo lo demás. Si no hay un documento de ese tipo, se toma de cualquiera.
+    """
+    cartas = [d for d in datos_lista if d.get("_tipo_documento") == "carta"]
+    constancias = [d for d in datos_lista if d.get("_tipo_documento") != "carta"]
+
+    def fuentes(campo):
+        if campo in CAMPOS_DE_CARTA and cartas:
+            return cartas
+        if campo in CAMPOS_DE_CONSTANCIA and constancias:
+            return constancias
+        return datos_lista
+
     datos_finales = {
         "numero_carta": "NO_ENCONTRADO",
         "fecha_expedicion": "NO_ENCONTRADO",
@@ -840,22 +890,34 @@ def combinar_datos_pareja(datos_lista):
         "numero_escritura": "NO_ENCONTRADO",
         "fecha_escritura": "NO_ENCONTRADO",
         "notario_origen_completo": "NO_ENCONTRADO",
-        "tiene_conyuge": "NO_ENCONTRADO"
+        "tiene_conyuge": "NO_ENCONTRADO",
+        "nombre_conyuge": "NO_ENCONTRADO"
     }
     
-    for d in datos_lista:
-        for k, v in d.items():
-            val = str(v).strip()
-            if val != "NO_ENCONTRADO" and val.lower() not in ['de', 'sreales', 'folio', 'carta', 'real']:
-                if datos_finales.get(k) == "" or datos_finales.get(k) == "NO_ENCONTRADO" or len(val) > len(str(datos_finales.get(k, ""))):
-                    datos_finales[k] = val
+    def valido(v):
+        val = str(v).strip()
+        return val and val != "NO_ENCONTRADO" and val.lower() not in ['de', 'sreales', 'folio', 'carta', 'real']
+
+    claves = {k for d in datos_lista for k in d if not str(k).startswith("_")}
+    for k in claves:
+        lista = fuentes(k)
+        valores = [str(d[k]).strip() for d in lista if k in d and valido(d[k])]
+        if not valores and k in CAMPOS_CON_RESPALDO:
+            valores = [str(d[k]).strip() for d in datos_lista if k in d and valido(d[k])]
+        if valores:
+            datos_finales[k] = max(valores, key=len)
+
+    # Para elegir al acreditado entre las personas de la constancia se usa el nombre de la carta
+    nombres_carta = [str(d.get("nombre_acreditado", "")).strip() for d in cartas if valido(d.get("nombre_acreditado", ""))]
+    datos_finales["_nombre_carta"] = nombres_carta[0] if nombres_carta else ""
+    datos_finales["_propietarios"] = [p for d in constancias for p in (d.get("_propietarios") or [])]
 
     # El género sale del nombre del acreditado ya combinado (antes ganaba el texto más largo: "MASCULINO")
     genero = genero_por_nombre(datos_finales.get("nombre_acreditado"))
     if genero:
         datos_finales["genero"] = genero
     # Si algún documento dice que está casado(a), eso pesa más que el "soltero" por omisión
-    civiles = [str(d.get("estado_civil", "")).upper() for d in datos_lista]
+    civiles = [str(d.get("estado_civil", "")).upper() for d in (constancias or datos_lista)]
     if "CASADO" in civiles:
         datos_finales["estado_civil"] = "CASADO"
 
@@ -917,6 +979,9 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         "fecha_escritura": obtener_valor("fecha_escritura"),
         "notario_origen_completo": obtener_valor("notario_origen_completo"),
         "tiene_conyuge": obtener_valor("tiene_conyuge"),
+        # En las plantillas de casados la variable se llama {{ nombre_conyugue }}
+        "nombre_conyuge": obtener_valor("nombre_conyuge") or obtener_valor("nombre_conyugue"),
+        "nombre_conyugue": obtener_valor("nombre_conyuge") or obtener_valor("nombre_conyugue"),
     }
 
     doc.render(context)

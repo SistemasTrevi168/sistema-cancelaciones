@@ -220,7 +220,7 @@ export default function TabIndividual() {
               <div style={{ flex: 1 }}>
                 La constancia trae <strong>{actosSingle.length} actos</strong>.{' '}
                 {elegido
-                  ? <>La escritura, el notario y el monto se tomaron de <strong>{elegido.clave || 'el acto'}</strong> (pág. {elegido.pagina}).</>
+                  ? <>El acreditado, la escritura, el notario y el monto se tomaron de <strong>{elegido.clave || 'el acto'}</strong> (pág. {elegido.pagina}).</>
                   : <>No se identificó con seguridad la hipoteca: revisa la escritura, el notario y el monto.</>}
               </div>
               <button type="button" onClick={() => abrirVisorDocs({ origen: 'single' })} style={{ background: 'transparent', border: `1px solid currentColor`, color: 'inherit', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>

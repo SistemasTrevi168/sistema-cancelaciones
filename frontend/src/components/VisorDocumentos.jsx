@@ -244,7 +244,7 @@ export default function VisorDocumentos() {
         {actos.length > 0 && verActos && (
           <section className="panel-docs-actos" style={{ borderRight: `1px solid ${theme.border}`, backgroundColor: theme.cardBg }}>
             <p style={{ fontSize: '11px', color: theme.textSecondary, margin: '0 0 8px 0' }}>
-              La escritura, la fecha, el notario y el monto se toman del acto marcado. Si no es el correcto, puedes usar cualquier otro.
+              El acreditado, el cónyuge, la escritura, la fecha, el notario y el monto se toman del acto marcado. Si no es el correcto, puedes usar cualquier otro.
             </p>
             {actos.map((acto) => (
               <article key={acto.id} className="tarjeta-acto" style={{ border: `1.5px solid ${acto.elegido ? '#10b981' : theme.border}`, backgroundColor: acto.elegido ? (isDarkMode ? '#052e16' : '#ecfdf5') : theme.subtleBg }}>
@@ -282,7 +282,7 @@ export default function VisorDocumentos() {
                     const i = archivos.findIndex((a) => a.name === acto.documento);
                     if (i >= 0 && i !== indiceArchivo) { cambiarArchivo(i); setTimeout(() => irAPagina(acto.pagina), 700); } else irAPagina(acto.pagina);
                   }}>Ver (pág. {acto.pagina})</button>
-                  <button type="button" disabled={acto.elegido} title="Tomar de este acto la escritura, la fecha, el notario y el monto (los que traiga)" style={{ ...boton, padding: '4px 8px', fontSize: '11px', backgroundColor: theme.accent, borderColor: theme.accent, color: '#fff', opacity: acto.elegido ? 0.5 : 1 }} onClick={() => usarActo(acto)}>
+                  <button type="button" disabled={acto.elegido} title="Tomar de este acto el acreditado, el cónyuge, la escritura, la fecha, el notario y el monto (los que traiga)" style={{ ...boton, padding: '4px 8px', fontSize: '11px', backgroundColor: theme.accent, borderColor: theme.accent, color: '#fff', opacity: acto.elegido ? 0.5 : 1 }} onClick={() => usarActo(acto)}>
                     {acto.elegido ? 'En uso' : 'Usar este acto'}
                   </button>
                 </div>

@@ -177,26 +177,63 @@ def reunir_actos(lista_datos: List[Dict[str, Any]], nombres: Optional[List[str]]
     return actos
 
 
+def _fecha_acto(acto):
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", str(acto.get("fecha") or ""))
+    return (int(m.group(3)), int(m.group(2)), int(m.group(1))) if m else (0, 0, 0)
+
+
 def aplicar_acto_elegido(datos: Dict[str, Any], actos: List[Dict[str, Any]]) -> Optional[str]:
     """
-    En constancias largas hay varios actos: se toma la escritura, notario y monto
+    En constancias largas hay varios actos: se toma la escritura, fecha, notario y monto
     del acto de hipoteca que corresponde a este crédito (no del primero que aparezca).
+    El acreditado y su cónyuge salen de ese mismo acto; si no los trae, del acto de propiedad
+    más reciente y, al final, de la tabla de propietarios de la primera hoja.
     """
-    elegido = actos_ifrem.elegir_acto(actos, datos.get("nombre_acreditado", ""), datos.get("entidad_financiera", ""))
+    nombre_carta = datos.pop("_nombre_carta", "") or ""
+    propietarios = datos.pop("_propietarios", None) or []
+    referencia = nombre_carta or datos.get("nombre_acreditado", "")
+
+    # Acreditado y cónyuge de cada acto (se usa el nombre de la carta para saber quién es quién)
+    for acto in actos:
+        personas = acto["datos"].get("personas") or []
+        if personas:
+            acreditado, conyuge = actos_ifrem.acreditado_y_conyuge(personas, referencia)
+            acto["datos"]["nombre_acreditado"] = acreditado
+            acto["datos"]["nombre_conyuge"] = conyuge
+
+    elegido = actos_ifrem.elegir_acto(actos, referencia, datos.get("entidad_financiera", ""))
     for acto in actos:
         acto["elegido"] = bool(elegido and acto["id"] == elegido["id"])
-    if not elegido:
-        return None
-    for campo in CAMPOS_DE_ACTO:
-        valor = elegido["datos"].get(campo)
-        if valor:
-            datos[campo] = valor
-            if campo == "monto_credito":
-                try:
-                    datos["monto_credito_letras"] = services.numero_a_letras(float(valor.replace("$", "").replace(",", "")))
-                except Exception:
-                    pass
-    return elegido["id"]
+    if elegido:
+        for campo in CAMPOS_DE_ACTO:
+            valor = elegido["datos"].get(campo)
+            if valor:
+                datos[campo] = valor
+                if campo == "monto_credito":
+                    try:
+                        datos["monto_credito_letras"] = services.numero_a_letras(float(valor.replace("$", "").replace(",", "")))
+                    except Exception:
+                        pass
+
+    # Nombre del acreditado y del cónyuge
+    fuente = elegido["datos"] if elegido and elegido["datos"].get("nombre_acreditado") else None
+    if not fuente:
+        de_propiedad = [a for a in actos if a.get("seccion") == "propiedad" and a["datos"].get("nombre_acreditado")]
+        if de_propiedad:
+            fuente = max(enumerate(de_propiedad), key=lambda x: (_fecha_acto(x[1]), x[0]))[1]["datos"]
+    if fuente:
+        acreditado, conyuge = fuente["nombre_acreditado"], fuente.get("nombre_conyuge", "")
+    else:
+        acreditado, conyuge = actos_ifrem.acreditado_y_conyuge(propietarios, referencia)
+    if acreditado:
+        datos["nombre_acreditado"] = acreditado
+        genero = services.genero_por_nombre(acreditado)
+        if genero:
+            datos["genero"] = genero
+    if conyuge:
+        datos["nombre_conyuge"] = conyuge
+        datos["tiene_conyuge"] = "Sí"
+    return elegido["id"] if elegido else None
 
 
 def eliminar_archivo_temporal(ruta: str):
@@ -643,6 +680,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     fecha_esc = corregir_numeros_compuestos(str(datos_origen.get("fecha_escritura") or ""))
     notario_completo = corregir_numeros_compuestos(str(datos_origen.get("notario_origen_completo") or ""))
     conyuge = datos_origen.get("tiene_conyuge") or "No"
+    nombre_conyuge = corregir_numeros_compuestos(str(datos_origen.get("nombre_conyuge") or datos_origen.get("nombre_conyugue") or ""))
 
     monto_letras = numero_a_letras(monto)
 
@@ -663,6 +701,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
         "fecha_escritura": fecha_esc,
         "notario_origen_completo": notario_completo,
         "tiene_conyuge": conyuge,
+        "nombre_conyuge": nombre_conyuge,
     }
     resultado.update(puntos_inmueble)
     return resultado
@@ -758,9 +797,9 @@ def obtener_lista_plantillas(usuario: dict = Depends(require_user)):
 CAMPOS_EDITABLES = {
     "nombre_acreditado", "monto_credito", "numero_credito", "oficina_registral", "numero_carta",
     "entidad_financiera", "fecha_liquidacion", "folio_real", "datos_inmueble", "fecha_expedicion",
-    "credito_a_salario", "numero_escritura", "fecha_escritura", "notario_origen_completo",
+    "credito_a_salario", "numero_escritura", "fecha_escritura", "notario_origen_completo", "nombre_conyuge",
 }
-ALIAS_VARIABLES = {"crédito_a_salario": "credito_a_salario"}
+ALIAS_VARIABLES = {"crédito_a_salario": "credito_a_salario", "nombre_conyugue": "nombre_conyuge"}
 _cache_campos: Dict[str, Any] = {}
 
 
@@ -1142,7 +1181,7 @@ def normalizar_campo(
             notario = services.extraer_notario_robusto(texto, texto)
             if notario and notario != "NO_ENCONTRADO":
                 valor = notario
-        elif campo == "nombre_acreditado":
+        elif campo in ("nombre_acreditado", "nombre_conyuge"):
             valor = texto.upper()
     except Exception as e:
         print(f"No se pudo normalizar {campo}: {e}")

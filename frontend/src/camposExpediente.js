@@ -1,7 +1,7 @@
 // Cómo se agrupan y nombran los datos de un expediente en pantalla
 
 export const GRUPOS_CAMPOS = [
-  { titulo: 'Acreditado', campos: ['nombre_acreditado', 'tiene_conyuge'] },
+  { titulo: 'Acreditado', campos: ['nombre_acreditado', 'tiene_conyuge', 'nombre_conyuge'] },
   {
     titulo: 'Crédito',
     campos: ['numero_credito', 'monto_credito', 'monto_letras', 'credito_a_salario', 'entidad_financiera', 'numero_carta', 'fecha_expedicion', 'fecha_liquidacion'],
@@ -13,6 +13,7 @@ export const GRUPOS_CAMPOS = [
 export const ETIQUETAS_CAMPOS = {
   nombre_acreditado: 'Nombre del acreditado',
   tiene_conyuge: 'Tiene cónyuge',
+  nombre_conyuge: 'Nombre del cónyuge',
   numero_credito: 'Número de crédito',
   monto_credito: 'Monto del crédito',
   monto_letras: 'Monto en letras',
@@ -72,4 +73,4 @@ export function agruparDatos(datos) {
 }
 
 // Datos que se toman del acto (hipoteca) elegido en la constancia del IFREM
-export const CAMPOS_DEL_ACTO = ['numero_escritura', 'fecha_escritura', 'notario_origen_completo', 'monto_credito'];
+export const CAMPOS_DEL_ACTO = ['nombre_acreditado', 'nombre_conyuge', 'numero_escritura', 'fecha_escritura', 'notario_origen_completo', 'monto_credito'];

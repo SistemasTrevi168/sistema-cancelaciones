@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, Eye, FileText, Hash, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Eye, FileText, Hash, Loader2, PencilLine, Save } from 'lucide-react';
 import { useApp } from '../AppContext';
 import CamposDatos from './CamposDatos';
 import IconoArchivo from './IconoArchivo';
@@ -12,12 +12,14 @@ import VisorDocumentos from './VisorDocumentos';
 export default function EspacioExpediente({
   destino, prefijo, datos, archivos, actos, plantilla, onPlantilla, sugerencia, onUsarSugerida,
   onCambio, expedienteId, navegacion = null, accionesExtra = null, previaActiva = false, onPrevia,
+  onGuardar, guardandoAhora = false,
 }) {
   const { theme, isDarkMode, faltantesPara, etiquetaCampo, handleDownloadWord, descargandoId } = useApp();
   const faltan = faltantesPara(datos, plantilla);
   const nombre = datos?.nombre_acreditado && datos.nombre_acreditado !== 'NO_ENCONTRADO' ? datos.nombre_acreditado : 'Acreditado no identificado';
   const credito = datos?.numero_credito && datos.numero_credito !== 'NO_ENCONTRADO' ? datos.numero_credito : '';
   const descargando = descargandoId === expedienteId;
+  const guardado = !!expedienteId;
 
   return (
     <section className="espacio-expediente" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
@@ -28,6 +30,9 @@ export default function EspacioExpediente({
           <div className="espacio-titulo">
             <h2 style={{ color: theme.textPrimary }}>{nombre}</h2>
             <div className="espacio-chips">
+              {guardado
+                ? <span className="chip-dato chip-ok" title="Ya está en Mi Historial"><CheckCircle size={12} /> Guardado</span>
+                : <span className="chip-dato chip-borrador" title="Todavía no se guarda en la base: revisa y corrige, y después guárdalo"><PencilLine size={12} /> Borrador · sin guardar</span>}
               {credito && <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><Hash size={12} /> Crédito {credito}</span>}
               <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><FileText size={12} /> {archivos.length} PDF</span>
               {faltan.length === 0
@@ -45,14 +50,26 @@ export default function EspacioExpediente({
             >
               <Eye size={15} color={previaActiva ? '#fff' : theme.accent} /> Vista previa
             </button>
-            <button
-              type="button"
-              onClick={() => handleDownloadWord(expedienteId, datos, plantilla)}
-              disabled={descargando}
-              className="boton-barra boton-word"
-            >
-              {descargando ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={17} />} Descargar Word
-            </button>
+            {guardado ? (
+              <button
+                type="button"
+                onClick={() => handleDownloadWord(expedienteId, datos, plantilla)}
+                disabled={descargando}
+                className="boton-barra boton-word"
+              >
+                {descargando ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={17} />} Descargar Word
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onGuardar}
+                disabled={guardandoAhora}
+                className="boton-barra boton-guardar"
+                title="Guarda el expediente en la base (Mi Historial) y genera su Word"
+              >
+                {guardandoAhora ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={15} />} Guardar y procesar
+              </button>
+            )}
           </div>
         </div>
 

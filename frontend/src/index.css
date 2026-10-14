@@ -1334,6 +1334,21 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   border-color: #10b981 !important;
   color: #fff !important;
 }
+.boton-guardar {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #fff !important;
+}
+.chip-borrador {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.tema-oscuro .chip-borrador {
+  background: #172554;
+  border-color: #1e3a8a;
+  color: #93c5fd;
+}
 .boton-revisar {
   background: #7c3aed;
   border-color: #7c3aed;
@@ -1655,6 +1670,7 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
 }
 .fila-lote {
   display: grid;
+  grid-auto-flow: row dense;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
@@ -1675,6 +1691,50 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   gap: 8px;
   align-items: center;
   font-size: 13px;
+}
+.fila-archivos {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -2px;
+}
+.chip-archivo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 3px 6px;
+  font-size: 11px;
+  max-width: 100%;
+}
+.chip-archivo-nombre {
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selector-mover {
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  max-width: 90px;
+}
+.quitar-archivo {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 1px;
+  border-radius: 4px;
+}
+.quitar-archivo:hover {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
 }
 .fila-nombre {
   display: flex;

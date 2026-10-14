@@ -1091,6 +1091,140 @@ async def procesar_masivo(
         borrar_archivos([item["ruta"] for item in locals().get("archivos_procesados", [])])
 
 
+# =====================================================================
+# LEER (sin guardar) y GUARDAR: primero se revisan los datos, después se guardan
+# =====================================================================
+def clave_de_credito(datos: Dict[str, Any], nombre: str) -> str:
+    """Número de crédito con el que se agrupan la carta y la constancia del mismo expediente."""
+    clave = None
+    credito = datos.get("numero_credito")
+    if credito and credito != "NO_ENCONTRADO":
+        clave = re.sub(r'\D', '', str(credito))
+    if not clave or len(clave) < 8:
+        m = re.search(r'\d{8,12}', nombre)
+        if m:
+            clave = m.group(0)
+    if not clave:
+        clave = re.sub(r'\D', '', nombre) or pathlib.Path(nombre).stem
+    return clave
+
+
+def leer_grupo(lista_datos: List[Dict[str, Any]], nombres: List[str], respaldo_credito: str = ""):
+    """Junta los datos de los documentos de un expediente (sin guardar nada)."""
+    if all("error_extraccion" in d for d in lista_datos):
+        raise ValueError("Los archivos PDF de este expediente están corruptos o vacíos.")
+    validos = [d for d in lista_datos if "error_extraccion" not in d]
+    nombres_validos = [n for n, d in zip(nombres, lista_datos) if "error_extraccion" not in d]
+    actos = reunir_actos(validos, nombres_validos)
+    datos_raw = services.combinar_datos_pareja(validos)
+    aplicar_acto_elegido(datos_raw, actos)
+    sugerencia = sugerir_plantilla_seguro(datos_raw, actos, validos)
+    num_credito = re.sub(r'\D', '', str(datos_raw.get("numero_credito") or ""))
+    if not num_credito or datos_raw.get("numero_credito") == "NO_ENCONTRADO":
+        num_credito = respaldo_credito if re.fullmatch(r"\d{6,}", respaldo_credito or "") else ""
+    datos_finales = limpiar_datos_para_plantilla(datos_raw, num_credito)
+    return datos_finales, actos, sugerencia
+
+
+@app.post("/api/expedientes/leer")
+async def leer_documentos(
+    files: List[UploadFile] = File(...),
+    agrupar: bool = Form(True),
+    sesion: dict = Depends(require_user)
+):
+    """
+    Lee los PDF y regresa los datos para revisarlos en pantalla. NO guarda nada en la base:
+    eso se hace después con /api/expedientes/guardar.
+    agrupar=True: separa los archivos en expedientes por número de crédito (carga masiva).
+    agrupar=False: todos los archivos son un solo expediente (caso individual).
+    """
+    archivos = []
+    try:
+        for file in files:
+            nombre = (file.filename or "").replace('\\', '/').split('/')[-1]
+            if not nombre.lower().endswith('.pdf'):
+                continue
+            ruta, nombre = guardar_upload(file)
+            try:
+                datos = services.extraer_datos_pdf(ruta)
+                if not datos or (datos.get("numero_credito") == "NO_ENCONTRADO" and not datos.get("texto_raw")):
+                    raise ValueError("El archivo PDF está vacío, corrupto o no contiene datos legibles.")
+            except Exception as e_file:
+                datos = {"error_extraccion": str(e_file), "numero_credito": "NO_ENCONTRADO"}
+            archivos.append({"ruta": ruta, "nombre": nombre, "datos": datos})
+
+        grupos: Dict[str, List[Dict[str, Any]]] = {}
+        for item in archivos:
+            clave = clave_de_credito(item["datos"], item["nombre"]) if agrupar else "expediente"
+            grupos.setdefault(clave, []).append(item)
+
+        borradores = []
+        for clave, grupo in grupos.items():
+            nombres = [g["nombre"] for g in grupo]
+            try:
+                datos_finales, actos, sugerencia = leer_grupo([g["datos"] for g in grupo], nombres, clave)
+                borradores.append({
+                    "id": uuid.uuid4().hex,
+                    "clave": clave,
+                    "archivos": nombres,
+                    "datos_extraidos": datos_finales,
+                    "actos": actos,
+                    "plantilla_sugerida": sugerencia,
+                })
+            except Exception as e_grupo:
+                borradores.append({"id": uuid.uuid4().hex, "clave": clave, "archivos": nombres, "error": str(e_grupo)})
+        return {"status": "exito", "borradores": borradores}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR EN /leer: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        borrar_archivos([a["ruta"] for a in archivos])
+
+
+@app.post("/api/expedientes/guardar")
+def guardar_expedientes(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user)
+):
+    """
+    Guarda en la base los expedientes ya revisados y genera su Word.
+    payload: {"expedientes": [{"ref", "datos", "plantilla", "archivos"}]}
+    """
+    resultados = []
+    for item in payload.get("expedientes") or []:
+        ref = item.get("ref")
+        try:
+            datos = dict(item.get("datos") or {})
+            plantilla = item.get("plantilla") or datos.get("plantilla_seleccionada") or "plantilla_manera2.docx"
+            num_credito = str(datos.get("numero_credito") or "").strip()
+            if not num_credito or num_credito == "NO_ENCONTRADO":
+                num_credito = "SIN_CREDITO"
+            datos["plantilla_seleccionada"] = plantilla
+            expediente = models.Expediente(
+                usuario_propietario=sesion["username"],
+                numero_credito=num_credito,
+                datos_extraidos=datos,
+                ruta_pdf_constancia=";".join(item.get("archivos") or []) or "Sin PDF",
+            )
+            db.add(expediente)
+            db.flush()
+            regenerar_word_expediente(expediente, {"datos": datos, "plantilla": plantilla}, db)
+            resultados.append({
+                "ref": ref,
+                "expediente_id": str(expediente.id),
+                "datos_extraidos": expediente.datos_extraidos,
+                "plantilla_seleccionada": plantilla,
+            })
+        except Exception as e:
+            db.rollback()
+            print(f"ERROR AL GUARDAR {ref}: {e}")
+            resultados.append({"ref": ref, "error": getattr(e, "detail", None) or str(e)})
+    return {"status": "exito", "guardados": len([r for r in resultados if "error" not in r]), "resultados": resultados}
+
+
 @app.put("/api/expedientes/{expediente_id}/actualizar")
 def actualizar_datos_expediente(
     expediente_id: str,

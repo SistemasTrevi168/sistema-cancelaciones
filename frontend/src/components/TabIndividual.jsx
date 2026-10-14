@@ -13,6 +13,8 @@ export default function TabIndividual() {
     sugerenciaSingle,
     usarPlantillaSugerida,
     nuevoExpedienteSingle,
+    guardarSingle,
+    guardando,
     datos,
     expedienteId,
     handleDragOver,
@@ -45,6 +47,8 @@ export default function TabIndividual() {
         expedienteId={expedienteId}
         previaActiva={vistaPrevia?.origen === 'single'}
         onPrevia={() => abrirVistaPrevia({ origen: 'single' })}
+        onGuardar={guardarSingle}
+        guardandoAhora={!!guardando.single}
         accionesExtra={(
           <button type="button" onClick={nuevoExpedienteSingle} className="boton-barra" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }} title="Subir los documentos de otro expediente">
             <FilePlus size={15} color={theme.accent} /> Nuevo expediente
@@ -60,7 +64,7 @@ export default function TabIndividual() {
     <div className="carga-documentos">
       <div className="carga-encabezado">
         <h2 style={{ color: theme.textPrimary }}><Upload size={20} color={theme.accent} /> Cargar expediente individual</h2>
-        <p style={{ color: theme.textSecondary }}>Sube la <strong>carta de instrucción</strong> y la <strong>constancia de folio</strong> del mismo crédito. Después podrás revisar los datos junto al PDF.</p>
+        <p style={{ color: theme.textSecondary }}>Sube la <strong>carta de instrucción</strong> y la <strong>constancia de folio</strong> del mismo crédito. Primero se leen los datos para que los revises y corrijas junto al PDF; <strong>nada se guarda</strong> hasta que le des “Guardar y procesar”.</p>
       </div>
 
       <div className="carga-rejilla">
@@ -140,7 +144,7 @@ export default function TabIndividual() {
               style={{ backgroundColor: listo ? theme.accent : theme.subtleBg, color: listo ? '#fff' : theme.textSecondary, cursor: listo ? 'pointer' : 'not-allowed' }}
             >
               {loading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle size={16} />}
-              Procesar expediente
+              Leer documentos
             </button>
           </div>
         </div>

@@ -872,6 +872,7 @@ const handlePreviewExcel = async (file) => {
     }
 
     if (allPdfFiles.length > 0) {
+      if (!(await descartarLoteSinGuardar())) return;
       setBatchFiles(allPdfFiles);
       setBatchResults([]);
       setError('');
@@ -893,9 +894,17 @@ const handlePreviewExcel = async (file) => {
     }
   };
 
-  const handleBatchFileChange = (e) => {
-    if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
+  // Antes de cambiar los archivos del lote, avisar si hay expedientes leídos sin guardar
+  const descartarLoteSinGuardar = async () => {
+    const sinGuardar = batchResults.filter((r) => !r.error && !r.expediente_id).length;
+    return sinGuardar === 0 || confirmar(`${sinGuardar} expediente(s) del lote anterior no se han guardado y se perderán.`, { titulo: '¿Cargar otro lote?', textoConfirmar: 'Sí, cargar otro', peligro: true });
+  };
+
+  const handleBatchFileChange = async (e) => {
+    const input = e.target;
+    if (input.files) {
+      const selectedFiles = Array.from(input.files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
+      if (!(await descartarLoteSinGuardar())) { input.value = ''; return; }
       setBatchFiles(selectedFiles);
       setBatchResults([]);
     }
@@ -913,32 +922,58 @@ const handlePreviewExcel = async (file) => {
       setProgressSingle((prev) => (prev < 90 ? prev + 15 : prev));
     }, 200);
 
+    // Solo se LEEN los datos (no se guarda nada): primero se revisan y después se guardan
     const formDataObj = new FormData();
     singleFiles.forEach((f) => formDataObj.append('files', f));
-    formDataObj.append('usuario_propietario', currentUser.username);
-    formDataObj.append('plantilla', selectedPlantilla);
+    formDataObj.append('agrupar', 'false');
 
     try {
-      const res = await api.post('/expedientes/procesar', formDataObj);
+      const res = await api.post('/expedientes/leer', formDataObj);
       clearInterval(interval);
+      const borrador = (res.data.borradores || [])[0];
+      if (!borrador || borrador.error) {
+        setError(borrador?.error || 'No se pudieron leer los archivos.');
+        setLoading(false);
+        return;
+      }
       setProgressSingle(100);
       setTimeout(() => {
-        setExpedienteId(res.data.expediente_id || res.data.id || null);
-        const rawDatos = res.data.datos_extraidos || {};
-        // Antes se agregaban copias "acreditado" y "monto"; al editarlas no cambiaba el Word
-        setDatos({
-          numero_credito: rawDatos.numero_credito || '',
-          ...rawDatos
-        });
-        setActosSingle(res.data.actos || []);
-        setSugerenciaBase(res.data.plantilla_sugerida || null);
+        setExpedienteId('');
+        const rawDatos = borrador.datos_extraidos || {};
+        setDatos({ numero_credito: rawDatos.numero_credito || '', ...rawDatos });
+        setActosSingle(borrador.actos || []);
+        setSugerenciaBase(borrador.plantilla_sugerida || null);
         setUnlockedFields({});
         setLoading(false);
-      }, 400);
+      }, 300);
     } catch (err) {
       clearInterval(interval);
-      setError(err.response?.data?.detail || 'Error al procesar los archivos.');
+      setError(err.response?.data?.detail || 'Error al leer los archivos.');
       setLoading(false);
+    }
+  };
+
+  // ---- GUARDAR (después de revisar): queda en la base, en Mi Historial, y se genera el Word ----
+  const [guardando, setGuardando] = useState({}); // { single: true, <ref>: true }
+  const guardarEnBase = async (lista) => {
+    const res = await api.post('/expedientes/guardar', { expedientes: lista });
+    return res.data.resultados || [];
+  };
+
+  const guardarSingle = async () => {
+    if (!datos) return;
+    const faltan = faltantesPara(datos, selectedPlantilla);
+    if (faltan.length > 0 && !(await confirmar(mensajeFaltantes(faltan, 'guardar el expediente'), { titulo: 'Faltan datos', textoConfirmar: 'Guardar de todas formas' }))) return;
+    setGuardando((g) => ({ ...g, single: true }));
+    try {
+      const [r] = await guardarEnBase([{ ref: 'single', datos, plantilla: selectedPlantilla, archivos: singleFiles.map((f) => f.name) }]);
+      if (!r || r.error) throw new Error(r?.error || 'No se pudo guardar');
+      setExpedienteId(r.expediente_id);
+      avisar.exito('Expediente guardado y procesado. Ya está en Mi Historial.');
+    } catch (err) {
+      avisar.error(`No se pudo guardar: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setGuardando((g) => ({ ...g, single: false }));
     }
   };
 
@@ -998,63 +1033,162 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
     // La vista previa (si está abierta para este expediente) se actualiza sola
   };
 
+  // Clave para mantener juntos los archivos del mismo crédito al mandarlos por partes
+  const claveDeArchivo = (nombre) => (String(nombre).match(/\d{8,12}/) || [String(nombre).replace(/\.pdf$/i, '')])[0];
+
+  const aBorrador = (b) => ({
+    ref: b.id,
+    clave: b.clave,
+    archivos: b.archivos || [],
+    error: b.error,
+    expediente_id: null,
+    plantilla_seleccionada: selectedPlantilla,
+    datos_extraidos: b.error ? {} : { numero_credito: b.datos_extraidos?.numero_credito || '', ...b.datos_extraidos },
+    actos: b.actos || [],
+    plantilla_sugerida: b.plantilla_sugerida || null,
+  });
+
+  const leerArchivos = async (archivos, agrupar) => {
+    const formDataObj = new FormData();
+    archivos.forEach((f) => formDataObj.append('files', f));
+    formDataObj.append('agrupar', agrupar ? 'true' : 'false');
+    const res = await api.post('/expedientes/leer', formDataObj);
+    return res.data.borradores || [];
+  };
+
   const handleUploadBatch = async () => {
     cerrarVistaPrevia();
-   
     if (batchFiles.length === 0) return;
     setBatchLoading(true);
     setProgressBatch(5);
     setError('');
+    setSelectedBatchIndices([]);
 
-    const chunkSize = 15;
-    const totalFiles = batchFiles.length;
-    let processedFiles = 0;
-    let resultadosTotales = [];
+    // Se arman paquetes de ~15 archivos sin separar la carta de su constancia
+    const grupos = {};
+    batchFiles.forEach((f) => { (grupos[claveDeArchivo(f.name)] ||= []).push(f); });
+    const paquetes = [];
+    let actual = [];
+    Object.values(grupos).forEach((g) => {
+      if (actual.length && actual.length + g.length > 15) { paquetes.push(actual); actual = []; }
+      actual = actual.concat(g);
+    });
+    if (actual.length) paquetes.push(actual);
 
+    let leidos = [];
+    let hechos = 0;
     try {
-      for (let i = 0; i < totalFiles; i += chunkSize) {
-        const chunk = batchFiles.slice(i, i + chunkSize);
-        const formDataObj = new FormData();
-        
-        chunk.forEach((f) => formDataObj.append('files', f));
-        formDataObj.append('usuario_propietario', currentUser.username);
-        formDataObj.append('plantilla', selectedPlantilla);
-
-        const res = await api.post('/expedientes/procesar-masivo', formDataObj);
-
-        const detallesNormalizados = (res.data.detalles || []).map((item) => {
-          const raw = item.datos_extraidos || {};
-          return {
-            ...item,
-            plantilla_seleccionada: selectedPlantilla,
-            datos_extraidos: {
-              numero_credito: raw.numero_credito || '',
-              ...raw
-            }
-          };
-        });
-
-        resultadosTotales = [...resultadosTotales, ...detallesNormalizados];
-        setBatchResults(resultadosTotales);
-
-        processedFiles += chunk.length;
-        const porcentajeReal = Math.round((processedFiles / totalFiles) * 95);
-        setProgressBatch(porcentajeReal);
+      for (const paquete of paquetes) {
+        const borradores = await leerArchivos(paquete, true);
+        leidos = [...leidos, ...borradores.map(aBorrador)];
+        setBatchResults(leidos);
+        hechos += paquete.length;
+        setProgressBatch(Math.round((hechos / batchFiles.length) * 95));
       }
-
       setProgressBatch(100);
       setTimeout(() => {
-        if (resultadosTotales.length > 0) {
-          setOpenAccordion({ 0: true });
-        }
         setUnlockedFields({});
         setBatchLoading(false);
       }, 300);
-
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al procesar el lote de archivos.');
+      setError(err.response?.data?.detail || 'Error al leer el lote de archivos.');
       setBatchLoading(false);
     }
+  };
+
+  // Mover o quitar archivos de un expediente del lote (solo borradores): se vuelven a leer sus datos
+  const releerBorrador = async (ref, archivosNombres) => {
+    const archivos = batchFiles.filter((f) => archivosNombres.includes(f.name));
+    setBatchResults((prev) => prev.map((r) => (r.ref === ref ? { ...r, archivos: archivosNombres, leyendo: true } : r)));
+    try {
+      const [b] = await leerArchivos(archivos, false);
+      setBatchResults((prev) => prev.map((r) => (r.ref !== ref ? r : {
+        ...aBorrador({ ...b, id: ref }),
+        plantilla_seleccionada: r.plantilla_seleccionada,
+        leyendo: false,
+      })));
+    } catch {
+      setBatchResults((prev) => prev.map((r) => (r.ref === ref ? { ...r, leyendo: false } : r)));
+      avisar.error('No se pudieron volver a leer los archivos de ese expediente.');
+    }
+  };
+
+  const moverArchivoLote = async (nombre, refOrigen, refDestino) => {
+    const origen = batchResults.find((r) => r.ref === refOrigen);
+    if (!origen) return;
+    const restantes = origen.archivos.filter((n) => n !== nombre);
+    let destinoRef = refDestino;
+    let destinoArchivos;
+    if (refDestino === 'nuevo') {
+      destinoRef = `nuevo-${Date.now()}`;
+      destinoArchivos = [nombre];
+      setBatchResults((prev) => [...prev, { ref: destinoRef, clave: claveDeArchivo(nombre), archivos: [nombre], expediente_id: null, plantilla_seleccionada: selectedPlantilla, datos_extraidos: {}, actos: [], leyendo: true }]);
+    } else {
+      const destino = batchResults.find((r) => r.ref === refDestino);
+      destinoArchivos = [...(destino?.archivos || []), nombre];
+    }
+    setSelectedBatchIndices([]);
+    if (restantes.length === 0) {
+      setBatchResults((prev) => prev.filter((r) => r.ref !== refOrigen));
+    }
+    await Promise.all([
+      restantes.length ? releerBorrador(refOrigen, restantes) : null,
+      releerBorrador(destinoRef, destinoArchivos),
+    ]);
+    avisar.exito(`"${nombre}" se movió${refDestino === 'nuevo' ? ' a un expediente nuevo' : ''}. Se volvieron a leer los datos.`);
+  };
+
+  const quitarArchivoLote = async (nombre, ref) => {
+    const item = batchResults.find((r) => r.ref === ref);
+    if (!item) return;
+    const restantes = item.archivos.filter((n) => n !== nombre);
+    setSelectedBatchIndices([]);
+    if (restantes.length === 0) {
+      if (!(await confirmar(`El expediente se queda sin archivos y se quitará de la lista.`, { titulo: `¿Quitar "${nombre}"?`, textoConfirmar: 'Quitar' }))) return;
+      setBatchResults((prev) => prev.filter((r) => r.ref !== ref));
+      return;
+    }
+    await releerBorrador(ref, restantes);
+    avisar.exito(`Se quitó "${nombre}" y se volvieron a leer los datos.`);
+  };
+
+  const quitarExpedienteLote = (ref) => {
+    setSelectedBatchIndices([]);
+    setBatchResults((prev) => prev.filter((r) => r.ref !== ref));
+  };
+
+  // Guarda en la base los expedientes indicados (por índice); regresa { ref: expediente_id } de los guardados
+  const guardarLote = async (indices) => {
+    const items = indices.map((i) => ({ i, r: batchResults[i] })).filter(({ r }) => r && !r.error && !r.expediente_id && !r.leyendo);
+    if (items.length === 0) return {};
+    const conFaltantes = items.filter(({ r }) => faltantesPara(r.datos_extraidos, r.plantilla_seleccionada || selectedPlantilla).length > 0);
+    if (conFaltantes.length > 0 && !(await confirmar(
+      `${conFaltantes.length} de ${items.length} expediente(s) tienen datos faltantes (marcados con ⚠).\n\n¿Quieres guardarlos de todas formas?`,
+      { titulo: 'Expedientes incompletos', textoConfirmar: 'Guardar de todas formas' }
+    ))) return {};
+    const refs = Object.fromEntries(items.map(({ r }) => [r.ref, true]));
+    setGuardando((g) => ({ ...g, ...refs }));
+    const nuevosIds = {};
+    try {
+      const resultados = await guardarEnBase(items.map(({ r }) => ({
+        ref: r.ref, datos: r.datos_extraidos, plantilla: r.plantilla_seleccionada || selectedPlantilla, archivos: r.archivos,
+      })));
+      const porRef = Object.fromEntries(resultados.map((x) => [x.ref, x]));
+      const guardados = resultados.filter((x) => !x.error).length;
+      resultados.forEach((x) => { if (!x.error) nuevosIds[x.ref] = x.expediente_id; });
+      setBatchResults((prev) => prev.map((r) => {
+        const x = porRef[r.ref];
+        return x && !x.error ? { ...r, expediente_id: x.expediente_id } : r;
+      }));
+      const errores = resultados.filter((x) => x.error);
+      if (errores.length) avisar.error(`${errores.length} expediente(s) no se pudieron guardar: ${errores[0].error}`);
+      if (guardados) avisar.exito(`${guardados} expediente(s) guardados y procesados. Ya están en Mi Historial.`);
+    } catch (err) {
+      avisar.error(`No se pudo guardar: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setGuardando((g) => Object.fromEntries(Object.entries(g).filter(([k]) => !refs[k])));
+    }
+    return nuevosIds;
   };
 
 // 📥 Función de descarga con el nombre basado en el Número de Crédito
@@ -1244,7 +1378,18 @@ const handleExcelSubmit = async (e) => {
 };
 
   const handleDownloadZip = async () => {
-    const conFaltantes = batchResults.filter((r) => !r.error && faltantesPara(
+    const pendientes = batchResults.map((r, i) => (!r.error && !r.expediente_id ? i : null)).filter((i) => i !== null);
+    if (pendientes.length > 0) {
+      if (!(await confirmar(`${pendientes.length} expediente(s) todavía no están guardados. Para incluirlos en el ZIP hay que guardarlos primero.`, { titulo: 'Hay expedientes sin guardar', textoConfirmar: 'Guardar y descargar' }))) return;
+      const nuevosIds = await guardarLote(pendientes);
+      // Solo entran al ZIP los que ya están guardados
+      return descargarZipGuardados(batchResults.map((r) => (nuevosIds[r.ref] ? { ...r, expediente_id: nuevosIds[r.ref] } : r)), true);
+    }
+    return descargarZipGuardados(batchResults, false);
+  };
+
+  const descargarZipGuardados = async (lista, yaConfirmado) => {
+    const conFaltantes = yaConfirmado ? [] : lista.filter((r) => !r.error && r.expediente_id && faltantesPara(
       r.datos_extraidos,
       r.plantilla_seleccionada || r.datos_extraidos?.plantilla_seleccionada || selectedPlantilla
     ).length > 0);
@@ -1254,7 +1399,9 @@ const handleExcelSubmit = async (e) => {
 
     // Se mandan la plantilla y los datos actuales de cada expediente,
     // para que el ZIP incluya los cambios hechos en pantalla
-    const ids = batchResults.filter((r) => !r.error).map((r) => ({
+    const guardados = lista.filter((r) => !r.error && r.expediente_id);
+    if (guardados.length === 0) { avisar.aviso('No hay expedientes guardados para descargar.'); return; }
+    const ids = guardados.map((r) => ({
       id: r.expediente_id,
       plantilla: r.plantilla_seleccionada || selectedPlantilla,
       datos: r.datos_extraidos,
@@ -1438,7 +1585,8 @@ const filteredHistorial = (historial || []).filter((item) => {
   };
 
   // Empieza un expediente nuevo en Caso Individual
-  const nuevoExpedienteSingle = () => {
+  const nuevoExpedienteSingle = async () => {
+    if (datos && !expedienteId && !(await confirmar('Este expediente todavía no está guardado; si continúas se pierden los datos leídos y lo que hayas corregido.', { titulo: '¿Descartar el expediente?', textoConfirmar: 'Descartar', peligro: true }))) return;
     cerrarVistaPrevia();
     setDatos(null); setActosSingle([]); setSugerenciaBase(null);
     setSingleFiles([]); setExpedienteId(''); setError(''); setProgressSingle(0);
@@ -1497,6 +1645,15 @@ const filteredHistorial = (historial || []).filter((item) => {
       + (faltan.length ? ` No trae ${faltan.join(', ').toLowerCase()}; se dejó lo que ya tenías.` : ''));
   };
 
+  // Aviso del navegador si se cierra o recarga la página con expedientes sin guardar
+  const hayBorradores = (!!datos && !expedienteId) || batchResults.some((r) => !r.error && !r.expediente_id);
+  useEffect(() => {
+    if (!hayBorradores) return;
+    const alSalirPagina = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', alSalirPagina);
+    return () => window.removeEventListener('beforeunload', alSalirPagina);
+  }, [hayBorradores]);
+
   // ---- PLANTILLA SUGERIDA ----
   const sugerenciaSingle = sugerenciaActual(sugerenciaBase, datos, actosSingle);
   const sugerenciaDeLote = (item) => sugerenciaActual(item?.plantilla_sugerida, item?.datos_extraidos, item?.actos);
@@ -1518,6 +1675,12 @@ const filteredHistorial = (historial || []).filter((item) => {
 
   // Todo lo que las pantallas (components/) necesitan leer del estado de App
   const ctx = {
+    guardarSingle,
+    guardando,
+    guardarLote,
+    moverArchivoLote,
+    quitarArchivoLote,
+    quitarExpedienteLote,
     sugerenciaSingle,
     sugerenciaDeLote,
     usarPlantillaSugerida,

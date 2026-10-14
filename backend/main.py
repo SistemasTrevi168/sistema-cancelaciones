@@ -366,152 +366,23 @@ def ajustar_digitos_segun_longitud(texto: str) -> str:
 
 
 def numero_a_letras(monto: Any) -> str:
-    """Convierte un valor numérico o texto a su representación formal en letras en MXN con centavos explícitos."""
+    """Monto con letra en pesos (misma regla que services.numero_a_letras)."""
     if not monto:
         return ""
+    monto_str = re.sub(r"[^\d.]", "", str(monto))
     try:
-        monto_str = re.sub(r"[^\d.]", "", str(monto))
-        val = float(monto_str)
-        
-        enteros = int(val)
-        centavos = int(round((val - enteros) * 100))
-        
-        unidades = ["", "UN", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE"]
-        decenas = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"]
-        dieces = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISÉIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"]
-        centenas = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"]
-
-        def _convertir_grupo(n: int) -> str:
-            if n == 0:
-                return ""
-            if n == 100:
-                return "CIEN"
-            
-            c = n // 100
-            d = (n % 100) // 10
-            u = n % 10
-            
-            res = []
-            if c > 0:
-                res.append(centenas[c])
-            
-            if d == 1:
-                res.append(dieces[u])
-            else:
-                if d == 2 and u > 0:
-                    res.append(f"VEINTI{unidades[u].lower()}".upper())
-                else:
-                    if d > 0:
-                        res.append(decenas[d])
-                    if u > 0:
-                        if d > 0:
-                            res.append("Y")
-                        res.append(unidades[u])
-            return " ".join(res)
-
-        if enteros == 0:
-            texto_enteros = "CERO PESOS"
-        else:
-            partes = []
-            millones = enteros // 1_000_000
-            miles = (enteros % 1_000_000) // 1_000
-            unidades_restantes = enteros % 1_000
-
-            if millones > 0:
-                if millones == 1:
-                    partes.append("UN MILLÓN")
-                else:
-                    partes.append(f"{_convertir_grupo(millones)} MILLONES")
-            
-            if miles > 0:
-                if miles == 1:
-                    partes.append("MIL")
-                else:
-                    partes.append(f"{_convertir_grupo(miles)} MIL")
-            
-            if unidades_restantes > 0:
-                partes.append(_convertir_grupo(unidades_restantes))
-            
-            texto_enteros = " ".join(partes) + " PESOS"
-
-        if centavos > 0:
-            texto_centavos = f"CON {_convertir_grupo(centavos)} CENTAVOS"
-        else:
-            texto_centavos = "CON CERO CENTAVOS"
-
-        return f"{texto_enteros} {texto_centavos}, MONEDA NACIONAL"
+        return services.numero_a_letras(float(monto_str))
     except Exception:
         return str(monto)
 
 
 def numero_folio_a_letras(monto: Any) -> str:
-    """Convierte un número de folio a su representación en letras sin mención de moneda."""
+    """Número de folio con letra, sin moneda: 21 -> VEINTIUNO."""
     if not monto:
         return ""
+    monto_str = re.sub(r"[^\d.]", "", str(monto))
     try:
-        monto_str = re.sub(r"[^\d.]", "", str(monto))
-        if not monto_str:
-            return str(monto)
-        val = float(monto_str)
-        enteros = int(val)
-        
-        unidades = ["", "UN", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE"]
-        decenas = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"]
-        dieces = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISÉIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"]
-        centenas = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"]
-
-        def _convertir_grupo(n: int) -> str:
-            if n == 0:
-                return ""
-            if n == 100:
-                return "CIEN"
-            
-            c = n // 100
-            d = (n % 100) // 10
-            u = n % 10
-            
-            res = []
-            if c > 0:
-                res.append(centenas[c])
-            
-            if d == 1:
-                res.append(dieces[u])
-            else:
-                if d == 2 and u > 0:
-                    res.append(f"VEINTI{unidades[u].lower()}".upper())
-                else:
-                    if d > 0:
-                        res.append(decenas[d])
-                    if u > 0:
-                        if d > 0:
-                            res.append("Y")
-                        res.append(unidades[u])
-            return " ".join(res)
-
-        if enteros == 0:
-            return "CERO"
-        
-        partes = []
-        millones = enteros // 1_000_000
-        miles = (enteros % 1_000_000) // 1_000
-        unidades_restantes = enteros % 1_000
-
-        if millones > 0:
-            if millones == 1:
-                partes.append("UN MILLÓN")
-            else:
-                partes.append(f"{_convertir_grupo(millones)} MILLONES")
-        
-        if miles > 0:
-            if miles == 1:
-                partes.append("MIL")
-            else:
-                partes.append(f"{_convertir_grupo(miles)} MIL")
-        
-        if unidades_restantes > 0:
-            partes.append(_convertir_grupo(unidades_restantes))
-        
-        return " ".join(partes)
+        return services.entero_en_letras(int(float(monto_str)))
     except Exception:
         return str(monto)
 
@@ -573,6 +444,9 @@ def corregir_numeros_compuestos(texto: str) -> str:
         r'\bdiez\s+y\s+ocho\b': 'dieciocho',
         r'\bdiez\s+y\s+nueve\b': 'diecinueve',
         r'\bveinte\s+y\s+uno\b': 'veintiuno',
+        r'\bveinte\s+y\s+un\s+(mil|mill[oó]n(?:es)?|pesos|centavos)\b': r'veintiún \1',
+        r'\bveinte\s+y\s+un\b': 'veintiuno',
+        r'\bveintiun\b(?!\s+(?:mil|mill))': 'veintiuno',
         r'\bveinte\s+y\s+dos\b': 'veintidós',
         r'\bveinte\s+y\s+tres\b': 'veintitrés',
         r'\bveinte\s+y\s+cuatro\b': 'veinticuatro',

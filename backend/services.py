@@ -23,35 +23,72 @@ def credito_a_letras(numero_str):
         return f'"{numero_str}" ({" ".join(digitos)})'
     return str(numero_str)
 
+# ---------------------------------------------------------------------
+# NÚMEROS CON LETRA (una sola regla para todo el sistema)
+#   1 -> "uno", 21 -> "veintiuno", 16 -> "dieciséis", 22 -> "veintidós", 31 -> "treinta y uno".
+#   Antes de "mil", "millones", "pesos" o "centavos" se acorta: "un", "veintiún", "treinta y un".
+# ---------------------------------------------------------------------
+_UNIDADES = ["", "UNO", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE"]
+_DIECES = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISÉIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"]
+_VEINTIS = ["VEINTE", "VEINTIUNO", "VEINTIDÓS", "VEINTITRÉS", "VEINTICUATRO", "VEINTICINCO", "VEINTISÉIS",
+            "VEINTISIETE", "VEINTIOCHO", "VEINTINUEVE"]
+_DECENAS = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"]
+_CENTENAS = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS",
+             "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"]
+
+
+def grupo_en_letras(n, apocope=False):
+    """0 a 999 con letra (MAYÚSCULAS). apocope=True: termina en "UN"/"VEINTIÚN" (va antes de un sustantivo)."""
+    n = int(n)
+    if n <= 0:
+        return ""
+    if n == 100:
+        return "CIEN"
+    c, r = divmod(n, 100)
+    partes = []
+    if c:
+        partes.append(_CENTENAS[c])
+    if r:
+        if r < 10:
+            texto = _UNIDADES[r]
+        elif r < 20:
+            texto = _DIECES[r - 10]
+        elif r < 30:
+            texto = _VEINTIS[r - 20]
+        else:
+            d, u = divmod(r, 10)
+            texto = _DECENAS[d] + (f" Y {_UNIDADES[u]}" if u else "")
+        if apocope:
+            texto = re.sub(r"VEINTIUNO$", "VEINTIÚN", texto)
+            texto = re.sub(r"\bUNO$", "UN", texto)
+        partes.append(texto)
+    return " ".join(partes)
+
+
+def entero_en_letras(n, apocope=False):
+    """Entero con letra (MAYÚSCULAS): 21 -> VEINTIUNO, 21000 -> VEINTIÚN MIL, 1001 -> MIL UNO."""
+    n = int(n)
+    if n == 0:
+        return "CERO"
+    millones, resto = divmod(n, 1_000_000)
+    miles, cientos = divmod(resto, 1000)
+    partes = []
+    if millones:
+        partes.append("UN MILLÓN" if millones == 1 else f"{entero_en_letras(millones, True)} MILLONES")
+    if miles:
+        partes.append("MIL" if miles == 1 else f"{grupo_en_letras(miles, True)} MIL")
+    if cientos:
+        partes.append(grupo_en_letras(cientos, apocope))
+    return " ".join(partes)
+
+
 def numero_a_palabras_generico(numero):
     """Convierte cualquier número entero o decimal con precisión exacta a texto completo."""
-    unidades = ["", "UN", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE"]
-    decenas = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"]
-    dieces = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISÉIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"]
-    centenas = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"]
-
-    def convert_group(n):
-        if n == 0: return ""
-        if n == 100: return "CIEN"
-        c = n // 100
-        d = (n % 100) // 10
-        u = n % 10
-        res = ""
-        if c > 0: res += centenas[c] + " "
-        if d == 1:
-            res += dieces[u] + " "
-        else:
-            if d > 0:
-                res += decenas[d] + (" Y " if u > 0 else " ")
-            if u > 0:
-                res += unidades[u] + " "
-        return res
-
     try:
         val_str = str(numero).replace('$', '').replace(',', '').strip()
         if '.' in val_str:
             partes_num = val_str.split('.')
-            enteros = int(partes_num[0])
+            enteros = int(partes_num[0] or 0)
             dec_str = partes_num[1]
         else:
             enteros = int(val_str)
@@ -59,43 +96,14 @@ def numero_a_palabras_generico(numero):
     except Exception:
         return str(numero)
 
-    if enteros == 0:
-        texto_enteros = "CERO"
-    else:
-        millones = enteros // 1000000
-        miles = (enteros % 1000000) // 1000
-        cientos = enteros % 1000
-
-        partes = []
-        if millones > 0:
-            if millones == 1:
-                partes.append("UN MILLÓN")
-            else:
-                partes.append(f"{convert_group(millones).strip()} MILLONES")
-        if miles > 0:
-            if miles == 1:
-                partes.append("MIL")
-            else:
-                partes.append(f"{convert_group(miles).strip()} MIL")
-        if cientos > 0:
-            partes.append(convert_group(cientos).strip())
-
-        texto_enteros = " ".join(partes)
+    texto_enteros = entero_en_letras(enteros)
 
     texto_dec = ""
     if dec_str:
         zeros_lead = len(dec_str) - len(dec_str.lstrip('0'))
         partes_cero = ["CERO"] * zeros_lead
         restante_str = dec_str.lstrip('0')
-        if restante_str:
-            try:
-                val_restante = int(restante_str)
-                texto_restante = convert_group(val_restante).strip()
-            except Exception:
-                texto_restante = restante_str
-        else:
-            texto_restante = ""
-
+        texto_restante = entero_en_letras(int(restante_str)) if restante_str.isdigit() else restante_str
         todas_partes_dec = partes_cero + ([texto_restante] if texto_restante else [])
         if todas_partes_dec:
             texto_dec = f" PUNTO {' '.join(todas_partes_dec)}"
@@ -250,28 +258,7 @@ def limpiar_fecha_escritura(fecha_str):
     return convertir_fecha_texto(fecha_str)
 
 def numero_a_letras(numero):
-    unidades = ["", "UN", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE"]
-    decenas = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"]
-    dieces = ["DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISÉIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"]
-    centenas = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS", "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"]
-
-    def convert_group(n):
-        if n == 0: return ""
-        if n == 100: return "CIEN"
-        c = n // 100
-        d = (n % 100) // 10
-        u = n % 10
-        res = ""
-        if c > 0: res += centenas[c] + " "
-        if d == 1:
-            res += dieces[u] + " "
-        else:
-            if d > 0:
-                res += decenas[d] + (" Y " if u > 0 else " ")
-            if u > 0:
-                res += unidades[u] + " "
-        return res
-
+    """Monto con letra: CIENTO SESENTA Y SIETE MIL OCHOCIENTOS OCHENTA PESOS CON NOVENTA Y SEIS CENTAVOS, MONEDA NACIONAL."""
     try:
         val = float(str(numero).replace('$', '').replace(',', '').strip())
         enteros = int(val)
@@ -282,31 +269,10 @@ def numero_a_letras(numero):
     if enteros == 0:
         texto_enteros = "CERO PESOS"
     else:
-        millones = enteros // 1000000
-        miles = (enteros % 1000000) // 1000
-        cientos = enteros % 1000
-
-        partes = []
-        if millones > 0:
-            if millones == 1:
-                partes.append("UN MILLÓN")
-            else:
-                partes.append(f"{convert_group(millones).strip()} MILLONES")
-        if miles > 0:
-            if miles == 1:
-                partes.append("MIL")
-            else:
-                partes.append(f"{convert_group(miles).strip()} MIL")
-        if cientos > 0:
-            partes.append(convert_group(cientos).strip())
-
-        texto_enteros = " ".join(partes) + " PESOS"
-
-    if centavos > 0:
-        texto_centavos = f"CON {convert_group(centavos).strip()} CENTAVOS"
-    else:
-        texto_centavos = "CON CERO CENTAVOS"
-
+        # "UN MILLÓN DE PESOS" (millones exactos llevan "de")
+        moneda = 'PESO' if enteros == 1 else ('DE PESOS' if enteros % 1_000_000 == 0 else 'PESOS')
+        texto_enteros = f"{entero_en_letras(enteros, apocope=True)} {moneda}"
+    texto_centavos = f"CON {grupo_en_letras(centavos, apocope=True)} CENTAVOS" if centavos > 0 else "CON CERO CENTAVOS"
     return f"{texto_enteros} {texto_centavos}, MONEDA NACIONAL"
 
 def convertir_inmueble_a_letras(texto_inmueble):

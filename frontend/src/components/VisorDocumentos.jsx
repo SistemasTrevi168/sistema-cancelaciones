@@ -264,7 +264,7 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '4px' }}>
                   <span className="chip-acto" style={{ backgroundColor: acto.seccion === 'gravamenes' ? '#fee2e2' : acto.seccion === 'propiedad' ? '#dbeafe' : '#f1f5f9', color: acto.seccion === 'gravamenes' ? '#991b1b' : acto.seccion === 'propiedad' ? '#1e40af' : '#475569' }}>{acto.seccion_nombre}</span>
                   {acto.clave && <strong style={{ fontSize: '12px' }}>{acto.clave}</strong>}
-                  {acto.fecha && <span style={{ fontSize: '11px', color: theme.textSecondary }}>{acto.fecha}</span>}
+                  {acto.fecha && <span style={{ fontSize: '11px', color: theme.textSecondary }} title={acto.fecha_inscripcion ? `Ingreso ${acto.fecha} · Inscripción ${acto.fecha_inscripcion}` : undefined}>{acto.fecha}{acto.fecha_inscripcion ? ` · inscr. ${acto.fecha_inscripcion}` : ''}</span>}
                   {acto.cancelada && <span className="chip-acto" style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}>Cancelada</span>}
                   {acto.elegido && <span className="chip-acto" style={{ backgroundColor: '#10b981', color: '#fff' }}><CheckCircle size={11} /> En uso</span>}
                 </div>

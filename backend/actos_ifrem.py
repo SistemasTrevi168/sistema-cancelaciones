@@ -32,10 +32,23 @@ _PIE = [
     re.compile(r"^https?://", re.I),
     re.compile(r"^\d{1,3}/\d{1,3}$"),                           # 1/3
     re.compile(r"Realizar otra b[uú]squeda", re.I),
+    # Columna "estado del acto": TRÁMITE(S) CANCELADO(S): 0 / PARCIAL / 08/11/2018
+    re.compile(r"^TR[AÁ]MITE\(S\)|^CANCELADO\(S\)|^\d+\s*/\s*(PARCIAL|TOTAL)\b", re.I),
+    re.compile(r"^-{3,}$"),
 ]
 _VOLANTE = re.compile(r"^\d{10,14}$")
 _FECHA = re.compile(r"^(\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2})$")
 _NOMBRE_ACTO = re.compile(r"^[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\.,/()-]{3,60}$")
+# Clave corta del acto en la tabla (A.C.S., C.V., C.G.A.M.L.U., CANC., HIP.…) o nombre de una palabra
+_CLAVE_CON_PUNTOS = re.compile(r"^(?=.*\.)[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\.\s/-]{0,24}$")
+_NOMBRES_DE_ACTO = {
+    "COMPRAVENTA", "HIPOTECA", "EMBARGO", "DONACION", "DONACIÓN", "ADJUDICACION", "ADJUDICACIÓN", "FIDEICOMISO",
+    "CANCELACION", "CANCELACIÓN", "PERMUTA", "HERENCIA", "USUFRUCTO", "SERVIDUMBRE", "ARRENDAMIENTO", "FUSION",
+    "FUSIÓN", "SUBDIVISION", "SUBDIVISIÓN", "LOTIFICACION", "LOTIFICACIÓN", "INMATRICULACION", "INMATRICULACIÓN",
+    "APORTACION", "APORTACIÓN", "DACION", "DACIÓN", "RECTIFICACION", "RECTIFICACIÓN", "AVISO", "DEMANDA",
+}
+_HORA = re.compile(r"^\d{1,2}:\d{2}(:\d{2})?$")
+_NUMERO_TRAMITE = re.compile(r"^\d{3,9}$")
 
 PALABRAS_HIPOTECA = re.compile(
     r"HIPOTEC|GARANT[IÍ]A\s+HIPOTECARIA|A\.?\s?C\.?\s?S\.?|APERTURA\s+DE\s+CR[EÉ]DITO|MUTUO|OTORGAMIENTO\s+DE\s+CR[EÉ]DITO",
@@ -94,6 +107,10 @@ def dividir_actos(paginas_texto):
 
             siguiente = next((l for l in lineas[i + 1:i + 4] if l and l.upper() not in _ENCABEZADOS and l not in ("---",)), "")
 
+            # Número de trámite (columna antes del volante): no es texto del acto
+            if _NUMERO_TRAMITE.match(linea) and _VOLANTE.match(siguiente or ""):
+                continue
+
             # Renglón del folio electrónico: empieza con el número de volante
             if _VOLANTE.match(linea):
                 pendientes = []
@@ -117,11 +134,17 @@ def dividir_actos(paginas_texto):
             if not actual["fecha"] and _FECHA.match(linea):
                 actual["fecha"] = linea
                 continue
-            if re.match(r"^\d{1,2}:\d{2}$", linea):  # hora suelta (00:00)
+            if _HORA.match(linea):  # hora suelta (00:00)
                 continue
-            # Clave corta del acto justo después de la fecha (ej. A.C.S., C.V.)
-            if actual["fecha"] and not actual["clave"] and not actual["lineas"] and len(linea) <= 12 and re.match(r"^[A-Z\.\s]+$", linea):
-                actual["clave"] = linea
+            # Segunda fecha de la tabla (fecha de inscripción), antes del texto del acto
+            if actual["fecha"] and not actual["lineas"] and _FECHA.match(linea):
+                actual.setdefault("fecha_inscripcion", linea)
+                continue
+            # Clave del acto justo después de las fechas (ej. A.C.S., C.V., C.G.A.M.L.U., COMPRAVENTA)
+            if not actual["clave"] and not actual["lineas"] and (
+                _CLAVE_CON_PUNTOS.match(linea) or _sin_acentos(linea.upper().strip(" .,")) in {_sin_acentos(n) for n in _NOMBRES_DE_ACTO}
+            ):
+                actual["clave"] = linea.strip()
                 continue
             actual["lineas"].append(linea)
     cerrar()

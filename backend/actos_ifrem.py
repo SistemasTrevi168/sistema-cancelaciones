@@ -151,6 +151,59 @@ def parece_constancia_ifrem(texto):
     return ("FOLIO REAL" in t or "IFREM" in t) and ("GRAV" in t or "INSCRIPCIONES DE PROPIEDAD" in t)
 
 
+_NUMS = {
+    "UN": 1, "UNO": 1, "PRIMERO": 1, "DOS": 2, "TRES": 3, "CUATRO": 4, "CINCO": 5, "SEIS": 6, "SIETE": 7, "OCHO": 8, "NUEVE": 9,
+    "DIEZ": 10, "ONCE": 11, "DOCE": 12, "TRECE": 13, "CATORCE": 14, "QUINCE": 15, "DIECISEIS": 16, "DIECISIETE": 17,
+    "DIECIOCHO": 18, "DIECINUEVE": 19, "VEINTE": 20, "VEINTIUNO": 21, "VEINTIUN": 21, "VEINTIDOS": 22, "VEINTITRES": 23,
+    "VEINTICUATRO": 24, "VEINTICINCO": 25, "VEINTISEIS": 26, "VEINTISIETE": 27, "VEINTIOCHO": 28, "VEINTINUEVE": 29,
+    "TREINTA": 30, "CUARENTA": 40, "CINCUENTA": 50, "SESENTA": 60, "SETENTA": 70, "OCHENTA": 80, "NOVENTA": 90,
+    "NOVECIENTOS": 900, "OCHOCIENTOS": 800,
+}
+
+
+def _sin_acentos(t):
+    return t.upper().translate(str.maketrans("ÁÉÍÓÚÜ", "AEIOUU"))
+
+
+def _palabras_a_entero(texto):
+    """'DOS MIL DIECIOCHO' -> 2018, 'DIEZ' -> 10, '10' -> 10. None si no se entiende."""
+    t = _sin_acentos(texto).strip()
+    if t.isdigit():
+        return int(t)
+    total, actual = 0, 0
+    for p in t.replace(",", " ").split():
+        if p == "Y":
+            continue
+        if p == "MIL":
+            total += (actual or 1) * 1000
+            actual = 0
+        elif p in _NUMS:
+            actual += _NUMS[p]
+        else:
+            return None
+    return total + actual
+
+
+_MES = r"(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|SETIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)"
+
+
+def _fecha_con_letra(texto, services):
+    """'DE FECHA 10 DE SEPTIEMBRE DEL AÑO DOS MIL DIECIOCHO' (día y año con número o con letra)."""
+    patron = (r"(?:DE\s+FECHA|CELEBRADA\s+EL|OTORGADA\s+EL|FIRMADA\s+EL)\s+"
+              r"([0-9]{1,2}|[A-ZÁÉÍÓÚ]+(?:\s+Y\s+[A-ZÁÉÍÓÚ]+)?)\s+DE\s+" + _MES +
+              r"\s+DE(?:L)?\s+(?:A[ÑN]O\s+)?([0-9]{4}|(?:DOS\s+MIL|MIL\s+NOVECIENTOS)(?:\s+[A-ZÁÉÍÓÚ]+){0,4}?)"
+              r"(?=\s*[,\.;]|\s+(?:PASADA|OTORGADA|ANTE|EN\s+LA|EN\s+EL|DEL\s+VOLUMEN|INSCRIT)|\s*$)")
+    m = re.search(patron, texto, re.I)
+    if not m:
+        return None
+    dia = _palabras_a_entero(m.group(1))
+    anio = _palabras_a_entero(m.group(3))
+    if not dia or not anio or not (1 <= dia <= 31) or not (1900 <= anio <= 2100):
+        return None
+    fecha = services.convertir_fecha_texto(f"{dia} de {m.group(2).lower()} de {anio}")
+    return fecha if fecha and fecha != "NO_ENCONTRADO" else None
+
+
 def datos_de_acto(acto, services):
     """Datos que se pueden tomar de un acto, ya con el formato que usa el Word."""
     texto = acto.get("texto", "")
@@ -174,6 +227,10 @@ def datos_de_acto(acto, services):
             if fecha and fecha != "NO_ENCONTRADO":
                 datos["fecha_escritura"] = fecha
                 break
+    if "fecha_escritura" not in datos:
+        fecha = _fecha_con_letra(texto, services)
+        if fecha:
+            datos["fecha_escritura"] = fecha
 
     notario = services.extraer_notario_robusto(texto, texto)
     if notario and notario != "NO_ENCONTRADO":

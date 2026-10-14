@@ -456,7 +456,7 @@ def extraer_notario_robusto(texto_limpio, texto_completo=""):
     }
 
     patrones = [
-        r'NOTI?AR[IÍ]O\s+P[UÚ]BLIC[OA]\s+(?:LICENCIADO|LIC\.?\s+)?([A-ZÁÉÍÓÚÑ\s]{4,45}?)\s+(?:N[UÚ]M[EÉ]RO|NO\.?)\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\s+QUE|\.|$)',
+        r'NOTI?AR[IÍ]O\s+P[UÚ]BLIC[OA]\s+(?:LICENCIADO|LIC\.?\s+)?([A-ZÁÉÍÓÚÑ\s]{4,45}?)\s*,?\s+(?:N[UÚ]M[EÉ]RO|NO\.?)\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\s+QUE|\.|$)',
         r'(?:ANTE\s+LA\s+FE\s+(?:DEL?\s+)?)(?:LICENCIADO|LIC\.?\s+)?([A-ZÁÉÍÓÚÑ\s]{4,45}?)\s*,?\s*NOTI?AR[IÍ]O\s+P[UÚ]BLIC[OA]\s+(?:NO\.?|N[UÚ]M[EÉ]RO)?\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\.|$)',
         r'NOTI?AR[IÍ]O\s+(?:P[UÚ]BLIC[OA]\s+)?(?:NO\.?|N[UÚ]M[EÉ]RO)?\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\s+EN\s+QUE|\.|$)'
     ]
@@ -890,4 +890,4 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         os.makedirs(directorio_salida, exist_ok=True)
         
     doc.save(ruta_salida)
-    return True
+    return True

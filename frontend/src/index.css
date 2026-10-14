@@ -528,6 +528,24 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   margin-bottom: 8px;
   transition: border-color 0.2s ease, background-color 0.2s ease;
 }
+.datos-acto {
+  margin: 0 0 8px 0;
+  padding: 6px 0 0 0;
+  border-top: 1px dashed;
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+}
+.datos-acto dt {
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.datos-acto dd {
+  margin: 0;
+  line-height: 1.35;
+}
 .chip-acto {
   display: inline-flex;
   align-items: center;

@@ -1462,6 +1462,10 @@ const filteredHistorial = (historial || []).filter((item) => {
 
   const usarActo = async (acto) => {
     if (!visorDocs || !acto?.datos) return;
+    if (!CAMPOS_DEL_ACTO.some((c) => acto.datos[c])) {
+      avisar.aviso('Este acto no trae escritura, fecha, notario ni monto. Puedes seleccionar el texto en el PDF y usarlo en el dato que quieras.');
+      return;
+    }
     const marcar = (lista) => (lista || []).map((a) => ({ ...a, elegido: a.id === acto.id }));
     const cambios = {};
     CAMPOS_DEL_ACTO.forEach((c) => { if (acto.datos[c]) cambios[c] = acto.datos[c]; });
@@ -1481,7 +1485,10 @@ const filteredHistorial = (historial || []).filter((item) => {
         datos_extraidos: { ...item.datos_extraidos, ...cambios },
       })));
     }
-    avisar.exito(`Se usaron la escritura, el notario y el monto del acto ${acto.clave || ''} (pág. ${acto.pagina}).`);
+    const tomados = CAMPOS_DEL_ACTO.filter((c) => acto.datos[c]).map(etiquetaDe);
+    const faltan = CAMPOS_DEL_ACTO.filter((c) => !acto.datos[c]).map(etiquetaDe);
+    avisar.exito(`Acto ${acto.clave || ''} (pág. ${acto.pagina}): se tomó ${tomados.join(', ').toLowerCase()}.`
+      + (faltan.length ? ` No trae ${faltan.join(', ').toLowerCase()}; se dejó lo que ya tenías.` : ''));
   };
 
   // Todo lo que las pantallas (components/) necesitan leer del estado de App

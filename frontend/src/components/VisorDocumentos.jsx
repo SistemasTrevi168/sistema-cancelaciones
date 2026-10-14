@@ -5,7 +5,7 @@ import {
 import { useApp } from '../AppContext';
 import { abrirPdf } from '../ui/pdf';
 import { leerTextoDeImagen } from '../ui/ocr';
-import { GRUPOS_CAMPOS, etiquetaDe } from '../camposExpediente';
+import { CAMPOS_DEL_ACTO, GRUPOS_CAMPOS, etiquetaDe } from '../camposExpediente';
 import PaginaPdf from './PaginaPdf';
 import IconoArchivo from './IconoArchivo';
 
@@ -31,6 +31,7 @@ export default function VisorDocumentos() {
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState([]);
   const [verActos, setVerActos] = useState(true);
+  const [abiertos, setAbiertos] = useState({}); // actos con el texto completo a la vista
   const textos = useRef({}); // texto por página (para buscar)
   const paginas = useRef({});
   const zonaRef = useRef(null);
@@ -243,7 +244,7 @@ export default function VisorDocumentos() {
         {actos.length > 0 && verActos && (
           <section className="panel-docs-actos" style={{ borderRight: `1px solid ${theme.border}`, backgroundColor: theme.cardBg }}>
             <p style={{ fontSize: '11px', color: theme.textSecondary, margin: '0 0 8px 0' }}>
-              La escritura, el notario y el monto se toman del acto marcado. Si no es el correcto, elige otro.
+              La escritura, la fecha, el notario y el monto se toman del acto marcado. Si no es el correcto, puedes usar cualquier otro.
             </p>
             {actos.map((acto) => (
               <article key={acto.id} className="tarjeta-acto" style={{ border: `1.5px solid ${acto.elegido ? '#10b981' : theme.border}`, backgroundColor: acto.elegido ? (isDarkMode ? '#052e16' : '#ecfdf5') : theme.subtleBg }}>
@@ -254,23 +255,36 @@ export default function VisorDocumentos() {
                   {acto.cancelada && <span className="chip-acto" style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}>Cancelada</span>}
                   {acto.elegido && <span className="chip-acto" style={{ backgroundColor: '#10b981', color: '#fff' }}><CheckCircle size={11} /> En uso</span>}
                 </div>
-                <p style={{ fontSize: '12px', margin: '0 0 6px 0', lineHeight: 1.4, color: theme.textPrimary }}>{acto.resumen}</p>
-                {acto.datos && (acto.datos.numero_escritura_digitos || acto.datos.monto_credito) && (
-                  <p style={{ fontSize: '11px', margin: '0 0 6px 0', color: theme.textSecondary }}>
-                    {acto.datos.numero_escritura_digitos && <>Escritura <strong>{acto.datos.numero_escritura_digitos}</strong>. </>}
-                    {acto.datos.monto_credito && <>Monto <strong>{acto.datos.monto_credito}</strong>.</>}
-                  </p>
+                <p style={{ fontSize: '12px', margin: '0 0 6px 0', lineHeight: 1.4, color: theme.textPrimary, whiteSpace: 'pre-line' }}>
+                  {abiertos[acto.id] ? acto.texto : acto.resumen}
+                </p>
+                {acto.texto && acto.texto.length > (acto.resumen || '').length + 5 && (
+                  <button type="button" onClick={() => setAbiertos((a) => ({ ...a, [acto.id]: !a[acto.id] }))} style={{ background: 'none', border: 'none', padding: 0, margin: '0 0 6px 0', color: theme.accent, fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>
+                    {abiertos[acto.id] ? 'Ver menos' : 'Ver texto completo'}
+                  </button>
                 )}
+                {/* Lo que se toma de este acto si lo eliges */}
+                <dl className="datos-acto" style={{ borderColor: theme.border }}>
+                  {CAMPOS_DEL_ACTO.map((c) => (
+                    <div key={c}>
+                      <dt style={{ color: theme.textSecondary }}>{etiquetaDe(c)}</dt>
+                      <dd style={{ color: acto.datos?.[c] ? theme.textPrimary : theme.textSecondary, fontStyle: acto.datos?.[c] ? 'normal' : 'italic' }}>
+                        {c === 'numero_escritura' && acto.datos?.numero_escritura_digitos
+                          ? `${acto.datos.numero_escritura_digitos} (${acto.datos[c]})`
+                          : (acto.datos?.[c] || 'No viene en este acto')}
+                      </dd>
+                    </div>
+                  ))}
+                  {acto.datos?.acreedor && <div><dt style={{ color: theme.textSecondary }}>Acreedor</dt><dd>{acto.datos.acreedor}</dd></div>}
+                </dl>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button type="button" style={{ ...boton, padding: '4px 8px', fontSize: '11px' }} onClick={() => {
                     const i = archivos.findIndex((a) => a.name === acto.documento);
                     if (i >= 0 && i !== indiceArchivo) { cambiarArchivo(i); setTimeout(() => irAPagina(acto.pagina), 700); } else irAPagina(acto.pagina);
                   }}>Ver (pág. {acto.pagina})</button>
-                  {acto.es_hipoteca && !acto.es_cancelacion && (
-                    <button type="button" disabled={acto.elegido} style={{ ...boton, padding: '4px 8px', fontSize: '11px', backgroundColor: theme.accent, borderColor: theme.accent, color: '#fff' }} onClick={() => usarActo(acto)}>
-                      Usar este acto
-                    </button>
-                  )}
+                  <button type="button" disabled={acto.elegido} title="Tomar de este acto la escritura, la fecha, el notario y el monto (los que traiga)" style={{ ...boton, padding: '4px 8px', fontSize: '11px', backgroundColor: theme.accent, borderColor: theme.accent, color: '#fff', opacity: acto.elegido ? 0.5 : 1 }} onClick={() => usarActo(acto)}>
+                    {acto.elegido ? 'En uso' : 'Usar este acto'}
+                  </button>
                 </div>
               </article>
             ))}

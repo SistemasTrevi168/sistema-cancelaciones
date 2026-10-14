@@ -70,3 +70,6 @@ export function agruparDatos(datos) {
   }
   return grupos.filter((g) => g.campos.length > 0);
 }
+
+// Datos que se toman del acto (hipoteca) elegido en la constancia del IFREM
+export const CAMPOS_DEL_ACTO = ['numero_escritura', 'fecha_escritura', 'notario_origen_completo', 'monto_credito'];

@@ -12,12 +12,17 @@ export default function PanelVistaPrevia() {
   const cuerpoRef = useRef(null);
   const hojaRef = useRef(null);
 
-  // Cerrar con Esc
+  // Cerrar con Esc (solo mientras está abierta: si no, cada Esc redibujaría la app
+  // y le quitaría la tecla a otras ventanas, como el visor de PDF)
+  const cerrarRef = useRef(cerrarVistaPrevia);
+  useEffect(() => { cerrarRef.current = cerrarVistaPrevia; });
+  const abierta = !!vistaPrevia;
   useEffect(() => {
-    const alTeclear = (e) => { if (e.key === 'Escape' && !document.querySelector('.fondo-modal')) cerrarVistaPrevia(); };
+    if (!abierta) return;
+    const alTeclear = (e) => { if (e.key === 'Escape' && !document.querySelector('.fondo-modal')) cerrarRef.current(); };
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
-  }, [cerrarVistaPrevia]);
+  }, [abierta]);
 
   // Pinta el documento recibido
   useLayoutEffect(() => {

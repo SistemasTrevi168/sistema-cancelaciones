@@ -589,8 +589,11 @@ def extraer_datos_pdf(ruta_pdf):
     try:
         doc = fitz.open(ruta_pdf)
         texto_completo = ""
+        paginas_texto = []
         for pagina in doc:
-            texto_completo += pagina.get_text() + "\n"
+            texto_pagina = pagina.get_text()
+            paginas_texto.append(texto_pagina)
+            texto_completo += texto_pagina + "\n"
         doc.close()
         datos["texto_raw"] = texto_completo
     except Exception as e:
@@ -781,6 +784,14 @@ def extraer_datos_pdf(ruta_pdf):
 
     tiene_conyuge_match = bool(re.search(r'(C[ÓO]NYUGE|SOCIEDAD\s+CONYUGAL|CASAD[AO]\s+EN\s+SOCIEDAD|EN\s+COPROPIEDAD)', texto_limpio, re.IGNORECASE))
     datos["tiene_conyuge"] = "Sí" if tiene_conyuge_match else "No"
+
+    # Actos de la constancia del IFREM (para tomar los datos del acto correcto)
+    try:
+        import actos_ifrem
+        if actos_ifrem.parece_constancia_ifrem(texto_completo):
+            datos["_actos"] = actos_ifrem.dividir_actos(paginas_texto)
+    except Exception as e:
+        print(f"No se pudieron separar los actos de {ruta_pdf}: {e}")
 
     return datos
 

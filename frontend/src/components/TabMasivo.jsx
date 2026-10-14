@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Eye, FileArchive, FolderPlus, Loader2,
+  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Eye, FileArchive, FileSearch, FolderPlus, Layers, Loader2,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
@@ -11,6 +11,8 @@ export default function TabMasivo() {
   const {
     setSelectedPlantilla,
     abrirVistaPrevia,
+    abrirVisorDocs,
+    batchVisorIndex,
     descargandoId,
     descargandoZip,
     etiquetaCampo,
@@ -300,6 +302,34 @@ export default function TabMasivo() {
                 <option value="" disabled>Seleccionar plantilla...</option>
                 <OpcionesPlantilla />
               </select>
+
+                      {(res.archivos || []).some((n) => batchFiles.some((f) => f.name === n && /\.pdf$/i.test(n))) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            abrirVisorDocs({ origen: 'batch', index: idx });
+                          }}
+                          title={res.actos?.length > 1 ? `Ver los PDF (la constancia trae ${res.actos.length} actos)` : 'Ver los PDF y seleccionar de dónde tomar un dato'}
+                          style={{
+                            backgroundColor: batchVisorIndex === idx ? '#7c3aed' : theme.cardBg,
+                            color: batchVisorIndex === idx ? '#fff' : theme.textPrimary,
+                            border: `1px solid ${theme.border}`,
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          {res.actos?.length > 1
+                            ? <Layers size={12} color={batchVisorIndex === idx ? '#fff' : '#7c3aed'} />
+                            : <FileSearch size={12} color={batchVisorIndex === idx ? '#fff' : '#7c3aed'} />}
+                          PDF{res.actos?.length > 1 ? ` · ${res.actos.length} actos` : ''}
+                        </button>
+                      )}
 
                       <button
                         onClick={(e) => {

@@ -18,6 +18,7 @@ import pandas as pd
 import models, services
 from database import get_db, SessionLocal, engine
 import auth
+import actos_ifrem
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -157,6 +158,45 @@ def asegurar_word(expediente, db: Session) -> Optional[str]:
     expediente.ruta_word_generado = ruta_salida
     db.commit()
     return ruta_salida
+
+
+# --- ACTOS DE LA CONSTANCIA (IFREM) ---
+CAMPOS_DE_ACTO = ["numero_escritura", "fecha_escritura", "notario_origen_completo", "monto_credito"]
+
+
+def reunir_actos(lista_datos: List[Dict[str, Any]], nombres: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """Saca los actos de cada documento (y los quita de los datos para no mezclarlos al combinar)."""
+    actos = []
+    for i, datos in enumerate(lista_datos):
+        for acto in datos.pop("_actos", None) or []:
+            acto = dict(acto)
+            acto["documento"] = (nombres[i] if nombres and i < len(nombres) else f"Documento {i + 1}")
+            acto["id"] = f"{i + 1}-{acto['id']}"
+            acto["datos"] = actos_ifrem.datos_de_acto(acto, services)
+            actos.append(acto)
+    return actos
+
+
+def aplicar_acto_elegido(datos: Dict[str, Any], actos: List[Dict[str, Any]]) -> Optional[str]:
+    """
+    En constancias largas hay varios actos: se toma la escritura, notario y monto
+    del acto de hipoteca que corresponde a este crédito (no del primero que aparezca).
+    """
+    elegido = actos_ifrem.elegir_acto(actos, datos.get("nombre_acreditado", ""), datos.get("entidad_financiera", ""))
+    for acto in actos:
+        acto["elegido"] = bool(elegido and acto["id"] == elegido["id"])
+    if not elegido:
+        return None
+    for campo in CAMPOS_DE_ACTO:
+        valor = elegido["datos"].get(campo)
+        if valor:
+            datos[campo] = valor
+            if campo == "monto_credito":
+                try:
+                    datos["monto_credito_letras"] = services.numero_a_letras(float(valor.replace("$", "").replace(",", "")))
+                except Exception:
+                    pass
+    return elegido["id"]
 
 
 def eliminar_archivo_temporal(ruta: str):
@@ -826,7 +866,9 @@ async def procesar_documento(
             datos = services.extraer_datos_pdf(ruta_guardado)
             datos_extraidos_lista.append(datos)
 
+        actos = reunir_actos(datos_extraidos_lista, nombres_originales)
         datos_combinados = services.combinar_datos_pareja(datos_extraidos_lista)
+        aplicar_acto_elegido(datos_combinados, actos)
         num_credito = datos_combinados.get("numero_credito", "SIN_CREDITO")
         
         datos_limpios = limpiar_datos_para_plantilla(datos_combinados, num_credito)
@@ -849,7 +891,9 @@ async def procesar_documento(
             "status": "exito",
             "id": str(nuevo_expediente.id),
             "expediente_id": str(nuevo_expediente.id),
-            "datos_extraidos": datos_limpios
+            "datos_extraidos": datos_limpios,
+            # Actos encontrados en la constancia, para elegir otro desde la pantalla
+            "actos": actos,
         }
     except Exception as e:
         print(f"ERROR EN /procesar: {e}")
@@ -933,7 +977,10 @@ async def procesar_masivo(
                 if not lista_datos_validos:
                     lista_datos_validos = lista_datos
 
+                nombres_grupo = [item[2] for item in grupo if "error_extraccion" not in item[1]] or [item[2] for item in grupo]
+                actos = reunir_actos(lista_datos_validos, nombres_grupo)
                 datos_raw = services.combinar_datos_pareja(lista_datos_validos)
+                aplicar_acto_elegido(datos_raw, actos)
                 
                 num_credito = datos_raw.get("numero_credito")
                 if not num_credito or num_credito == "NO_ENCONTRADO":
@@ -969,7 +1016,9 @@ async def procesar_masivo(
                     "datos": datos_finales,
                     "datos_extraidos": datos_finales,
                     "ruta_word": ruta_salida,
-                    "plantilla_seleccionada": plantilla
+                    "plantilla_seleccionada": plantilla,
+                    "archivos": [item[2] for item in grupo],
+                    "actos": actos,
                 })
             except Exception as e_grupo:
                 db.rollback()
@@ -1056,6 +1105,49 @@ def regenerar_word_expediente(expediente, datos_payload: Optional[Dict[str, Any]
     db.refresh(expediente)
     return ruta_salida, num_credito
 
+
+
+@app.post("/api/expedientes/normalizar-campo")
+def normalizar_campo(
+    payload: Dict[str, Any] = Body(...),
+    sesion: dict = Depends(require_user)
+):
+    """
+    Da al texto seleccionado en el PDF el mismo formato que usa la extracción automática
+    (números y fechas con letra, monto con formato de pesos, etc.).
+    """
+    campo = str(payload.get("campo") or "")
+    texto = " ".join(str(payload.get("texto") or "").split())
+    valor = texto
+    extra: Dict[str, Any] = {}
+    try:
+        solo_digitos = re.sub(r"[^\d]", "", texto)
+        if campo in ("numero_escritura",) and solo_digitos and re.fullmatch(r"[\d,\.\s]+", texto):
+            valor = services.numero_a_palabras_generico(solo_digitos).lower()
+        elif campo == "folio_real" and solo_digitos and re.fullmatch(r"[\d,\.\s\-]+", texto):
+            limpio = services.limpiar_ceros_izquierda(solo_digitos)
+            valor = services.numero_a_palabras_generico(limpio).lower() if limpio.isdigit() else limpio
+        elif campo in ("fecha_escritura", "fecha_liquidacion", "fecha_expedicion") and re.search(r"\d", texto):
+            convertida = services.convertir_fecha_texto(texto)
+            if convertida and convertida != "NO_ENCONTRADO":
+                valor = convertida
+        elif campo == "monto_credito":
+            m = re.search(r"[\d][\d,]*(?:\.\d+)?", texto)
+            if m:
+                valor = f"${float(m.group(0).replace(',', '')):,.2f}"
+                extra["monto_letras"] = numero_a_letras(valor)
+        elif campo == "credito_a_salario" and re.fullmatch(r"[\d,\.\s]+", texto):
+            valor = services.convertir_vsm_a_letras(texto.replace(",", "").strip())
+        elif campo == "notario_origen_completo" and re.search(r"NOTI?AR", texto, re.I):
+            notario = services.extraer_notario_robusto(texto, texto)
+            if notario and notario != "NO_ENCONTRADO":
+                valor = notario
+        elif campo == "nombre_acreditado":
+            valor = texto.upper()
+    except Exception as e:
+        print(f"No se pudo normalizar {campo}: {e}")
+        valor = texto
+    return {"campo": campo, "original": texto, "valor": valor, "extra": extra}
 
 @app.post("/api/expedientes/vista-previa")
 def vista_previa(

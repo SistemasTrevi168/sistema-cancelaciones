@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, CheckCircle, Eye, FileText, Loader2, Upload,
+  AlertTriangle, CheckCircle, Eye, FileSearch, FileText, Layers, Loader2, Upload,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
@@ -10,6 +10,9 @@ export default function TabIndividual() {
   const {
     abrirVistaPrevia,
     vistaPrevia,
+    abrirVisorDocs,
+    visorDocs,
+    actosSingle,
     isDarkMode,
     descargandoId,
     etiquetaCampo,
@@ -151,7 +154,31 @@ export default function TabIndividual() {
             <CheckCircle size={20} color="#10b981" /> Datos Extraídos
           </h2>
           
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {/* BOTÓN PARA VER LOS PDF (seleccionar texto / elegir acto) */}
+            {singleFiles.some((f) => /\.pdf$/i.test(f.name)) && (
+              <button
+                onClick={() => abrirVisorDocs({ origen: 'single' })}
+                title="Ver los PDF subidos y seleccionar de dónde tomar un dato"
+                style={{
+                  backgroundColor: visorDocs?.origen === 'single' ? '#7c3aed' : theme.subtleBg,
+                  color: visorDocs?.origen === 'single' ? '#fff' : theme.textPrimary,
+                  border: `1px solid ${theme.border}`,
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <FileSearch size={14} color={visorDocs?.origen === 'single' ? '#fff' : '#7c3aed'} />
+                Ver PDF
+              </button>
+            )}
+
             {/* BOTÓN DE VISTA PREVIA */}
             <button
               onClick={() => abrirVistaPrevia({ origen: 'single' })}
@@ -183,6 +210,25 @@ export default function TabIndividual() {
             </button>
           </div>
         </div>
+
+        {/* CONSTANCIA CON VARIOS ACTOS: de cuál se tomaron los datos */}
+        {actosSingle.length > 1 && (() => {
+          const elegido = actosSingle.find((a) => a.elegido);
+          return (
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: isDarkMode ? '#1e1b4b' : '#f5f3ff', color: isDarkMode ? '#c4b5fd' : '#5b21b6', border: `1px solid ${isDarkMode ? '#4c1d95' : '#ddd6fe'}`, padding: '10px 12px', borderRadius: '8px', fontSize: '12px', marginBottom: '14px' }}>
+              <Layers size={18} style={{ flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                La constancia trae <strong>{actosSingle.length} actos</strong>.{' '}
+                {elegido
+                  ? <>La escritura, el notario y el monto se tomaron de <strong>{elegido.clave || 'el acto'}</strong> (pág. {elegido.pagina}).</>
+                  : <>No se identificó con seguridad la hipoteca: revisa la escritura, el notario y el monto.</>}
+              </div>
+              <button type="button" onClick={() => abrirVisorDocs({ origen: 'single' })} style={{ background: 'transparent', border: `1px solid currentColor`, color: 'inherit', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Revisar actos
+              </button>
+            </div>
+          );
+        })()}
 
         {(() => {
           const faltan = faltantesPara(datos, selectedPlantilla);

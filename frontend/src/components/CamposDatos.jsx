@@ -42,7 +42,7 @@ export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, 
       resize: 'vertical',
     };
     return (
-      <div key={clave} style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: largo && !compacto ? '1 / -1' : undefined }}>
+      <div key={clave} style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: largo ? '1 / -1' : undefined }}>
         <label htmlFor={`${prefijo}_${clave}`} style={{ fontSize: compacto ? '11px' : '12px', fontWeight: '600', color: falta ? '#ef4444' : theme.textSecondary }}>
           {etiquetaDe(clave)} {falta && <span>(falta)</span>}
         </label>
@@ -93,7 +93,7 @@ export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, 
             </h4>
             {g.nota && !plegado && <p style={{ fontSize: '11px', color: theme.textSecondary, margin: '-4px 0 10px 0' }}>{g.nota}</p>}
             {!plegado && (
-              <div style={{ display: 'grid', gridTemplateColumns: compacto ? 'repeat(auto-fill, minmax(240px, 1fr))' : '1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: compacto ? 'repeat(auto-fill, minmax(240px, 1fr))' : 'repeat(auto-fill, minmax(230px, 1fr))', gap: '12px' }}>
                 {g.campos.map(campo)}
               </div>
             )}

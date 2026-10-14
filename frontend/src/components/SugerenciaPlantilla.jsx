@@ -4,11 +4,39 @@ import { useApp } from '../AppContext';
 import { nombrePlantilla } from '../plantillasCatalogo';
 
 // Aviso "Este expediente puede usar la plantilla…" con el porqué y un botón para usarla
-export default function SugerenciaPlantilla({ sugerencia, actual, onUsar }) {
+export default function SugerenciaPlantilla({ sugerencia, actual, onUsar, compacto = false }) {
   const { theme, isDarkMode } = useApp();
   const [verPorque, setVerPorque] = useState(false);
   if (!sugerencia?.plantilla) return null;
   const enUso = String(actual || '').replace(/\.docx$/i, '') === sugerencia.plantilla;
+
+  // Versión de una línea (barra del espacio de trabajo)
+  if (compacto) {
+    return (
+      <div className={`sugerencia-compacta ${enUso ? 'en-uso' : ''}`}>
+        {enUso ? <CheckCircle size={15} color="#10b981" /> : <Sparkles size={15} color="#7c3aed" />}
+        <span className="sugerencia-texto">
+          {enUso ? 'Plantilla sugerida en uso' : 'Sugerida:'} <strong>{nombrePlantilla(sugerencia.plantilla)}</strong>
+        </span>
+        {sugerencia.dudas?.length > 0 && (
+          <span title={`Revísala: ${sugerencia.dudas.join('. ')}`} style={{ display: 'flex' }}><AlertTriangle size={14} color="#d97706" /></span>
+        )}
+        <button type="button" className="enlace-pequeno" onClick={() => setVerPorque(!verPorque)} aria-expanded={verPorque}>
+          ¿Por qué? {verPorque ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
+        {!enUso && <button type="button" onClick={() => onUsar(sugerencia.plantilla)} className="boton-usar-sugerencia">Usar</button>}
+        {verPorque && (
+          <div className="sugerencia-porque" style={{ backgroundColor: theme.cardBg, borderColor: theme.border, color: theme.textSecondary }}>
+            <ul>
+              {sugerencia.razones.map((r) => <li key={r}>{r}</li>)}
+              {sugerencia.dudas?.map((d) => <li key={d} style={{ color: isDarkMode ? '#fcd34d' : '#92400e' }}>Revisar: {d}</li>)}
+              <li>Si no es la correcta, elige otra en el selector.</li>
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div

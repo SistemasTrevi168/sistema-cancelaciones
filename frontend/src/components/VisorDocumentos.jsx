@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckCircle, ChevronDown, ChevronUp, FileSearch, Layers, Loader2, Maximize2, Minimize2, ScanText, Search, X, ZoomIn, ZoomOut,
+  CheckCircle, ChevronDown, ChevronUp, Layers, Loader2, Maximize2, Minimize2, ScanText, Search, X, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import { abrirPdf } from '../ui/pdf';
@@ -9,15 +9,17 @@ import { CAMPOS_DEL_ACTO, GRUPOS_CAMPOS, etiquetaDe } from '../camposExpediente'
 import PaginaPdf from './PaginaPdf';
 import IconoArchivo from './IconoArchivo';
 
-// Visor de los PDF subidos: permite seleccionar texto (o un área con OCR) y mandarlo a un dato,
-// y elegir de qué acto de la constancia se toman la escritura, el notario y el monto.
-export default function VisorDocumentos() {
-  const { theme, isDarkMode, visorDocs, documentosVisor, actosVisor, cerrarVisorDocs, asignarCampoDesdeDocumento, usarActo } = useApp();
+// Visor de los PDF del expediente (va dentro del espacio de trabajo, junto a los datos):
+// permite seleccionar texto (o un área con OCR) y mandarlo a un dato,
+// y elegir de qué acto de la constancia se toman el acreditado, la escritura, el notario y el monto.
+// destino: a qué expediente van los datos ({ origen: 'single' } o { origen: 'batch', index }).
+export default function VisorDocumentos({ archivos: archivosProp, actos: actosProp, destino }) {
+  const { theme, isDarkMode, asignarCampoDesdeDocumento, usarActo } = useApp();
   // Se abre primero la constancia (el archivo de donde salen los actos)
   const [indiceArchivo, setIndiceArchivo] = useState(() => {
-    const lista = actosVisor || [];
+    const lista = actosProp || [];
     const doc = (lista.find((a) => a.elegido) || lista[0])?.documento;
-    return Math.max(0, (documentosVisor || []).findIndex((f) => f.name === doc));
+    return Math.max(0, (archivosProp || []).findIndex((f) => f.name === doc));
   });
   const [pdf, setPdf] = useState(null);
   const [dims, setDims] = useState({ ancho: 612, alto: 792 });
@@ -30,20 +32,21 @@ export default function VisorDocumentos() {
   const [menu, setMenu] = useState(null); // { texto, x, y }
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState([]);
-  const [verActos, setVerActos] = useState(true);
+  const [verActos, setVerActos] = useState(false);
   const [abiertos, setAbiertos] = useState({}); // actos con el texto completo a la vista
   const textos = useRef({}); // texto por página (para buscar)
   const paginas = useRef({});
   const zonaRef = useRef(null);
 
-  const archivos = documentosVisor || [];
+  const archivos = archivosProp || [];
   const archivo = archivos[indiceArchivo];
-  const actos = actosVisor || [];
+  const actos = actosProp || [];
+  const actoEnUso = actos.find((a) => a.elegido);
 
-  // Cerrar con Esc (el oyente se registra una sola vez y lee el estado más reciente)
+  // Esc: cierra el menú o sale de pantalla completa (el oyente se registra una sola vez)
   const alEscape = useRef(null);
   useEffect(() => {
-    alEscape.current = () => { if (menu) setMenu(null); else cerrarVisorDocs(); };
+    alEscape.current = () => { if (menu) setMenu(null); else if (amplio) setAmplio(false); };
   });
   useEffect(() => {
     const alTeclear = (e) => {
@@ -159,55 +162,49 @@ export default function VisorDocumentos() {
     const texto = menu.texto;
     setMenu(null);
     window.getSelection()?.removeAllRanges();
-    await asignarCampoDesdeDocumento(campo, texto);
+    await asignarCampoDesdeDocumento(campo, texto, destino);
   };
 
   const camposMenu = useMemo(() => GRUPOS_CAMPOS.map((g) => ({ ...g, campos: g.campos.filter((c) => c !== 'monto_letras') })), []);
 
-  if (!visorDocs) return null;
   const boton = { background: 'transparent', border: `1px solid ${theme.border}`, color: theme.textPrimary, borderRadius: '8px', padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '12px', fontWeight: 600 };
 
   return (
-    <aside
-      className={`panel-previa panel-previa-izquierda panel-docs ${amplio ? 'panel-previa-amplio' : ''}`}
-      role="dialog"
+    <section
+      className={`visor-embebido ${amplio ? 'visor-pantalla-completa' : ''}`}
       aria-label="Documentos del expediente"
       style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.textPrimary }}
     >
       {/* ENCABEZADO */}
-      <header style={{ padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, backgroundColor: theme.subtleBg, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <FileSearch size={18} color={theme.accent} />
-          <strong style={{ fontSize: '14px', flex: 1 }}>Documentos del expediente</strong>
+      <header style={{ padding: '8px 10px', borderBottom: `1px solid ${theme.border}`, backgroundColor: theme.subtleBg, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+        {/* Archivos y zoom */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div className="pestanas-archivos">
+            {archivos.map((a, i) => (
+              <button
+                key={a.name + i}
+                type="button"
+                onClick={() => cambiarArchivo(i)}
+                style={{ ...boton, padding: '5px 10px', backgroundColor: i === indiceArchivo ? theme.accent : theme.cardBg, color: i === indiceArchivo ? '#fff' : theme.textPrimary, borderColor: i === indiceArchivo ? theme.accent : theme.border, maxWidth: '210px', flexShrink: 0 }}
+                title={a.name}
+              >
+                <IconoArchivo tipo="pdf" size={15} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+              </button>
+            ))}
+            {archivos.length === 0 && <span style={{ fontSize: '12px', color: theme.textSecondary }}>Los PDF de este expediente ya no están en esta sesión (vuelve a subirlos para verlos).</span>}
+          </div>
           <button type="button" style={boton} title="Alejar" onClick={() => setEscalaManual(Math.max(0.4, +(escala - 0.15).toFixed(2)))}><ZoomOut size={15} /></button>
-          <button type="button" style={{ ...boton, minWidth: '48px' }} title="Ajustar al ancho" onClick={() => setEscalaManual(null)}>{Math.round(escala * 100)}%</button>
+          <button type="button" style={{ ...boton, minWidth: '46px' }} title="Ajustar al ancho" onClick={() => setEscalaManual(null)}>{Math.round(escala * 100)}%</button>
           <button type="button" style={boton} title="Acercar" onClick={() => setEscalaManual(Math.min(3, +(escala + 0.15).toFixed(2)))}><ZoomIn size={15} /></button>
-          <button type="button" style={boton} className="ocultar-celular" title={amplio ? 'Reducir' : 'Ampliar'} onClick={() => setAmplio(!amplio)}>{amplio ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
-          <button type="button" style={{ ...boton, backgroundColor: '#ef4444', borderColor: '#ef4444', color: '#fff' }} title="Cerrar (Esc)" onClick={cerrarVisorDocs}><X size={15} /></button>
+          <button type="button" style={boton} title={amplio ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'} onClick={() => setAmplio(!amplio)}>{amplio ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
         </div>
 
-        {/* Archivos */}
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {archivos.map((a, i) => (
-            <button
-              key={a.name + i}
-              type="button"
-              onClick={() => cambiarArchivo(i)}
-              style={{ ...boton, padding: '5px 10px', backgroundColor: i === indiceArchivo ? theme.accent : theme.cardBg, color: i === indiceArchivo ? '#fff' : theme.textPrimary, borderColor: i === indiceArchivo ? theme.accent : theme.border, maxWidth: '230px' }}
-              title={a.name}
-            >
-              <IconoArchivo tipo="pdf" size={16} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
-            </button>
-          ))}
-          {archivos.length === 0 && <span style={{ fontSize: '12px', color: theme.textSecondary }}>No hay archivos disponibles (vuelve a subirlos para verlos).</span>}
-        </div>
-
-        {/* Herramientas */}
+        {/* Buscar, OCR y actos */}
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: '160px', display: 'flex', alignItems: 'center', gap: '6px', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '0 8px', backgroundColor: theme.inputBg }}>
+          <div style={{ flex: 1, minWidth: '150px', display: 'flex', alignItems: 'center', gap: '6px', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '0 8px', backgroundColor: theme.inputBg }}>
             <Search size={14} color={theme.textSecondary} />
-            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar en el documento…" style={{ border: 'none', outline: 'none', background: 'transparent', color: theme.textPrimary, padding: '7px 0', fontSize: '13px', width: '100%' }} />
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar en el documento…" style={{ border: 'none', outline: 'none', background: 'transparent', color: theme.textPrimary, padding: '6px 0', fontSize: '13px', width: '100%' }} />
           </div>
           <button
             type="button"
@@ -217,15 +214,31 @@ export default function VisorDocumentos() {
           >
             <ScanText size={15} /> {modoOcr ? 'Dibuja un recuadro…' : 'Leer área (OCR)'}
           </button>
-          {actos.length > 0 && (
-            <button type="button" onClick={() => setVerActos(!verActos)} style={{ ...boton, padding: '6px 10px' }}>
-              <Layers size={15} /> Actos ({actos.length}) {verActos ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          {actos.length > 0 && verActos && (
+            <button type="button" onClick={() => setVerActos(false)} style={{ ...boton, padding: '6px 10px' }}>
+              <Layers size={15} /> Ocultar actos <ChevronUp size={14} />
             </button>
           )}
         </div>
-        <p style={{ margin: 0, fontSize: '11px', color: theme.textSecondary }}>
-          {modoOcr ? 'Arrastra sobre la página para marcar el área que quieres leer.' : 'Selecciona texto en el PDF para mandarlo a un dato del expediente.'}
-        </p>
+
+        {/* Acto del que salieron los datos */}
+        {actos.length > 0 && !verActos && (
+          <div className="acto-en-uso" style={{ borderColor: actoEnUso ? (isDarkMode ? '#166534' : '#a7f3d0') : (isDarkMode ? '#a16207' : '#fcd34d'), backgroundColor: actoEnUso ? (isDarkMode ? '#052e16' : '#ecfdf5') : (isDarkMode ? '#422006' : '#fffbeb') }}>
+            <Layers size={14} color={actoEnUso ? '#10b981' : '#d97706'} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              {actoEnUso
+                ? <>Datos del acto <strong>{actoEnUso.clave || 'elegido'}</strong>{actoEnUso.fecha ? ` (${actoEnUso.fecha})` : ''}, pág. {actoEnUso.pagina} · {actos.length} acto(s)</>
+                : <>No se identificó la hipoteca entre los {actos.length} actos: elige uno.</>}
+            </span>
+            {actoEnUso && <button type="button" className="enlace-pequeno" onClick={() => irAPagina(actoEnUso.pagina)}>Ver</button>}
+            <button type="button" className="enlace-pequeno" onClick={() => setVerActos(true)}>Cambiar <ChevronDown size={12} /></button>
+          </div>
+        )}
+        {(modoOcr || actos.length === 0) && (
+          <p style={{ margin: 0, fontSize: '11px', color: theme.textSecondary }}>
+            {modoOcr ? 'Arrastra sobre la página para marcar el área que quieres leer.' : 'Selecciona texto en el PDF para mandarlo a un dato del expediente.'}
+          </p>
+        )}
       </header>
 
       {/* RESULTADOS DE BÚSQUEDA */}
@@ -282,7 +295,7 @@ export default function VisorDocumentos() {
                     const i = archivos.findIndex((a) => a.name === acto.documento);
                     if (i >= 0 && i !== indiceArchivo) { cambiarArchivo(i); setTimeout(() => irAPagina(acto.pagina), 700); } else irAPagina(acto.pagina);
                   }}>Ver (pág. {acto.pagina})</button>
-                  <button type="button" disabled={acto.elegido} title="Tomar de este acto el acreditado, el cónyuge, la escritura, la fecha, el notario y el monto (los que traiga)" style={{ ...boton, padding: '4px 8px', fontSize: '11px', backgroundColor: theme.accent, borderColor: theme.accent, color: '#fff', opacity: acto.elegido ? 0.5 : 1 }} onClick={() => usarActo(acto)}>
+                  <button type="button" disabled={acto.elegido} title="Tomar de este acto el acreditado, el cónyuge, la escritura, la fecha, el notario y el monto (los que traiga)" style={{ ...boton, padding: '4px 8px', fontSize: '11px', backgroundColor: theme.accent, borderColor: theme.accent, color: '#fff', opacity: acto.elegido ? 0.5 : 1 }} onClick={() => usarActo(acto, destino)}>
                     {acto.elegido ? 'En uso' : 'Usar este acto'}
                   </button>
                 </div>
@@ -358,7 +371,7 @@ export default function VisorDocumentos() {
           <button type="button" onClick={() => setMenu(null)} style={{ width: '100%', border: 'none', borderTop: `1px solid ${theme.border}`, background: 'transparent', color: theme.textSecondary, padding: '8px', cursor: 'pointer', fontSize: '12px' }}>Cancelar</button>
         </div>
       )}
-    </aside>
+    </section>
   );
 }
 

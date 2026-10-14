@@ -1,0 +1,100 @@
+import { AlertTriangle, CheckCircle, Eye, FileText, Hash, Loader2 } from 'lucide-react';
+import { useApp } from '../AppContext';
+import CamposDatos from './CamposDatos';
+import IconoArchivo from './IconoArchivo';
+import OpcionesPlantilla from './OpcionesPlantilla';
+import SugerenciaPlantilla from './SugerenciaPlantilla';
+import VisorDocumentos from './VisorDocumentos';
+
+// Espacio de trabajo de un expediente: arriba la barra (nombre, plantilla sugerida y botones);
+// abajo, lado a lado, el PDF (con sus actos) y los datos extraídos.
+// Se usa en Caso Individual y al revisar un expediente de la Carga Masiva.
+export default function EspacioExpediente({
+  destino, prefijo, datos, archivos, actos, plantilla, onPlantilla, sugerencia, onUsarSugerida,
+  onCambio, expedienteId, navegacion = null, accionesExtra = null, previaActiva = false, onPrevia,
+}) {
+  const { theme, isDarkMode, faltantesPara, etiquetaCampo, handleDownloadWord, descargandoId } = useApp();
+  const faltan = faltantesPara(datos, plantilla);
+  const nombre = datos?.nombre_acreditado && datos.nombre_acreditado !== 'NO_ENCONTRADO' ? datos.nombre_acreditado : 'Acreditado no identificado';
+  const credito = datos?.numero_credito && datos.numero_credito !== 'NO_ENCONTRADO' ? datos.numero_credito : '';
+  const descargando = descargandoId === expedienteId;
+
+  return (
+    <section className="espacio-expediente" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
+      {/* BARRA SUPERIOR */}
+      <header className="espacio-barra" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg }}>
+        <div className="espacio-fila">
+          {navegacion}
+          <div className="espacio-titulo">
+            <h2 style={{ color: theme.textPrimary }}>{nombre}</h2>
+            <div className="espacio-chips">
+              {credito && <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><Hash size={12} /> Crédito {credito}</span>}
+              <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><FileText size={12} /> {archivos.length} PDF</span>
+              {faltan.length === 0
+                ? <span className="chip-dato chip-ok"><CheckCircle size={12} /> Datos completos</span>
+                : <span className="chip-dato chip-falta" title={`Faltan: ${faltan.map(etiquetaCampo).join(', ')}`}><AlertTriangle size={12} /> Faltan {faltan.length} dato(s)</span>}
+            </div>
+          </div>
+          <div className="espacio-acciones">
+            {accionesExtra}
+            <button
+              type="button"
+              onClick={onPrevia}
+              className="boton-barra"
+              style={{ backgroundColor: previaActiva ? theme.accent : theme.cardBg, color: previaActiva ? '#fff' : theme.textPrimary, borderColor: previaActiva ? theme.accent : theme.border }}
+            >
+              <Eye size={15} color={previaActiva ? '#fff' : theme.accent} /> Vista previa
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDownloadWord(expedienteId, datos, plantilla)}
+              disabled={descargando}
+              className="boton-barra boton-word"
+            >
+              {descargando ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={17} />} Descargar Word
+            </button>
+          </div>
+        </div>
+
+        <div className="espacio-fila espacio-plantilla">
+          <label htmlFor={`${prefijo}_plantilla`} style={{ color: theme.textSecondary }}>Plantilla</label>
+          <select
+            id={`${prefijo}_plantilla`}
+            value={plantilla || ''}
+            onChange={(e) => onPlantilla(e.target.value)}
+            className="selector-plantilla"
+            style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}
+          >
+            <option value="" disabled>Seleccionar plantilla...</option>
+            <OpcionesPlantilla />
+          </select>
+          <SugerenciaPlantilla sugerencia={sugerencia} actual={plantilla} onUsar={onUsarSugerida} compacto />
+        </div>
+      </header>
+
+      {/* CUERPO: PDF | DATOS */}
+      <div className="espacio-cuerpo">
+        <div className="espacio-columna espacio-docs">
+          <VisorDocumentos key={`${prefijo}-${archivos.map((a) => a.name).join('|')}`} archivos={archivos} actos={actos} destino={destino} />
+        </div>
+
+        <div className="espacio-columna espacio-datos" style={{ borderColor: theme.border }}>
+          {faltan.length > 0 ? (
+            <div className="aviso-datos" style={{ backgroundColor: isDarkMode ? '#422006' : '#fffbeb', color: isDarkMode ? '#fcd34d' : '#92400e', borderColor: isDarkMode ? '#a16207' : '#fcd34d' }}>
+              <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+              <div>
+                <strong>Faltan {faltan.length} dato(s) que usa la plantilla:</strong> {faltan.map(etiquetaCampo).join(', ')}.
+                <div style={{ marginTop: '2px' }}>Captúralos con el candado, o selecciónalos en el PDF y elige “Usar como…”.</div>
+              </div>
+            </div>
+          ) : (
+            <div className="aviso-datos" style={{ backgroundColor: isDarkMode ? '#052e16' : '#ecfdf5', color: isDarkMode ? '#86efac' : '#065f46', borderColor: isDarkMode ? '#166534' : '#a7f3d0' }}>
+              <CheckCircle size={16} style={{ flexShrink: 0 }} /> Están completos todos los datos que usa la plantilla.
+            </div>
+          )}
+          <CamposDatos datos={datos} prefijo={prefijo} faltantes={faltan} onCambio={onCambio} />
+        </div>
+      </div>
+    </section>
+  );
+}

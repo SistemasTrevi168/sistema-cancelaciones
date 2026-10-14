@@ -3,8 +3,9 @@ import { ArrowLeftRight, Eye, Loader2, Maximize2, Minimize2, RefreshCw, X, ZoomI
 import { useApp } from '../AppContext';
 import { nombrePlantilla } from '../plantillasCatalogo';
 
-// Ventana flotante de vista previa del Word. Se usa en todas las pantallas.
-export default function PanelVistaPrevia() {
+// Vista previa del Word. Normalmente es una ventana flotante; con `embebido` va dentro de
+// la pantalla (Captura Manual) y se actualiza mientras se escribe.
+export default function PanelVistaPrevia({ embebido = false }) {
   const { theme, isDarkMode, vistaPrevia, estadoPrevia, documentoPrevia, cerrarVistaPrevia, refrescarVistaPrevia, cambiarLadoPrevia } = useApp();
   const [amplio, setAmplio] = useState(false);
   const [zoomManual, setZoomManual] = useState(null); // null = ajustar al ancho
@@ -16,7 +17,7 @@ export default function PanelVistaPrevia() {
   // y le quitaría la tecla a otras ventanas, como el visor de PDF)
   const cerrarRef = useRef(cerrarVistaPrevia);
   useEffect(() => { cerrarRef.current = cerrarVistaPrevia; });
-  const abierta = !!vistaPrevia;
+  const abierta = !!vistaPrevia && !vistaPrevia.embebido;
   useEffect(() => {
     if (!abierta) return;
     const alTeclear = (e) => { if (e.key === 'Escape' && !document.querySelector('.fondo-modal')) cerrarRef.current(); };
@@ -45,15 +46,15 @@ export default function PanelVistaPrevia() {
     return () => obs.disconnect();
   }, [documentoPrevia, amplio]);
 
-  if (!vistaPrevia) return null;
+  if (!vistaPrevia || !!vistaPrevia.embebido !== embebido) return null;
   const lado = vistaPrevia.lado || 'derecha';
   const escala = zoomManual ?? escalaAuto;
   const boton = { background: 'transparent', border: `1px solid ${theme.border}`, color: theme.textPrimary, borderRadius: '8px', padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
   return (
     <aside
-      className={`panel-previa panel-previa-${lado} ${amplio ? 'panel-previa-amplio' : ''}`}
-      role="dialog"
+      className={embebido ? 'previa-embebida' : `panel-previa panel-previa-${lado} ${amplio ? 'panel-previa-amplio' : ''}`}
+      role={embebido ? 'region' : 'dialog'}
       aria-label="Vista previa del documento"
       style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.textPrimary }}
     >
@@ -72,10 +73,10 @@ export default function PanelVistaPrevia() {
           <button type="button" style={boton} title="Alejar" onClick={() => setZoomManual(Math.max(0.3, +(escala - 0.1).toFixed(2)))}><ZoomOut size={15} /></button>
           <button type="button" style={{ ...boton, fontSize: '11px', fontWeight: 700, minWidth: '46px' }} title="Ajustar al ancho" onClick={() => setZoomManual(null)}>{Math.round(escala * 100)}%</button>
           <button type="button" style={boton} title="Acercar" onClick={() => setZoomManual(Math.min(2, +(escala + 0.1).toFixed(2)))}><ZoomIn size={15} /></button>
-          <button type="button" style={boton} className="ocultar-celular" title="Mover al otro lado" onClick={cambiarLadoPrevia}><ArrowLeftRight size={15} /></button>
-          <button type="button" style={boton} className="ocultar-celular" title={amplio ? 'Reducir' : 'Ampliar'} onClick={() => setAmplio(!amplio)}>{amplio ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
+          {!embebido && <button type="button" style={boton} className="ocultar-celular" title="Mover al otro lado" onClick={cambiarLadoPrevia}><ArrowLeftRight size={15} /></button>}
+          {!embebido && <button type="button" style={boton} className="ocultar-celular" title={amplio ? 'Reducir' : 'Ampliar'} onClick={() => setAmplio(!amplio)}>{amplio ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>}
           <button type="button" style={boton} title="Volver a generar" onClick={refrescarVistaPrevia}><RefreshCw size={15} /></button>
-          <button type="button" style={{ ...boton, backgroundColor: '#ef4444', borderColor: '#ef4444', color: '#fff' }} title="Cerrar (Esc)" onClick={cerrarVistaPrevia}><X size={15} /></button>
+          {!embebido && <button type="button" style={{ ...boton, backgroundColor: '#ef4444', borderColor: '#ef4444', color: '#fff' }} title="Cerrar (Esc)" onClick={cerrarVistaPrevia}><X size={15} /></button>}
         </div>
       </header>
 

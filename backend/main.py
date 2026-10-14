@@ -1554,7 +1554,11 @@ async def procesar_excel(
                 folio = str(fila_normalizada.get('folio_real') or fila_normalizada.get('folio') or '').strip()
                 inmueble = str(fila_normalizada.get('datos_inmueble') or fila_normalizada.get('inmueble') or '').strip()
                 fecha_exp = str(fila_normalizada.get('fecha_expedicion') or '').strip()
-                credito_salario = str(fila_normalizada.get('credito_a_salario') or '').strip()
+                credito_salario = str(fila_normalizada.get('credito_a_salario') or fila_normalizada.get('vsm') or '').strip()
+                escritura = str(fila_normalizada.get('numero_escritura') or fila_normalizada.get('escritura') or '').strip()
+                fecha_esc = str(fila_normalizada.get('fecha_escritura') or '').strip()
+                notario = str(fila_normalizada.get('notario_origen_completo') or fila_normalizada.get('notario') or '').strip()
+                conyuge = str(fila_normalizada.get('nombre_conyuge') or fila_normalizada.get('nombre_conyugue') or fila_normalizada.get('conyuge') or fila_normalizada.get('cónyuge') or '').strip()
 
                 datos_brutos = {
                     "nombre_acreditado": acreditado,
@@ -1568,6 +1572,11 @@ async def procesar_excel(
                     "datos_inmueble": inmueble,
                     "fecha_expedicion": fecha_exp,
                     "credito_a_salario": credito_salario,
+                    "numero_escritura": escritura,
+                    "fecha_escritura": fecha_esc,
+                    "notario_origen_completo": notario,
+                    "nombre_conyuge": conyuge,
+                    "tiene_conyuge": "Sí" if conyuge else "No",
                 }
 
                 datos_finales = limpiar_datos_para_plantilla(datos_brutos, num_credito)

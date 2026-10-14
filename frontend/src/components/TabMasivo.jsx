@@ -1,20 +1,20 @@
+import { useState } from 'react';
 import {
-  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Eye, FileArchive, FileSearch, FolderPlus, Layers, Loader2, Sparkles,
+  AlertTriangle, ArrowLeft, CheckCircle, ChevronLeft, ChevronRight, Eye, FileArchive, FolderPlus, Layers, ListChecks, Loader2, Sparkles, Upload,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
-import CamposDatos from './CamposDatos';
 import OpcionesPlantilla from './OpcionesPlantilla';
+import EspacioExpediente from './EspacioExpediente';
 import { nombrePlantilla } from '../plantillasCatalogo';
 
 export default function TabMasivo() {
   const {
     setSelectedPlantilla,
     abrirVistaPrevia,
-    abrirVisorDocs,
+    archivosDeLote,
     sugerenciaDeLote,
     usarSugeridasEnLote,
-    batchVisorIndex,
     descargandoId,
     descargandoZip,
     etiquetaCampo,
@@ -35,388 +35,261 @@ export default function TabMasivo() {
     handleSelectAllBatch,
     handleToggleSelectBatch,
     handleUploadBatch,
-    openAccordion,
     progressBatch,
     selectedBatchIndices,
     theme,
-    toggleAccordion,
+    isDarkMode,
   } = useApp();
 
+  const [abierto, setAbierto] = useState(null); // expediente en revisión (índice)
+  const [cargaAbierta, setCargaAbierta] = useState(false);
+
+  const validos = batchResults.map((r, i) => (r.error ? null : i)).filter((i) => i !== null);
+  const enRevision = abierto !== null && batchResults[abierto] && !batchResults[abierto].error ? abierto : null;
+  const cargaVisible = batchResults.length === 0 || batchLoading || cargaAbierta;
+  const plantillaDe = (res) => res.plantilla_seleccionada || selectedPlantilla;
+  const faltanDe = (res) => faltantesPara(res.datos_extraidos || {}, plantillaDe(res));
+  const conFaltantes = validos.filter((i) => faltanDe(batchResults[i]).length > 0).length;
+
+  const procesar = () => { setCargaAbierta(false); setAbierto(null); handleUploadBatch(); };
+
+  // ---- ESPACIO DE TRABAJO DE UN EXPEDIENTE ----
+  if (enRevision !== null) {
+    const idx = enRevision;
+    const res = batchResults[idx];
+    const pos = validos.indexOf(idx);
+    const ir = (p) => setAbierto(validos[p]);
+    const navegacion = (
+      <div className="nav-lote" style={{ borderColor: theme.border }}>
+        <button type="button" className="boton-barra" onClick={() => setAbierto(null)} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }} title="Volver a la lista del lote">
+          <ArrowLeft size={15} /> Lista
+        </button>
+        <button type="button" className="boton-icono" disabled={pos <= 0} onClick={() => ir(pos - 1)} title="Anterior" style={{ borderColor: theme.border, color: theme.textPrimary, backgroundColor: theme.cardBg }}><ChevronLeft size={16} /></button>
+        <span style={{ color: theme.textSecondary }}>{pos + 1} de {validos.length}</span>
+        <button type="button" className="boton-icono" disabled={pos >= validos.length - 1} onClick={() => ir(pos + 1)} title="Siguiente" style={{ borderColor: theme.border, color: theme.textPrimary, backgroundColor: theme.cardBg }}><ChevronRight size={16} /></button>
+      </div>
+    );
+    return (
+      <EspacioExpediente
+        key={idx}
+        destino={{ origen: 'batch', index: idx }}
+        prefijo={`batch_${idx}`}
+        datos={res.datos_extraidos || {}}
+        archivos={archivosDeLote(res)}
+        actos={res.actos || []}
+        plantilla={plantillaDe(res)}
+        onPlantilla={(v) => handleBatchPlantillaChange(idx, v)}
+        sugerencia={sugerenciaDeLote(res)}
+        onUsarSugerida={(v) => handleBatchPlantillaChange(idx, v)}
+        onCambio={(campo, valor) => handleBatchInputChange(idx, campo, valor)}
+        expedienteId={res.expediente_id}
+        navegacion={navegacion}
+        previaActiva={batchPreviewIndex === idx}
+        onPrevia={() => abrirVistaPrevia({ origen: 'batch', index: idx, flotante: true, lado: 'izquierda' })}
+      />
+    );
+  }
+
   return (
-<div>
-    {/* ESTILOS GLOBALES Y TOASTS FLOTANTES (ESQUINA INFERIOR DERECHA) */}
-    <style>{`
-      @keyframes fadeInOut {
-        0% { opacity: 0; transform: translateY(15px); }
-        12% { opacity: 1; transform: translateY(0); }
-        82% { opacity: 1; transform: translateY(0); }
-        100% { opacity: 0; transform: translateY(-10px); }
-      }
-      .docx-container-scroll {
-        height: 100% !important;
-        max-height: 100% !important;
-        overflow-y: auto !important;
-      }
-      .docx-container-scroll .docx-wrapper {
-        background-color: transparent !important;
-        padding: 12px 0 !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        gap: 16px !important;
-      }
-      .docx-container-scroll .docx-wrapper > section {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
-        border-radius: 6px !important;
-        margin-bottom: 0 !important;
-        background-color: #ffffff !important;
-        border: 1px solid #e2e8f0 !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        padding: 16px !important;
-        box-sizing: border-box !important;
-      }
-    `}</style>
-
-    {/* SECCIÓN SUPERIOR: FORMULARIO DE CARGA */}
-    <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}`, marginBottom: '24px' }}>
-      <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <FolderPlus size={20} color={theme.accent} /> Carga Masiva de Expedientes
-      </h2>
-
-      <div 
-        onDragOver={handleDragOver}
-        onDrop={handleDropBatch}
-        style={{ border: `2px dashed ${theme.dropzoneBorder}`, backgroundColor: theme.dropzoneBg, borderRadius: '12px', padding: '32px 20px', textAlign: 'center', marginBottom: '20px', cursor: 'pointer' }}
-      >
-        <FileArchive size={40} color={theme.accent} style={{ margin: '0 auto 12px auto' }} />
-        <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: theme.textPrimary }}>
-          Arrastra aquí tu carpeta o múltiples archivos PDF
-        </p>
-        <p style={{ margin: '0 0 16px 0', fontSize: '12px', color: theme.textSecondary }}>se escanearán subcarpetas automáticamente</p>
-        <input
-          type="file"
-          multiple
-          accept=".pdf"
-          webkitdirectory="true"
-          onChange={handleBatchFileChange}
-          style={{ display: 'none' }}
-          id="batch-file-input"
-        />
-        <label htmlFor="batch-file-input" style={{ backgroundColor: theme.subtleBg, border: `1px solid ${theme.border}`, padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', color: theme.textPrimary, cursor: 'pointer' }}>
-          Buscar Carpeta / Archivos
-        </label>
-      </div>
-
-      {batchFiles.length > 0 && (
-        <div style={{ marginBottom: '20px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: theme.textSecondary }}>
-            Archivos Detectados ({batchFiles.length}):
+    <div className="carga-documentos">
+      {/* ---- CARGA DEL LOTE ---- */}
+      {cargaVisible ? (
+        <>
+          <div className="carga-encabezado">
+            <h2 style={{ color: theme.textPrimary }}><FolderPlus size={20} color={theme.accent} /> Carga masiva de expedientes</h2>
+            <p style={{ color: theme.textSecondary }}>Sube una carpeta con las cartas y constancias de varios créditos. Se agrupan por número de crédito en el nombre del archivo.</p>
           </div>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: '150px', overflowY: 'auto' }}>
-            {batchFiles.map((f, i) => (
-              <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '6px', backgroundColor: theme.subtleBg, marginBottom: '6px', fontSize: '13px', color: theme.textPrimary }}>
-                <IconoArchivo tipo="pdf" size={18} />
-                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="carga-rejilla">
+            <div onDragOver={handleDragOver} onDrop={handleDropBatch} className="zona-soltar" style={{ borderColor: theme.dropzoneBorder, backgroundColor: theme.dropzoneBg }}>
+              <FileArchive size={40} color={theme.accent} />
+              <p className="zona-titulo" style={{ color: theme.textPrimary }}>Arrastra aquí tu carpeta o varios PDF</p>
+              <p className="zona-ayuda" style={{ color: theme.textSecondary }}>se revisan también las subcarpetas</p>
+              <input type="file" multiple accept=".pdf" webkitdirectory="true" onChange={handleBatchFileChange} style={{ display: 'none' }} id="batch-file-input" />
+              <label htmlFor="batch-file-input" className="boton-barra" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border, cursor: 'pointer' }}>
+                Buscar carpeta / archivos
+              </label>
+            </div>
+
+            <div className="carga-panel" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
+              <div>
+                <div className="carga-subtitulo" style={{ color: theme.textSecondary }}>Archivos detectados ({batchFiles.length})</div>
+                {batchFiles.length === 0 ? (
+                  <p style={{ fontSize: '13px', color: theme.textSecondary, margin: '6px 0 0 0' }}>Todavía no has elegido archivos.</p>
+                ) : (
+                  <ul className="lista-archivos">
+                    {batchFiles.map((f, i) => (
+                      <li key={i} style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary }}>
+                        <IconoArchivo tipo="pdf" size={18} />
+                        <span>{f.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="plantilla-lote" className="carga-subtitulo" style={{ color: theme.textSecondary }}>Plantilla inicial del lote</label>
+                <select id="plantilla-lote" value={selectedPlantilla} onChange={(e) => setSelectedPlantilla(e.target.value)} className="selector-plantilla selector-grande" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}>
+                  <OpcionesPlantilla />
+                </select>
+                <p style={{ fontSize: '12px', color: theme.textSecondary, margin: '6px 0 0 0' }}>
+                  Después puedes usar la plantilla sugerida de cada expediente o cambiarla a mano.
+                </p>
+              </div>
+
+              {batchLoading && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px', color: theme.textSecondary }}>
+                    <span>Procesando lote…</span><span>{progressBatch}%</span>
+                  </div>
+                  <div className="barra-progreso" style={{ backgroundColor: theme.subtleBg }}>
+                    <div style={{ width: `${progressBatch}%`, backgroundColor: theme.accent }} />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {batchResults.length > 0 && !batchLoading && (
+                  <button type="button" className="boton-barra" onClick={() => setCargaAbierta(false)} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+                    Cancelar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={procesar}
+                  disabled={batchFiles.length === 0 || batchLoading}
+                  className="boton-principal"
+                  style={{ backgroundColor: batchFiles.length === 0 || batchLoading ? theme.subtleBg : theme.accent, color: batchFiles.length === 0 || batchLoading ? theme.textSecondary : '#fff', cursor: batchFiles.length === 0 || batchLoading ? 'not-allowed' : 'pointer' }}
+                >
+                  {batchLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <FolderPlus size={16} />}
+                  Procesar carga masiva
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="lote-resumen" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg, color: theme.textSecondary }}>
+          <FolderPlus size={18} color={theme.accent} />
+          <span><strong style={{ color: theme.textPrimary }}>{batchFiles.length} archivos</strong> · {validos.length} expediente(s) procesados</span>
+          <button type="button" className="boton-barra" onClick={() => setCargaAbierta(true)} style={{ marginLeft: 'auto', backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+            <Upload size={15} /> Cargar otro lote
+          </button>
         </div>
       )}
 
-      {batchLoading && (
-        <div style={{ marginBottom: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px', color: theme.textSecondary }}>
-            <span>Procesando lote de documentos...</span>
-            <span>{progressBatch}%</span>
-          </div>
-          <div style={{ width: '100%', backgroundColor: theme.subtleBg, height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{ width: `${progressBatch}%`, backgroundColor: theme.accent, height: '100%', transition: 'width 0.2s' }} />
-          </div>
-        </div>
-      )}
-
-      <div style={{ marginBottom: '16px' }}>
-        <label htmlFor="plantilla-lote" style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: theme.textPrimary, marginBottom: '8px' }}>
-          Plantilla para este lote
-        </label>
-        <select
-          id="plantilla-lote"
-          value={selectedPlantilla}
-          onChange={(e) => setSelectedPlantilla(e.target.value)}
-          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
-        >
-          <OpcionesPlantilla />
-        </select>
-        <p style={{ fontSize: '12px', color: theme.textSecondary, margin: '6px 0 0 0' }}>
-          Después puedes cambiar la plantilla de cada expediente en la lista de resultados.
-        </p>
-      </div>
-
-      <button
-        onClick={() => {
-          handleUploadBatch();
-        }}
-        disabled={batchFiles.length === 0 || batchLoading}
-        style={{
-          width: '100%',
-          backgroundColor: batchFiles.length === 0 || batchLoading ? theme.subtleBg : theme.accent,
-          color: batchFiles.length === 0 || batchLoading ? theme.textSecondary : '#fff',
-          border: 'none',
-          padding: '12px',
-          borderRadius: '10px',
-          fontWeight: '600',
-          fontSize: '14px',
-          cursor: batchFiles.length === 0 || batchLoading ? 'not-allowed' : 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px'
-        }}
-      >
-        {batchLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <FolderPlus size={16} />}
-        Procesar Carga Masiva
-      </button>
-    </div>
-
-    {/* RESULTADOS DEL LOTE - DISEÑO GRID SEGURO CON MINMAX */}
-    {batchResults.length > 0 && (
-      <div className="grid-masivo" style={{ 
-        display: 'grid', 
-        gridTemplateColumns: '1fr', 
-        gap: '24px',
-        alignItems: 'start',
-        width: '100%',
-        boxSizing: 'border-box',
-        transition: 'all 0.3s ease'
-      }}>
-        
-        {/* COLUMNA IZQUIERDA: LISTA Y ACORDEONES */}
-        <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}`, minWidth: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <input 
+      {/* ---- RESULTADOS ---- */}
+      {batchResults.length > 0 && (
+        <section className="resultados-lote" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
+          <header className="resultados-encabezado" style={{ borderColor: theme.border }}>
+            <div className="resultados-titulo">
+              <input
                 type="checkbox"
-                checked={batchResults.length > 0 && selectedBatchIndices.length === batchResults.length}
+                checked={validos.length > 0 && selectedBatchIndices.length === batchResults.length}
                 onChange={handleSelectAllBatch}
-                style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: theme.accent }}
-                title="Seleccionar todos"
+                style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: theme.accent }}
+                title="Marcar todos"
               />
-              <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: theme.textPrimary }}>
-                Resultados del Lote ({batchResults.length})
-              </h2>
-
-              {/* SELECTOR GLOBAL: cambia la plantilla de los expedientes marcados */}
+              <h2 style={{ color: theme.textPrimary }}><ListChecks size={19} color={theme.accent} /> Resultados ({validos.length})</h2>
+              <span className="chip-dato chip-ok"><CheckCircle size={12} /> {validos.length - conFaltantes} completos</span>
+              {conFaltantes > 0 && <span className="chip-dato chip-falta"><AlertTriangle size={12} /> {conFaltantes} con faltantes</span>}
+            </div>
+            <div className="resultados-acciones">
               <select
                 value=""
                 disabled={selectedBatchIndices.length === 0}
                 onChange={(e) => handleApplyTemplateToSelected(e.target.value)}
                 className="selector-plantilla"
                 title={selectedBatchIndices.length === 0 ? 'Marca uno o más expedientes con la casilla para cambiar su plantilla' : ''}
-                style={{ padding: '6px 12px', borderRadius: '6px', border: `1px solid ${selectedBatchIndices.length ? theme.accent : theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                style={{ borderColor: selectedBatchIndices.length ? theme.accent : theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}
               >
                 <option value="" disabled>
-                  {selectedBatchIndices.length === 0
-                    ? 'Marca expedientes para cambiar su plantilla'
-                    : `Aplicar plantilla a ${selectedBatchIndices.length} seleccionado(s)...`}
+                  {selectedBatchIndices.length === 0 ? 'Marca expedientes para cambiar su plantilla' : `Plantilla para ${selectedBatchIndices.length} marcado(s)…`}
                 </option>
                 <OpcionesPlantilla />
               </select>
-
-              {/* Usar en todos la plantilla que corresponde según sus documentos */}
-              {batchResults.some((r) => !r.error && sugerenciaDeLote(r)?.plantilla) && (
-                <button type="button" onClick={usarSugeridasEnLote} className="chip-sugerida" style={{ padding: '6px 12px', fontSize: '12px' }} title="Pone a cada expediente la plantilla que le corresponde según sus documentos">
+              {validos.some((i) => sugerenciaDeLote(batchResults[i])?.plantilla) && (
+                <button type="button" onClick={usarSugeridasEnLote} className="chip-sugerida" style={{ padding: '7px 12px', fontSize: '12px' }} title="Pone a cada expediente la plantilla que le corresponde según sus documentos">
                   <Sparkles size={13} /> Usar las plantillas sugeridas
                 </button>
               )}
+              <button type="button" onClick={handleDownloadZip} disabled={descargandoZip} className="boton-barra boton-word">
+                {descargandoZip ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="zip" size={18} />} Descargar todo (ZIP)
+              </button>
             </div>
+          </header>
 
-            <button
-              onClick={handleDownloadZip}
-              disabled={descargandoZip}
-              style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              {descargandoZip ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="zip" size={20} />} Descargar Todo (ZIP)
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div className="filas-lote">
             {batchResults.map((res, idx) => {
               if (res.error) {
                 return (
-                  <div key={idx} style={{ border: '1px solid #ef4444', borderRadius: '10px', padding: '14px 18px', backgroundColor: '#fef2f2', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#b91c1c', fontSize: '14px', fontWeight: '600' }}>
-                      <span>⚠️ Error al procesar archivo:</span>
-                      <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{res.expediente_id}</span>
-                    </div>
-                    <p style={{ margin: '6px 0 0 28px', fontSize: '12px', color: '#7f1d1d' }}>
-                      Detalle: {res.error}
-                    </p>
+                  <div key={idx} className="fila-lote fila-error" style={{ borderColor: '#fecaca', backgroundColor: isDarkMode ? '#450a0a' : '#fef2f2', color: isDarkMode ? '#fca5a5' : '#991b1b' }}>
+                    <AlertTriangle size={16} /> <strong>No se pudo procesar {res.expediente_id}:</strong> <span>{res.error}</span>
                   </div>
                 );
               }
-              const isOpen = !!openAccordion[idx];
-              const datosExtraidos = res.datos_extraidos || {};
-              const acreditadoNombre = datosExtraidos.acreditado || datosExtraidos.nombre_acreditado || 'Acreditado no identificado';
-              const isPreviewingThis = batchPreviewIndex === idx;
-              const isSelected = selectedBatchIndices.includes(idx);
-              const faltanItem = faltantesPara(datosExtraidos, res.plantilla_seleccionada || datosExtraidos.plantilla_seleccionada || selectedPlantilla);
-
+              const d = res.datos_extraidos || {};
+              const faltan = faltanDe(res);
+              const sug = sugerenciaDeLote(res);
+              const enUsoSug = sug?.plantilla && sug.plantilla === res.plantilla_seleccionada;
+              const marcado = selectedBatchIndices.includes(idx);
               return (
-                <div key={idx} className="entrada-escalonada" style={{ animationDelay: `${Math.min(idx, 12) * 40}ms`, border: `1px solid ${isPreviewingThis ? theme.accent : theme.border}`, borderRadius: '10px', overflow: 'hidden', transition: 'border-color 0.2s ease' }}>
-                  <div 
-                    onClick={() => toggleAccordion(idx)}
-                    style={{ padding: '14px 18px', backgroundColor: theme.subtleBg, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', flexWrap: 'wrap', gap: '8px' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <input 
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          handleToggleSelectBatch(idx);
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: theme.accent }}
-                      />
-                      {faltanItem.length > 0
-                        ? <AlertTriangle size={18} color="#d97706" />
-                        : <CheckCircle size={18} color="#10b981" />}
-                      <span style={{ fontWeight: '600', fontSize: '14px', color: theme.textPrimary }}>
-                        {acreditadoNombre}
-                      </span>
-                      {faltanItem.length > 0 && (
-                        <span title={`Faltan: ${faltanItem.map(etiquetaCampo).join(', ')}`} style={{ fontSize: '11px', fontWeight: '600', color: '#92400e', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px', border: '1px solid #fcd34d' }}>
-                          ⚠ Faltan {faltanItem.length} dato(s)
-                        </span>
-                      )}
-                      {datosExtraidos.numero_credito && (
-                        <span style={{ fontSize: '12px', color: theme.textSecondary, backgroundColor: theme.cardBg, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${theme.border}` }}>
-                          Crédito: {datosExtraidos.numero_credito}
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {/* SELECTOR INDIVIDUAL CARGA MASIVA*/}
-              <select
-                value={res.plantilla_seleccionada || ''}
-                onChange={(e) => handleBatchPlantillaChange(idx, e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                className="selector-plantilla"
-                style={{ padding: '6px 8px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '12px', cursor: 'pointer', maxWidth: '230px' }}
-                title={`Plantilla de este expediente: ${nombrePlantilla(res.plantilla_seleccionada)}`}
-              >
-                <option value="" disabled>Seleccionar plantilla...</option>
-                <OpcionesPlantilla />
-              </select>
+                <div
+                  key={idx}
+                  className={`fila-lote entrada-escalonada ${marcado ? 'marcada' : ''}`}
+                  style={{ animationDelay: `${Math.min(idx, 12) * 30}ms`, borderColor: batchPreviewIndex === idx ? theme.accent : theme.border, backgroundColor: theme.cardBg }}
+                >
+                  <input type="checkbox" checked={marcado} onChange={() => handleToggleSelectBatch(idx)} style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: theme.accent }} aria-label="Marcar expediente" />
 
-              {/* PLANTILLA SUGERIDA PARA ESTE EXPEDIENTE */}
-              {(() => {
-                const sug = sugerenciaDeLote(res);
-                if (!sug?.plantilla) return null;
-                const enUso = sug.plantilla === res.plantilla_seleccionada;
-                const titulo = `${enUso ? 'Usa la plantilla sugerida' : 'Plantilla sugerida'}: ${nombrePlantilla(sug.plantilla)}\n\n${sug.razones.join('\n')}${sug.dudas.length ? `\n\nRevisar: ${sug.dudas.join('. ')}` : ''}`;
-                return enUso ? (
-                  <span title={titulo} className="chip-sugerida chip-sugerida-ok"><CheckCircle size={12} /> Sugerida</span>
-                ) : (
-                  <button
-                    type="button"
-                    title={titulo}
-                    className="chip-sugerida"
-                    onClick={(e) => { e.stopPropagation(); handleBatchPlantillaChange(idx, sug.plantilla); }}
-                  >
-                    <Sparkles size={12} /> Usar sugerida
+                  <button type="button" className="fila-nombre" onClick={() => setAbierto(idx)} title="Revisar con el PDF">
+                    {faltan.length > 0 ? <AlertTriangle size={17} color="#d97706" /> : <CheckCircle size={17} color="#10b981" />}
+                    <span>
+                      <strong style={{ color: theme.textPrimary }}>{d.nombre_acreditado && d.nombre_acreditado !== 'NO_ENCONTRADO' ? d.nombre_acreditado : 'Acreditado no identificado'}</strong>
+                      <small style={{ color: theme.textSecondary }}>
+                        {d.numero_credito ? `Crédito ${d.numero_credito}` : 'Sin número de crédito'}
+                        {res.actos?.length > 1 ? ` · ${res.actos.length} actos` : ''}
+                        {faltan.length > 0 ? ` · faltan: ${faltan.map(etiquetaCampo).join(', ')}` : ''}
+                      </small>
+                    </span>
                   </button>
-                );
-              })()}
 
-                      {(res.archivos || []).some((n) => batchFiles.some((f) => f.name === n && /\.pdf$/i.test(n))) && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            abrirVisorDocs({ origen: 'batch', index: idx });
-                          }}
-                          title={res.actos?.length > 1 ? `Ver los PDF (la constancia trae ${res.actos.length} actos)` : 'Ver los PDF y seleccionar de dónde tomar un dato'}
-                          style={{
-                            backgroundColor: batchVisorIndex === idx ? '#7c3aed' : theme.cardBg,
-                            color: batchVisorIndex === idx ? '#fff' : theme.textPrimary,
-                            border: `1px solid ${theme.border}`,
-                            padding: '6px 10px',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          {res.actos?.length > 1
-                            ? <Layers size={12} color={batchVisorIndex === idx ? '#fff' : '#7c3aed'} />
-                            : <FileSearch size={12} color={batchVisorIndex === idx ? '#fff' : '#7c3aed'} />}
-                          PDF{res.actos?.length > 1 ? ` · ${res.actos.length} actos` : ''}
-                        </button>
-                      )}
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          abrirVistaPrevia({ origen: 'batch', index: idx });
-                        }}
-                        style={{ 
-                          backgroundColor: isPreviewingThis ? theme.accent : theme.cardBg, 
-                          color: isPreviewingThis ? '#fff' : theme.textPrimary, 
-                          border: `1px solid ${theme.border}`, 
-                          padding: '6px 10px', 
-                          borderRadius: '6px', 
-                          fontSize: '12px', 
-                          fontWeight: '600', 
-                          cursor: 'pointer', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '4px' 
-                        }}
-                      >
-                        <Eye size={12} color={isPreviewingThis ? '#fff' : theme.accent} /> 
-                        {isPreviewingThis ? 'Viendo' : 'Previa'}
+                  <div className="fila-plantilla">
+                    <select
+                      value={res.plantilla_seleccionada || ''}
+                      onChange={(e) => handleBatchPlantillaChange(idx, e.target.value)}
+                      className="selector-plantilla"
+                      title={`Plantilla: ${nombrePlantilla(res.plantilla_seleccionada)}`}
+                      style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}
+                    >
+                      <option value="" disabled>Seleccionar plantilla...</option>
+                      <OpcionesPlantilla />
+                    </select>
+                    {sug?.plantilla && (enUsoSug ? (
+                      <span className="chip-sugerida chip-sugerida-ok" title={`Plantilla sugerida en uso\n\n${sug.razones.join('\n')}`}><CheckCircle size={12} /> Sugerida</span>
+                    ) : (
+                      <button type="button" className="chip-sugerida" title={`Sugerida: ${nombrePlantilla(sug.plantilla)}\n\n${sug.razones.join('\n')}`} onClick={() => handleBatchPlantillaChange(idx, sug.plantilla)}>
+                        <Sparkles size={12} /> Usar sugerida
                       </button>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDownloadWord(res.expediente_id, datosExtraidos, res.plantilla_seleccionada || selectedPlantilla);
-                        }}
-                        disabled={descargandoId === res.expediente_id}
-                        style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        {descargandoId === res.expediente_id ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={16} />} DOCX
-                      </button>
-                      {isOpen ? <ChevronUp size={18} color={theme.textSecondary} /> : <ChevronDown size={18} color={theme.textSecondary} />}
-                    </div>
+                    ))}
                   </div>
 
-                  {isOpen && (
-                    <div style={{ padding: '18px', backgroundColor: theme.cardBg, borderTop: `1px solid ${theme.border}` }}>
-                      <CamposDatos
-                        datos={datosExtraidos}
-                        prefijo={`batch_${idx}`}
-                        faltantes={faltanItem}
-                        onCambio={(campo, valor) => handleBatchInputChange(idx, campo, valor)}
-                        compacto
-                      />
-                    </div>
-                  )}
+                  <div className="fila-acciones">
+                    <button type="button" className="boton-barra boton-revisar" onClick={() => setAbierto(idx)} title="Revisar los datos junto al PDF">
+                      <Layers size={14} /> Revisar
+                    </button>
+                    <button type="button" className="boton-barra" onClick={() => abrirVistaPrevia({ origen: 'batch', index: idx })} style={{ backgroundColor: batchPreviewIndex === idx ? theme.accent : theme.cardBg, color: batchPreviewIndex === idx ? '#fff' : theme.textPrimary, borderColor: batchPreviewIndex === idx ? theme.accent : theme.border }}>
+                      <Eye size={14} color={batchPreviewIndex === idx ? '#fff' : theme.accent} /> Previa
+                    </button>
+                    <button type="button" className="boton-barra boton-word" onClick={() => handleDownloadWord(res.expediente_id, d, plantillaDe(res))} disabled={descargandoId === res.expediente_id}>
+                      {descargandoId === res.expediente_id ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={16} />} DOCX
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
-        </div>
-
-      </div>
-    )}
-  </div>
+        </section>
+      )}
+    </div>
   );
 }
-

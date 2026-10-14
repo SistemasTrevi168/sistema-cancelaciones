@@ -8,7 +8,6 @@ import ModalPassword from './components/ModalPassword';
 import Notificaciones from './components/Notificaciones';
 import PanelVistaPrevia from './components/PanelVistaPrevia';
 import PantallaCarga from './components/PantallaCarga';
-import VisorDocumentos from './components/VisorDocumentos';
 import { avisar, confirmar } from './ui/notificaciones';
 import { instalarEfectoOnda } from './ui/efectoOnda';
 import { CAMPOS_DEL_ACTO, etiquetaDe } from './camposExpediente';
@@ -202,8 +201,6 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [resultadoPrevia, setResultadoPrevia] = useState({ clave: null, error: '' }); // última respuesta recibida
   const [documentoPrevia, setDocumentoPrevia] = useState(null); // documento ya dibujado (nodo HTML)
   const [versionPrevia, setVersionPrevia] = useState(0);        // para el botón "volver a generar"
-  // Visor de los PDF subidos: null o { origen: 'single' | 'batch', index? }
-  const [visorDocs, setVisorDocs] = useState(null);
   const [actosSingle, setActosSingle] = useState([]); // actos de la constancia (caso individual)
   const [sugerenciaBase, setSugerenciaBase] = useState(null); // plantilla sugerida según los documentos
   const turnoPrevia = useRef(0);                                // descarta respuestas viejas
@@ -391,7 +388,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   };
 
   const abrirVistaPrevia = (config) => {
-    setVisorDocs(null);
+   
     const mismo = vistaPrevia && vistaPrevia.origen === config.origen && vistaPrevia.index === config.index
       && (config.origen !== 'historial' || vistaPrevia.id === config.id);
     if (!mismo) {
@@ -411,7 +408,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // Al cambiar de pestaña se cierran la vista previa y el visor de PDF
   const cambiarPestana = (pestana) => {
     cerrarVistaPrevia();
-    setVisorDocs(null);
+   
     if (pestana !== activeTab && navegador.guardia) {
       window.history.pushState({ app: 'cancelaciones', tipo: 'tab', tab: pestana }, '');
     }
@@ -546,8 +543,8 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         setTimeout(() => setAnimarEntrada(false), 3000);
         setLoginPassword('');
         setSingleFiles([]);
-        setDatos(null); setActosSingle([]); setSugerenciaBase(null); setVisorDocs(null);
-        setBatchResults([]); setVisorDocs(null);
+        setDatos(null); setActosSingle([]); setSugerenciaBase(null);
+        setBatchResults([]);
       }
     } catch (err) {
       setLoginError(err.response?.data?.detail || 'Error al iniciar sesión.');
@@ -574,8 +571,8 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setError('');
       setLoginUser('');
       setLoginPassword('');
-      setDatos(null); setActosSingle([]); setSugerenciaBase(null); setVisorDocs(null);
-      setBatchResults([]); setVisorDocs(null);
+      setDatos(null); setActosSingle([]); setSugerenciaBase(null);
+      setBatchResults([]);
       setHistorial([]);
 
       // Limpieza de Excel
@@ -847,7 +844,7 @@ const handlePreviewExcel = async (file) => {
       const files = Array.from(e.dataTransfer.files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
       if (files.length > 0) {
         setSingleFiles(files);
-        setDatos(null); setActosSingle([]); setSugerenciaBase(null); setVisorDocs(null);
+        setDatos(null); setActosSingle([]); setSugerenciaBase(null);
       }
     }
   };
@@ -876,7 +873,7 @@ const handlePreviewExcel = async (file) => {
 
     if (allPdfFiles.length > 0) {
       setBatchFiles(allPdfFiles);
-      setBatchResults([]); setVisorDocs(null);
+      setBatchResults([]);
       setError('');
     } else {
       setError('No se encontraron archivos PDF.');
@@ -892,7 +889,7 @@ const handlePreviewExcel = async (file) => {
         return;
       }
       setSingleFiles(filesArray);
-      setDatos(null); setActosSingle([]); setSugerenciaBase(null); setVisorDocs(null);
+      setDatos(null); setActosSingle([]); setSugerenciaBase(null);
     }
   };
 
@@ -900,14 +897,14 @@ const handlePreviewExcel = async (file) => {
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
       setBatchFiles(selectedFiles);
-      setBatchResults([]); setVisorDocs(null);
+      setBatchResults([]);
     }
   };
 
   const handleUploadSingle = async () => {
     if (singleFiles.length === 0) return;
     cerrarVistaPrevia();
-    setVisorDocs(null);
+   
     setLoading(true);
     setProgressSingle(10);
     setError('');
@@ -1003,7 +1000,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
 
   const handleUploadBatch = async () => {
     cerrarVistaPrevia();
-    setVisorDocs(null);
+   
     if (batchFiles.length === 0) return;
     setBatchLoading(true);
     setProgressBatch(5);
@@ -1417,36 +1414,35 @@ const filteredHistorial = (historial || []).filter((item) => {
     accent: '#2563eb'
   };
 
-  // ---- VISOR DE DOCUMENTOS (seleccionar texto del PDF / elegir acto de la constancia) ----
-  const documentosVisor = (() => {
-    if (!visorDocs) return [];
-    if (visorDocs.origen === 'single') return singleFiles.filter((f) => /\.pdf$/i.test(f.name));
-    const item = batchResults[visorDocs.index];
+  // ---- DOCUMENTOS DEL EXPEDIENTE (visor de PDF: seleccionar texto / elegir acto) ----
+  // destino: { origen: 'single' } o { origen: 'batch', index }
+  const esPdf = (f) => /\.pdf$/i.test(f.name);
+  const archivosSingle = singleFiles.filter(esPdf);
+  const archivosDeLote = (item) => {
     const nombres = item?.archivos || [];
-    return batchFiles.filter((f) => nombres.includes(f.name));
-  })();
-  const actosVisor = !visorDocs ? []
-    : visorDocs.origen === 'single' ? actosSingle
-    : (batchResults[visorDocs.index]?.actos || []);
-
-  const abrirVisorDocs = (config) => {
-    cerrarVistaPrevia();
-    setVisorDocs(config);
+    return batchFiles.filter((f) => esPdf(f) && nombres.includes(f.name));
   };
-  const cerrarVisorDocs = () => setVisorDocs(null);
 
-  // Pone uno o varios datos en el expediente que se está viendo en el visor
-  const ponerCamposVisor = (cambios) => {
-    if (!visorDocs) return;
-    if (visorDocs.origen === 'single') {
+  // Pone uno o varios datos en el expediente indicado
+  const ponerCamposEn = (destino, cambios) => {
+    if (!destino) return;
+    if (destino.origen === 'single') {
       setDatos((prev) => ({ ...prev, ...cambios }));
     } else {
-      const idx = visorDocs.index;
+      const idx = destino.index;
       setBatchResults((prev) => prev.map((item, i) => (i !== idx ? item : {
         ...item,
         datos_extraidos: { ...item.datos_extraidos, ...cambios },
       })));
     }
+  };
+
+  // Empieza un expediente nuevo en Caso Individual
+  const nuevoExpedienteSingle = () => {
+    cerrarVistaPrevia();
+    setDatos(null); setActosSingle([]); setSugerenciaBase(null);
+    setSingleFiles([]); setExpedienteId(''); setError(''); setProgressSingle(0);
+    setUnlockedFields({});
   };
 
   // Da al texto el mismo formato que la extracción automática (si el servidor no responde, se usa tal cual)
@@ -1459,14 +1455,14 @@ const filteredHistorial = (historial || []).filter((item) => {
     }
   };
 
-  const asignarCampoDesdeDocumento = async (campo, texto) => {
+  const asignarCampoDesdeDocumento = async (campo, texto, destino) => {
     const { valor, extra } = await normalizarCampo(campo, texto);
-    ponerCamposVisor({ [campo]: valor, ...extra });
+    ponerCamposEn(destino, { [campo]: valor, ...extra });
     avisar.exito(`${etiquetaDe(campo)}: ${valor.length > 60 ? valor.slice(0, 60) + '…' : valor}`);
   };
 
-  const usarActo = async (acto) => {
-    if (!visorDocs || !acto?.datos) return;
+  const usarActo = async (acto, destino) => {
+    if (!destino || !acto?.datos) return;
     if (!CAMPOS_DEL_ACTO.some((c) => acto.datos[c])) {
       avisar.aviso('Este acto no trae acreditado, escritura, fecha, notario ni monto. Puedes seleccionar el texto en el PDF y usarlo en el dato que quieras.');
       return;
@@ -1484,11 +1480,11 @@ const filteredHistorial = (historial || []).filter((item) => {
       const { extra } = await normalizarCampo('monto_credito', cambios.monto_credito);
       Object.assign(cambios, extra);
     }
-    if (visorDocs.origen === 'single') {
+    if (destino.origen === 'single') {
       setDatos((prev) => ({ ...prev, ...cambios }));
       setActosSingle(marcar);
     } else {
-      const idx = visorDocs.index;
+      const idx = destino.index;
       setBatchResults((prev) => prev.map((item, i) => (i !== idx ? item : {
         ...item,
         actos: marcar(item.actos),
@@ -1526,15 +1522,14 @@ const filteredHistorial = (historial || []).filter((item) => {
     sugerenciaDeLote,
     usarPlantillaSugerida,
     usarSugeridasEnLote,
-    visorDocs,
-    documentosVisor,
-    actosVisor,
+    archivosSingle,
+    archivosDeLote,
+    nuevoExpedienteSingle,
+    normalizarCampo,
+    camposDePlantilla: (plantilla) => camposPorPlantilla[normalizarPlantilla(plantilla)] || null,
     actosSingle,
-    abrirVisorDocs,
-    cerrarVisorDocs,
     asignarCampoDesdeDocumento,
     usarActo,
-    batchVisorIndex: visorDocs?.origen === 'batch' ? visorDocs.index : null,
     formatearMonto,
     abrirVistaPrevia,
     batchPreviewIndex: vistaPrevia?.origen === 'batch' ? vistaPrevia.index : null,
@@ -1659,8 +1654,7 @@ const filteredHistorial = (historial || []).filter((item) => {
         isDarkMode ? 'tema-oscuro' : 'tema-claro',
         // En lote, captura manual e historial la vista previa reserva su espacio
         // (la lista se acomoda a un lado); en caso individual flota encima de la carga de archivos
-        vistaPrevia && solicitudPrevia && vistaPrevia.origen !== 'single' ? `con-previa-${vistaPrevia.lado}` : '',
-        visorDocs && visorDocs.origen === 'batch' ? 'con-previa-izquierda con-visor-docs' : '',
+        vistaPrevia && solicitudPrevia && vistaPrevia.origen !== 'single' && !vistaPrevia.embebido && !vistaPrevia.flotante ? `con-previa-${vistaPrevia.lado}` : '',
       ].join(' ')}
       style={{
       fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
@@ -1728,9 +1722,6 @@ const filteredHistorial = (historial || []).filter((item) => {
 
       {/* VISTA PREVIA FLOTANTE */}
       {isAuthenticated && <PanelVistaPrevia />}
-
-      {/* VISOR DE LOS PDF SUBIDOS */}
-      {isAuthenticated && visorDocs && <VisorDocumentos key={visorDocs.origen + (visorDocs.index ?? '')} />}
 
       {/* AVISOS FLOTANTES Y CONFIRMACIONES */}
       <Notificaciones />

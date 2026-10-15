@@ -509,7 +509,7 @@ def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "
     puntos = {k: "" for k in _PUNTOS_INMUEBLE}
     texto_base = " ".join(str(texto_completo or texto_inmueble_raw or "").split())
 
-    seccion = re.search(r"DATOS\s+DE\s+IDENTIFICACI[OÓ]N\s*:?(.*?)(?=SUPERFICIE\s*:|RUMBOS|MEDIDAS\s+Y\s+COLINDANCIAS|DATOS\s+DE\s+REGISTRO|INFORMACI[OÓ]N\s+COMPLEMENTARIA|$)", texto_base, re.I)
+    seccion = re.search(r"DATOS\s+DE\s+IDENTIFICACI[OÓ]N\s*:?(.*?)(?=SUPERFICIE\s*:|RUMBOS|MEDIDAS\s+Y\s+COLINDANCIAS|DATOS\s+DE\s+REGISTRO|INFORMACI[OÓ]N\s+COMPLEMENTARIA|TR[AÁ]MITE\s+VOLANTE|GRAV[AÁ]MENES|INSCRIPCIONES\s+DE\s+PROPIEDAD|ANOTACIONES\s+PREVENTIVAS|$)", texto_base, re.I)
     if seccion:
         texto = seccion.group(1)
         patron = "|".join(f"(?P<g{n}>{pat})" for n, (_, pat) in enumerate(_ETIQUETAS_INMUEBLE))
@@ -644,6 +644,10 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
         "nombre_conyuge": nombre_conyuge,
     }
     resultado.update(puntos_inmueble)
+    # Lo que no se encontró se deja vacío (en pantalla se marca en rojo para llenarlo)
+    for clave, valor in resultado.items():
+        if isinstance(valor, str) and valor.strip().upper() in ("NO_ENCONTRADO", "NONE", "NULL", "N/A"):
+            resultado[clave] = ""
     return resultado
 
 @app.on_event("startup")

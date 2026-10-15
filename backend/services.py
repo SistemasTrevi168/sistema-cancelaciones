@@ -635,6 +635,44 @@ def formatear_notario(texto):
     titulo = "de la Licenciada" if mujer else "del Licenciado"
     return f"{titulo} {nombre_propio(nombre)}, {resto}"
 
+# Encabezado y pie que pone el navegador al imprimir la consulta del IFREM a PDF:
+#   "2/10/26, 4:19 p.m."  "nt.ifrem.gob.mx/portal/...?linea=..."  "https://nt.ifrem.gob.mx/..."  "1/2"
+_FECHA_NAVEGADOR = r"\d{1,2}/\d{1,2}/\d{2,4},\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]\.?\s*m\.?)?"
+_URL_PORTAL = r"(?:https?://)?[\w.-]*ifrem\.gob\.mx/\S*"
+_CONTADOR_PAGINA = r"\d{1,3}\s*/\s*\d{1,3}"
+
+
+def quitar_encabezados_navegador(texto: str) -> str:
+    """Quita del texto la fecha, el link y el número de página que imprime el navegador en cada hoja."""
+    if not texto:
+        return texto
+    lineas = texto.split("\n")
+    salida = []
+    anterior_era_basura = False
+    for linea in lineas:
+        limpia = linea.strip()
+        resto = re.sub(_URL_PORTAL, " ", limpia, flags=re.I)
+        hubo_url = resto != limpia
+        resto = re.sub(rf"^\s*{_FECHA_NAVEGADOR}", " ", resto, flags=re.I)
+        hubo_fecha = resto.strip() != re.sub(_URL_PORTAL, " ", limpia, flags=re.I).strip()
+        if hubo_url or hubo_fecha:
+            resto = re.sub(rf"\s+{_CONTADOR_PAGINA}\s*$", " ", resto)
+        resto = resto.strip()
+        # Línea que solo traía el contador de página ("1/2") justo después del link
+        if anterior_era_basura and re.fullmatch(_CONTADOR_PAGINA, limpia):
+            continue
+        if (hubo_url or hubo_fecha) and not resto:
+            anterior_era_basura = True
+            continue
+        if hubo_url:
+            salida.append(resto)
+            anterior_era_basura = True
+            continue
+        salida.append(linea)
+        anterior_era_basura = False
+    return "\n".join(salida)
+
+
 def extraer_datos_pdf(ruta_pdf):
     datos = {
         "numero_carta": "NO_ENCONTRADO",
@@ -664,7 +702,7 @@ def extraer_datos_pdf(ruta_pdf):
         texto_completo = ""
         paginas_texto = []
         for pagina in doc:
-            texto_pagina = pagina.get_text()
+            texto_pagina = quitar_encabezados_navegador(pagina.get_text())
             paginas_texto.append(texto_pagina)
             texto_completo += texto_pagina + "\n"
         doc.close()

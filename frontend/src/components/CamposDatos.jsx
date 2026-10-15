@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Lock, Pencil, Unlock } from 'lucide-react';
 import { useApp } from '../AppContext';
-import { CAMPOS_LARGOS, agruparDatos, etiquetaDe } from '../camposExpediente';
+import { CAMPOS_LARGOS, agruparDatos, esPuntoInmueble, etiquetaDe } from '../camposExpediente';
+import { esDatoVacio } from '../datosFaltantes';
 
 // Lista de datos de un expediente, agrupada y editable.
 // prefijo: identifica los candados de este expediente (ej. 'single' o 'batch_3').
@@ -24,9 +25,12 @@ export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, 
   const tam = compacto ? { fuente: '12px', relleno: '8px 10px', boton: '8px', icono: 14 } : { fuente: '13px', relleno: '10px 12px', boton: '10px', icono: 16 };
 
   const campo = (clave) => {
-    const valor = datos[clave];
+    // "NO_ENCONTRADO" ya no se muestra: el campo queda vacío y marcado en rojo
+    const valor = esDatoVacio(datos[clave]) ? '' : datos[clave];
     const editable = !!unlockedFields[`${prefijo}_${clave}`];
-    const falta = faltantes.includes(clave) || String(valor ?? '').trim().toUpperCase() === 'NO_ENCONTRADO';
+    const conConyuge = /^s[ií]/i.test(String(datos.tiene_conyuge || '')) || !esDatoVacio(datos.nombre_conyuge);
+    const opcional = esPuntoInmueble(clave) || clave === 'tiene_conyuge' || (clave === 'nombre_conyuge' && !conConyuge);
+    const falta = faltantes.includes(clave) || (valor === '' && !opcional);
     const largo = CAMPOS_LARGOS.has(clave);
     const estilo = {
       flex: 1,

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import {
-  AlertTriangle, ArrowLeft, CheckCircle, ChevronLeft, ChevronRight, Eye, FileArchive, FolderPlus, Layers, ListChecks, Loader2, PencilLine, Save, Sparkles, Trash2, Upload, X,
+  AlertTriangle, ArrowLeft, CheckCircle, ChevronLeft, ChevronRight, Eye, FolderPlus, Layers, ListChecks, Loader2, PencilLine, Save, Sparkles, Trash2, Upload, X,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
 import OpcionesPlantilla from './OpcionesPlantilla';
+import ZonaArchivos from './ZonaArchivos';
 import EspacioExpediente from './EspacioExpediente';
 import { nombrePlantilla } from '../plantillasCatalogo';
 
@@ -25,13 +26,15 @@ export default function TabMasivo() {
     batchPreviewIndex,
     batchResults,
     handleApplyTemplateToSelected,
-    handleBatchFileChange,
+    cartasLote,
+    constanciasLote,
+    agregarArchivosLote,
+    quitarArchivoDeLote,
+    soltarArchivosLote,
     handleBatchInputChange,
     handleBatchPlantillaChange,
     handleDownloadWord,
     handleDownloadZip,
-    handleDragOver,
-    handleDropBatch,
     handleSelectAllBatch,
     handleToggleSelectBatch,
     handleUploadBatch,
@@ -96,6 +99,7 @@ export default function TabMasivo() {
         previaActiva={batchPreviewIndex === idx}
         onPrevia={() => abrirVistaPrevia({ origen: 'batch', index: idx, flotante: true, lado: 'izquierda' })}
         onGuardar={() => guardarLote([idx])}
+        avisos={res.avisos}
         guardandoAhora={!!guardando[res.ref]}
       />
     );
@@ -108,46 +112,41 @@ export default function TabMasivo() {
         <>
           <div className="carga-encabezado">
             <h2 style={{ color: theme.textPrimary }}><FolderPlus size={20} color={theme.accent} /> Carga masiva de expedientes</h2>
-            <p style={{ color: theme.textSecondary }}>Sube una carpeta con las cartas y constancias de varios créditos. Se agrupan por número de crédito y se leen sus datos para que los revises, muevas archivos entre expedientes y corrijas; <strong>nada se guarda</strong> hasta que le des “Guardar”.</p>
+            <p style={{ color: theme.textSecondary }}>Sube las <strong>cartas</strong> y las <strong>constancias</strong> de varios créditos, cada tipo en su recuadro (archivos sueltos o carpetas). Se leen sus datos para que los revises, muevas archivos entre expedientes y corrijas; <strong>nada se guarda</strong> hasta que le des “Guardar”.</p>
           </div>
-          <div className="carga-rejilla">
-            <div onDragOver={handleDragOver} onDrop={handleDropBatch} className="zona-soltar" style={{ borderColor: theme.dropzoneBorder, backgroundColor: theme.dropzoneBg }}>
-              <FileArchive size={40} color={theme.accent} />
-              <p className="zona-titulo" style={{ color: theme.textPrimary }}>Arrastra aquí tu carpeta o varios PDF</p>
-              <p className="zona-ayuda" style={{ color: theme.textSecondary }}>se revisan también las subcarpetas</p>
-              <input type="file" multiple accept=".pdf" webkitdirectory="true" onChange={handleBatchFileChange} style={{ display: 'none' }} id="batch-file-input" />
-              <label htmlFor="batch-file-input" className="boton-barra" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border, cursor: 'pointer' }}>
-                Buscar carpeta / archivos
-              </label>
+          <div className="zonas-tipo">
+            <ZonaArchivos
+              tipo="carta"
+              varios
+              archivos={cartasLote}
+              onElegir={(fs) => agregarArchivosLote('carta', fs)}
+              onSoltar={(e) => soltarArchivosLote('carta', e)}
+              onQuitar={(f) => quitarArchivoDeLote('carta', f)}
+              ayuda="Arrastra aquí las cartas (PDF sueltos o una carpeta)"
+            />
+            <ZonaArchivos
+              tipo="constancia"
+              varios
+              archivos={constanciasLote}
+              onElegir={(fs) => agregarArchivosLote('constancia', fs)}
+              onSoltar={(e) => soltarArchivosLote('constancia', e)}
+              onQuitar={(f) => quitarArchivoDeLote('constancia', f)}
+              ayuda="Arrastra aquí las constancias (PDF sueltos o una carpeta)"
+            />
+          </div>
+
+          <div className="carga-acciones" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
+            <div style={{ flex: 1, minWidth: '240px' }}>
+              <label htmlFor="plantilla-lote" className="carga-subtitulo" style={{ color: theme.textSecondary }}>Plantilla inicial del lote</label>
+              <select id="plantilla-lote" value={selectedPlantilla} onChange={(e) => setSelectedPlantilla(e.target.value)} className="selector-plantilla selector-grande" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}>
+                <OpcionesPlantilla />
+              </select>
+              <p style={{ fontSize: '12px', color: theme.textSecondary, margin: '6px 0 0 0' }}>
+                Cada carta se junta con su constancia por el número de crédito (o por el nombre del acreditado). Después puedes mover archivos entre expedientes.
+              </p>
             </div>
 
-            <div className="carga-panel" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
-              <div>
-                <div className="carga-subtitulo" style={{ color: theme.textSecondary }}>Archivos detectados ({batchFiles.length})</div>
-                {batchFiles.length === 0 ? (
-                  <p style={{ fontSize: '13px', color: theme.textSecondary, margin: '6px 0 0 0' }}>Todavía no has elegido archivos.</p>
-                ) : (
-                  <ul className="lista-archivos">
-                    {batchFiles.map((f, i) => (
-                      <li key={i} style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary }}>
-                        <IconoArchivo tipo="pdf" size={18} />
-                        <span>{f.name}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="plantilla-lote" className="carga-subtitulo" style={{ color: theme.textSecondary }}>Plantilla inicial del lote</label>
-                <select id="plantilla-lote" value={selectedPlantilla} onChange={(e) => setSelectedPlantilla(e.target.value)} className="selector-plantilla selector-grande" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}>
-                  <OpcionesPlantilla />
-                </select>
-                <p style={{ fontSize: '12px', color: theme.textSecondary, margin: '6px 0 0 0' }}>
-                  Después puedes usar la plantilla sugerida de cada expediente o cambiarla a mano.
-                </p>
-              </div>
-
+            <div style={{ flex: 1, minWidth: '240px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {batchLoading && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px', color: theme.textSecondary }}>
@@ -158,7 +157,11 @@ export default function TabMasivo() {
                   </div>
                 </div>
               )}
-
+              {!batchLoading && batchFiles.length > 0 && cartasLote.length !== constanciasLote.length && (
+                <p style={{ fontSize: '12px', color: '#b45309', margin: 0 }}>
+                  Hay {cartasLote.length} carta(s) y {constanciasLote.length} constancia(s): algunos expedientes quedarán incompletos.
+                </p>
+              )}
               <div style={{ display: 'flex', gap: '8px' }}>
                 {batchResults.length > 0 && !batchLoading && (
                   <button type="button" className="boton-barra" onClick={() => setCargaAbierta(false)} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
@@ -173,7 +176,7 @@ export default function TabMasivo() {
                   style={{ backgroundColor: batchFiles.length === 0 || batchLoading ? theme.subtleBg : theme.accent, color: batchFiles.length === 0 || batchLoading ? theme.textSecondary : '#fff', cursor: batchFiles.length === 0 || batchLoading ? 'not-allowed' : 'pointer' }}
                 >
                   {batchLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <FolderPlus size={16} />}
-                  Leer documentos
+                  Leer documentos ({batchFiles.length})
                 </button>
               </div>
             </div>
@@ -276,11 +279,18 @@ export default function TabMasivo() {
                     {res.leyendo && <Loader2 size={15} color={theme.accent} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />}
                   </button>
 
+                  {res.avisos?.length > 0 && (
+                    <div className="fila-avisos">
+                      {res.avisos.map((a) => <span key={a}><AlertTriangle size={12} /> {a}</span>)}
+                    </div>
+                  )}
+
                   {/* Archivos del expediente: se pueden mover a otro o quitar mientras sea borrador */}
                   <div className="fila-archivos">
                     {(res.archivos || []).map((n) => (
                       <span key={n} className="chip-archivo" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg, color: theme.textPrimary }} title={n}>
                         <IconoArchivo tipo="pdf" size={14} />
+                        {res.tipos?.[n] && <span className={`marca-tipo ${res.tipos[n]}`}>{res.tipos[n] === 'carta' ? 'Carta' : 'Constancia'}</span>}
                         <span className="chip-archivo-nombre">{n}</span>
                         {!guardado && !res.leyendo && (
                           <>

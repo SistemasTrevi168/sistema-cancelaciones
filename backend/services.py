@@ -111,37 +111,19 @@ def numero_a_palabras_generico(numero):
     return f"{texto_enteros}{texto_dec}"
 
 def convertir_vsm_a_letras(val_str):
-    """Convierte el valor de veces salario mínimo manejando los decimales agrupados de dos en dos."""
+    """
+    Veces salario mínimo con letra. Después del punto se lee la cifra completa
+    y los ceros del inicio uno por uno:
+      45.2095 -> cuarenta y cinco punto dos mil noventa y cinco
+      45.0003 -> cuarenta y cinco punto cero cero cero tres
+      45.0000 -> cuarenta y cinco punto cero cero cero cero
+    """
     if not val_str or str(val_str).upper() in ["NO_ENCONTRADO", "NONE", ""]:
         return ""
-    try:
-        val_str = str(val_str).replace(',', '').strip()
-        if '.' in val_str:
-            partes = val_str.split('.')
-            enteros = int(partes[0]) if partes[0] else 0
-            dec_part = partes[1] if len(partes) > 1 and partes[1] else ""
-            texto_enteros = numero_a_palabras_generico(enteros).lower()
-            
-            if dec_part:
-                dec_str = dec_part.strip()
-                if len(dec_str) % 2 != 0:
-                    dec_str += '0'
-                pares_dec = []
-                for i in range(0, len(dec_str), 2):
-                    par = int(dec_str[i:i+2])
-                    if par == 0:
-                        pares_dec.append("cero")
-                    else:
-                        pares_dec.append(numero_a_palabras_generico(par).lower())
-                texto_dec = " " + " ".join(pares_dec)
-            else:
-                texto_dec = ""
-                
-            return f"{texto_enteros} punto{texto_dec}"
-        else:
-            return numero_a_palabras_generico(int(val_str)).lower()
-    except Exception:
+    limpio = str(val_str).replace(',', '').strip()
+    if not re.fullmatch(r"\d*\.?\d+", limpio):
         return str(val_str)
+    return numero_a_palabras_generico(limpio).lower()
 
 def convertir_fecha_texto(texto_fecha):
     if not texto_fecha or str(texto_fecha).upper() in ["NO_ENCONTRADO", "NONE", ""]:
@@ -274,6 +256,56 @@ def numero_a_letras(numero):
         texto_enteros = f"{entero_en_letras(enteros, apocope=True)} {moneda}"
     texto_centavos = f"CON {grupo_en_letras(centavos, apocope=True)} CENTAVOS" if centavos > 0 else "CON CERO CENTAVOS"
     return f"{texto_enteros} {texto_centavos}, MONEDA NACIONAL"
+
+# Abreviaturas que vienen en las constancias y cartas -> texto completo
+_ABREVIATURAS = [
+    (r"\bUNID(?:AD)?\.?\s*HAB(?:ITACIONAL)?\.?(?=\s|,|$)|\bU\.\s?H\.(?=\s|,|$)", "UNIDAD HABITACIONAL"),
+    (r"\bSUPER\s*MZA\.?(?=\s|,|$)|\bS\.\s?M\.(?=\s|,|$)|\bSMZA\.?(?=\s|,|$)|\bSMZ\.?(?=\s|,|$)", "SUPERMANZANA"),
+    (r"\bMZA?\.?(?=\s|,|$)", "MANZANA"),
+    (r"\bLOT\.(?=\s|,|$)|\bLT\.?(?=\s|,|$)", "LOTE"),
+    (r"\bCOND\.(?=\s|,|$)|\bCOND(?=\s|,|$)", "CONDOMINIO"),
+    (r"\bD(?:E)?PTO\.?(?=\s|,|$)", "DEPARTAMENTO"),
+    (r"\bEDIF\.?(?=\s|,|$)|\bEDF\.?(?=\s|,|$)|\bED\.(?=\s|,|$)", "EDIFICIO"),
+    (r"\bFRACC?\.?(?=\s|,|$)", "FRACCIONAMIENTO"),
+    (r"\bCOL\.(?=\s|,|$)", "COLONIA"),
+    (r"\bAVE?\.(?=\s|,|$)", "AVENIDA"),
+    (r"\bCDA\.?(?=\s|,|$)", "CERRADA"),
+    (r"\bPRIV\.?(?=\s|,|$)", "PRIVADA"),
+    (r"\bPROL\.?(?=\s|,|$)", "PROLONGACIÓN"),
+    (r"\bBLVD\.?(?=\s|,|$)", "BOULEVARD"),
+    (r"\bCALZ\.?(?=\s|,|$)", "CALZADA"),
+    (r"\bCJTO\.?(?=\s|,|$)|\bCONJ\.(?=\s|,|$)", "CONJUNTO"),
+    (r"\bHAB\.(?=\s|,|$)", "HABITACIONAL"),
+    (r"\bVIV\.?(?=\s|,|$)", "VIVIENDA"),
+    (r"\bCS\.?(?=\s+\d)", "CASA"),
+    (r"\bINT\.(?=\s|,|$)", "INTERIOR"),
+    (r"\bEXT\.(?=\s|,|$)", "EXTERIOR"),
+    (r"\bN[UÚ]M\.(?=\s|,|$)|\bNO\.(?=\s*\d)", "NÚMERO"),
+    (r"\bSECC?\.(?=\s|,|$)", "SECCIÓN"),
+    (r"\bRESID?\.(?=\s|,|$)", "RESIDENCIAL"),
+    (r"\bMPIO\.?(?=\s|,|$)", "MUNICIPIO"),
+    (r"\bEDO\.?\s*(?:DE\s+)?M[EÉ]X\.?(?=\s|,|$)", "ESTADO DE MÉXICO"),
+    (r"\bEDO\.(?=\s|,|$)", "ESTADO"),
+    (r"\bC\.\s?P\.(?=\s|,|$)", "CÓDIGO POSTAL"),
+    (r"\bPTE\.(?=\s|,|$)", "PONIENTE"),
+    (r"\bOTE\.(?=\s|,|$)", "ORIENTE"),
+    (r"\bNTE\.(?=\s|,|$)", "NORTE"),
+    (r"\bETP\.?(?=\s|,|$)", "ETAPA"),
+    (r"\bLOC\.(?=\s|,|$)", "LOCALIDAD"),
+    (r"\bBO\.(?=\s|,|$)|\bBARR\.(?=\s|,|$)", "BARRIO"),
+    (r"\bS\s?/\s?N\b", "SIN NÚMERO"),
+]
+
+
+def expandir_abreviaturas(texto):
+    """LOT. 5 COND. LAS FLORES -> LOTE 5 CONDOMINIO LAS FLORES"""
+    if not texto:
+        return texto
+    t = str(texto)
+    for patron, completo in _ABREVIATURAS:
+        t = re.sub(patron, completo, t, flags=re.I)
+    return re.sub(r"\s{2,}", " ", t).strip()
+
 
 def convertir_inmueble_a_letras(texto_inmueble):
     if not texto_inmueble or texto_inmueble == "NO_ENCONTRADO":
@@ -459,7 +491,13 @@ def extraer_notario_robusto(texto_limpio, texto_completo=""):
             jurisdiccion = match.group(3).strip()
             jurisdiccion = re.sub(r'\s+(?:CON|RESIDENCIA|RESICENCIA|EN|DE).*$', '', jurisdiccion).strip()
             
-            palabras_n = [p for p in posible_nombre.split() if p not in prohibidas and len(p) > 1 and not p.isdigit()]
+            particulas = {"DE", "DEL", "LA", "LAS", "LOS", "Y"}
+            # Las partículas (de, del, la, y) se conservan dentro del nombre: MARIA DE LA LUZ, ESCOBAR Y EZETA
+            palabras_n = [p for p in posible_nombre.split() if (p in particulas or p not in prohibidas) and (len(p) > 1 or p == "Y") and not p.isdigit()]
+            while palabras_n and palabras_n[0] in particulas:
+                palabras_n.pop(0)
+            while palabras_n and palabras_n[-1] in particulas:
+                palabras_n.pop()
             if palabras_n:
                 nombre_limpio = " ".join(palabras_n)
                 if "JUAN CARLOS" in nombre_limpio.upper():
@@ -544,14 +582,56 @@ def extraer_notario_robusto(texto_limpio, texto_completo=""):
             menciones_extra.append("Patrimonio Inmueble Federal")
         elif "INMOBILIARIO FEDERAL" in sup_upper:
             menciones_extra.append("Inmobiliario Federal")
-        if " NACIONAL" in sup_upper or "DEL NACIONAL" in sup_upper:
+        if menciones_extra and (" NACIONAL" in sup_upper or "DEL NACIONAL" in sup_upper):
             if "nacional" not in str(texto_resultado).lower():
                 menciones_extra.append("Nacional")
         
         if menciones_extra and texto_resultado != "NO_ENCONTRADO":
             texto_resultado += f", {', '.join(menciones_extra)}"
 
-    return texto_resultado
+    return formatear_notario(texto_resultado)
+
+
+_PALABRAS_MINUSCULA = {"DE", "DEL", "LA", "LAS", "LOS", "Y", "E", "VON", "VAN"}
+
+
+def nombre_propio(nombre):
+    """JUAN PEREZ DE LA ROSA -> Juan Perez de la Rosa"""
+    palabras = str(nombre or "").split()
+    res = []
+    for i, p in enumerate(palabras):
+        up = p.upper()
+        if i > 0 and up in _PALABRAS_MINUSCULA:
+            res.append(p.lower())
+        else:
+            res.append("-".join(x[:1].upper() + x[1:].lower() for x in p.split("-")))
+    return " ".join(res)
+
+
+def formatear_notario(texto):
+    """
+    Deja el notario listo para la plantilla ("ante la fe {{ notario_origen_completo }}"):
+      del Licenciado Jorge Valdes Ramirez, Notario Público número veinticuatro del Estado de México
+      de la Licenciada Ana Luisa Martinez Soto, Notaria Pública número ochenta y ocho del Estado de México
+    Si ya tiene ese formato (o no se reconoce), se regresa igual.
+    """
+    t = " ".join(str(texto or "").split())
+    if not t or t.upper() == "NO_ENCONTRADO":
+        return texto
+    if re.match(r"^(del\s+licenciad[oa]|de\s+la\s+licenciad[oa])\b", t, re.I):
+        return t
+    m = re.search(r"\bNOTARI[OA]\s+P[UÚ]BLIC[OA]\b", t, re.I)
+    if not m:
+        return t
+    nombre = t[:m.start()].strip(" ,.-")
+    resto = t[m.start():].strip()
+    nombre = re.sub(r"^(?:EL\s+|LA\s+)?(?:LICENCIAD[OA]|LIC\.?)\s*", "", nombre, flags=re.I).strip(" ,.")
+    if not nombre or len(nombre.split()) < 2:
+        return t
+    mujer = genero_por_nombre(nombre) == "FEMENINO"
+    resto = re.sub(r"^NOTARI[OA]\s+P[UÚ]BLIC[OA]", "Notaria Pública" if mujer else "Notario Público", resto, flags=re.I)
+    titulo = "de la Licenciada" if mujer else "del Licenciado"
+    return f"{titulo} {nombre_propio(nombre)}, {resto}"
 
 def extraer_datos_pdf(ruta_pdf):
     datos = {
@@ -823,6 +903,7 @@ CAMPOS_DE_CONSTANCIA = {
     "monto_credito", "monto_credito_letras", "credito_a_salario", "datos_inmueble",
     "folio_real", "oficina_registral", "tiene_conyuge", "nombre_conyuge", "numero_escritura",
     "fecha_escritura", "notario_origen_completo", "estado_civil",
+    "texto_raw",  # el desglose del inmueble se arma con el texto de la constancia
 }
 # Si no vienen en su documento, se pueden tomar del otro (son el mismo dato en los dos)
 CAMPOS_CON_RESPALDO = {"numero_credito", "numero_credito_letras", "entidad_financiera", "nombre_acreditado"}

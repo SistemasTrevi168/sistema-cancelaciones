@@ -203,6 +203,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [versionPrevia, setVersionPrevia] = useState(0);        // para el botón "volver a generar"
   const [actosSingle, setActosSingle] = useState([]); // actos de la constancia (caso individual)
   const [sugerenciaBase, setSugerenciaBase] = useState(null); // plantilla sugerida según los documentos
+  const [avisosSingle, setAvisosSingle] = useState([]); // avisos al leer (ej. falta la constancia)
   const turnoPrevia = useRef(0);                                // descarta respuestas viejas
   const hayDocumentoPrevia = useRef(false);
   const manualPreviewRef = useRef(null);
@@ -211,7 +212,10 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [unlockedFields, setUnlockedFields] = useState({});
 
   // --- 6. ESTADOS - Caso Individual ---
-  const [singleFiles, setSingleFiles] = useState([]);
+  // Caso individual: la carta y la constancia se suben por separado
+  const [cartaSingle, setCartaSingle] = useState(null);
+  const [constanciaSingle, setConstanciaSingle] = useState(null);
+  const singleFiles = [cartaSingle, constanciaSingle].filter(Boolean);
   const [loading, setLoading] = useState(false);
   const [progressSingle, setProgressSingle] = useState(0);
   const [expedienteId, setExpedienteId] = useState('');
@@ -219,7 +223,10 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [error, setError] = useState('');
 
   // --- 7. ESTADOS - Carga Masiva ---
-  const [batchFiles, setBatchFiles] = useState([]);
+  // Carga masiva: cartas y constancias en recuadros separados
+  const [cartasLote, setCartasLote] = useState([]);
+  const [constanciasLote, setConstanciasLote] = useState([]);
+  const batchFiles = [...cartasLote, ...constanciasLote];
   const [batchLoading, setBatchLoading] = useState(false);
   const [progressBatch, setProgressBatch] = useState(0);
   const [batchResults, setBatchResults] = useState([]);
@@ -542,8 +549,8 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         setTimeout(() => setBienvenida(null), 2100);
         setTimeout(() => setAnimarEntrada(false), 3000);
         setLoginPassword('');
-        setSingleFiles([]);
-        setDatos(null); setActosSingle([]); setSugerenciaBase(null);
+        setCartaSingle(null); setConstanciaSingle(null);
+        setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]);
         setBatchResults([]);
       }
     } catch (err) {
@@ -571,7 +578,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setError('');
       setLoginUser('');
       setLoginPassword('');
-      setDatos(null); setActosSingle([]); setSugerenciaBase(null);
+      setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]);
       setBatchResults([]);
       setHistorial([]);
 
@@ -837,77 +844,70 @@ const handlePreviewExcel = async (file) => {
     e.stopPropagation();
   };
 
-  const handleDropSingle = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const files = Array.from(e.dataTransfer.files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
-      if (files.length > 0) {
-        setSingleFiles(files);
-        setDatos(null); setActosSingle([]); setSugerenciaBase(null);
-      }
-    }
-  };
-
-  const handleDropBatch = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    let allPdfFiles = [];
-    const items = e.dataTransfer.items;
-
+  // Archivos PDF de lo que se soltó (archivos sueltos o carpetas con subcarpetas)
+  const pdfsDeSoltar = async (e) => {
+    let pdfs = [];
+    const items = e.dataTransfer?.items;
     if (items && items.length > 0) {
-      const promises = [];
+      const entradas = [];
       for (let i = 0; i < items.length; i++) {
         const entry = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
-        if (entry) promises.push(scanFilesFromEntry(entry));
+        if (entry) entradas.push(scanFilesFromEntry(entry));
       }
-      if (promises.length > 0) {
-        const results = await Promise.all(promises);
-        allPdfFiles = results.flat();
-      }
+      if (entradas.length) pdfs = (await Promise.all(entradas)).flat();
     }
-
-    if (allPdfFiles.length === 0 && e.dataTransfer.files) {
-      allPdfFiles = Array.from(e.dataTransfer.files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
+    if (pdfs.length === 0 && e.dataTransfer?.files) {
+      pdfs = Array.from(e.dataTransfer.files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
     }
-
-    if (allPdfFiles.length > 0) {
-      if (!(await descartarLoteSinGuardar())) return;
-      setBatchFiles(allPdfFiles);
-      setBatchResults([]);
-      setError('');
-    } else {
-      setError('No se encontraron archivos PDF.');
-    }
+    return pdfs;
   };
 
-  const handleSingleFileChange = (e) => {
-    if (e.target.files) {
-      const filesArray = Array.from(e.target.files);
-      if (filesArray.length > 2) {
-        avisar.aviso("⚠️ Solo se permite un máximo de 2 archivos para el trámite individual.");
-        e.target.value = "";
-        return;
-      }
-      setSingleFiles(filesArray);
-      setDatos(null); setActosSingle([]); setSugerenciaBase(null);
-    }
+  // Tipo de cada archivo según el recuadro donde se subió
+  const tipoDeArchivo = (f) => (f === cartaSingle || cartasLote.includes(f) ? 'carta' : 'constancia');
+
+  // ---- Caso individual ----
+  const elegirArchivoSingle = (tipo, archivos) => {
+    const pdf = Array.from(archivos || []).find((f) => f.name.toLowerCase().endsWith('.pdf'));
+    if (!pdf) { avisar.aviso('Elige un archivo PDF.'); return; }
+    if (tipo === 'carta') setCartaSingle(pdf); else setConstanciaSingle(pdf);
+    setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]); setError('');
+  };
+  const quitarArchivoSingle = (tipo) => {
+    if (tipo === 'carta') setCartaSingle(null); else setConstanciaSingle(null);
+  };
+  const soltarArchivoSingle = async (tipo, e) => {
+    e.preventDefault(); e.stopPropagation();
+    elegirArchivoSingle(tipo, await pdfsDeSoltar(e));
   };
 
+  // ---- Carga masiva ----
   // Antes de cambiar los archivos del lote, avisar si hay expedientes leídos sin guardar
   const descartarLoteSinGuardar = async () => {
     const sinGuardar = batchResults.filter((r) => !r.error && !r.expediente_id).length;
     return sinGuardar === 0 || confirmar(`${sinGuardar} expediente(s) del lote anterior no se han guardado y se perderán.`, { titulo: '¿Cargar otro lote?', textoConfirmar: 'Sí, cargar otro', peligro: true });
   };
-
-  const handleBatchFileChange = async (e) => {
-    const input = e.target;
-    if (input.files) {
-      const selectedFiles = Array.from(input.files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
-      if (!(await descartarLoteSinGuardar())) { input.value = ''; return; }
-      setBatchFiles(selectedFiles);
+  const agregarArchivosLote = async (tipo, archivos) => {
+    const pdfs = Array.from(archivos || []).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
+    if (pdfs.length === 0) { avisar.aviso('No se encontraron archivos PDF.'); return; }
+    if (batchResults.length > 0) {
+      if (!(await descartarLoteSinGuardar())) return;
       setBatchResults([]);
     }
+    // Se agregan a los que ya estaban (sin repetir el mismo archivo)
+    const fijar = tipo === 'carta' ? setCartasLote : setConstanciasLote;
+    fijar((prev) => {
+      const ya = new Set(prev.map((f) => `${f.name}|${f.size}`));
+      return [...prev, ...pdfs.filter((f) => !ya.has(`${f.name}|${f.size}`))];
+    });
+    setError('');
+  };
+  const quitarArchivoDeLote = (tipo, archivo) => {
+    const fijar = tipo === 'carta' ? setCartasLote : setConstanciasLote;
+    fijar((prev) => (archivo ? prev.filter((f) => f !== archivo) : []));
+  };
+  const soltarArchivosLote = async (tipo, e) => {
+    e.preventDefault(); e.stopPropagation();
+    await agregarArchivosLote(tipo, await pdfsDeSoltar(e));
   };
 
   const handleUploadSingle = async () => {
@@ -924,7 +924,7 @@ const handlePreviewExcel = async (file) => {
 
     // Solo se LEEN los datos (no se guarda nada): primero se revisan y después se guardan
     const formDataObj = new FormData();
-    singleFiles.forEach((f) => formDataObj.append('files', f));
+    singleFiles.forEach((f) => { formDataObj.append('files', f); formDataObj.append('tipos', tipoDeArchivo(f)); });
     formDataObj.append('agrupar', 'false');
 
     try {
@@ -943,6 +943,7 @@ const handlePreviewExcel = async (file) => {
         setDatos({ numero_credito: rawDatos.numero_credito || '', ...rawDatos });
         setActosSingle(borrador.actos || []);
         setSugerenciaBase(borrador.plantilla_sugerida || null);
+        setAvisosSingle(borrador.avisos || []);
         setUnlockedFields({});
         setLoading(false);
       }, 300);
@@ -1040,6 +1041,8 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
     ref: b.id,
     clave: b.clave,
     archivos: b.archivos || [],
+    tipos: b.tipos || {},
+    avisos: b.avisos || [],
     error: b.error,
     expediente_id: null,
     plantilla_seleccionada: selectedPlantilla,
@@ -1050,7 +1053,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
 
   const leerArchivos = async (archivos, agrupar) => {
     const formDataObj = new FormData();
-    archivos.forEach((f) => formDataObj.append('files', f));
+    archivos.forEach((f) => { formDataObj.append('files', f); formDataObj.append('tipos', tipoDeArchivo(f)); });
     formDataObj.append('agrupar', agrupar ? 'true' : 'false');
     const res = await api.post('/expedientes/leer', formDataObj);
     return res.data.borradores || [];
@@ -1070,7 +1073,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
     const paquetes = [];
     let actual = [];
     Object.values(grupos).forEach((g) => {
-      if (actual.length && actual.length + g.length > 15) { paquetes.push(actual); actual = []; }
+      if (actual.length && actual.length + g.length > 40) { paquetes.push(actual); actual = []; }
       actual = actual.concat(g);
     });
     if (actual.length) paquetes.push(actual);
@@ -1588,8 +1591,8 @@ const filteredHistorial = (historial || []).filter((item) => {
   const nuevoExpedienteSingle = async () => {
     if (datos && !expedienteId && !(await confirmar('Este expediente todavía no está guardado; si continúas se pierden los datos leídos y lo que hayas corregido.', { titulo: '¿Descartar el expediente?', textoConfirmar: 'Descartar', peligro: true }))) return;
     cerrarVistaPrevia();
-    setDatos(null); setActosSingle([]); setSugerenciaBase(null);
-    setSingleFiles([]); setExpedienteId(''); setError(''); setProgressSingle(0);
+    setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]);
+    setCartaSingle(null); setConstanciaSingle(null); setExpedienteId(''); setError(''); setProgressSingle(0);
     setUnlockedFields({});
   };
 
@@ -1676,6 +1679,7 @@ const filteredHistorial = (historial || []).filter((item) => {
   // Todo lo que las pantallas (components/) necesitan leer del estado de App
   const ctx = {
     guardarSingle,
+    avisosSingle,
     guardando,
     guardarLote,
     moverArchivoLote,
@@ -1733,7 +1737,16 @@ const filteredHistorial = (historial || []).filter((item) => {
     formData,
     formatLabel,
     handleApplyTemplateToSelected,
-    handleBatchFileChange,
+    cartaSingle,
+    constanciaSingle,
+    elegirArchivoSingle,
+    quitarArchivoSingle,
+    soltarArchivoSingle,
+    cartasLote,
+    constanciasLote,
+    agregarArchivosLote,
+    quitarArchivoDeLote,
+    soltarArchivosLote,
     handleBatchInputChange,
     handleBatchPlantillaChange,
     handleConfirmLogout,
@@ -1741,8 +1754,6 @@ const filteredHistorial = (historial || []).filter((item) => {
     handleDownloadWord,
     handleDownloadZip,
     handleDragOver,
-    handleDropBatch,
-    handleDropSingle,
     handleEliminarUsuario,
     handleExcelSubmit,
     handleExport,
@@ -1750,7 +1761,6 @@ const filteredHistorial = (historial || []).filter((item) => {
     handleLogin,
     handlePreviewExcel,
     handleSelectAllBatch,
-    handleSingleFileChange,
     handleToggleSelectBatch,
     handleToggleUnlock,
     handleUploadBatch,

@@ -12,7 +12,7 @@ import VisorDocumentos from './VisorDocumentos';
 export default function EspacioExpediente({
   destino, prefijo, datos, archivos, actos, plantilla, onPlantilla, sugerencia, onUsarSugerida,
   onCambio, expedienteId, navegacion = null, accionesExtra = null, previaActiva = false, onPrevia,
-  onGuardar, guardandoAhora = false,
+  onGuardar, guardandoAhora = false, avisos = [],
 }) {
   const { theme, isDarkMode, faltantesPara, etiquetaCampo, handleDownloadWord, descargandoId } = useApp();
   const faltan = faltantesPara(datos, plantilla);
@@ -96,6 +96,12 @@ export default function EspacioExpediente({
         </div>
 
         <div className="espacio-columna espacio-datos" style={{ borderColor: theme.border }}>
+          {avisos?.length > 0 && (
+            <div className="aviso-datos" style={{ backgroundColor: isDarkMode ? '#422006' : '#fff7ed', color: isDarkMode ? '#fdba74' : '#9a3412', borderColor: isDarkMode ? '#9a3412' : '#fed7aa' }}>
+              <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+              <div>{avisos.map((a) => <div key={a}>{a}</div>)}</div>
+            </div>
+          )}
           {faltan.length > 0 ? (
             <div className="aviso-datos" style={{ backgroundColor: isDarkMode ? '#422006' : '#fffbeb', color: isDarkMode ? '#fcd34d' : '#92400e', borderColor: isDarkMode ? '#a16207' : '#fcd34d' }}>
               <AlertTriangle size={16} style={{ flexShrink: 0 }} />

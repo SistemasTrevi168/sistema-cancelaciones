@@ -461,57 +461,98 @@ def corregir_numeros_compuestos(texto: str) -> str:
     return texto
 
 
+# Etiquetas de la tabla "DATOS DE IDENTIFICACIÓN" de la constancia del IFREM -> punto del inmueble
+_ETIQUETAS_INMUEBLE = [
+    ("11_denominacion_del_inmueble", r"DENOMINACI[OÓ]N\s+DEL\s+INMUEBLE"),
+    ("2_uso_de_suelo", r"USO\s+DE\s+SUELO"),
+    ("6_supermanzana", r"SUPER\s*(?:MZA|MANZANA)\.?"),
+    ("10_no_exterior", r"N(?:O|[UÚ]M)\.?\s*EXT(?:ERIOR)?\.?"),
+    ("3_no_interior", r"N(?:O|[UÚ]M)\.?\s*INT(?:ERIOR)?\.?"),
+    ("9_calle", r"CALLE"),
+    ("14_sector", r"SECTOR"),
+    ("12_seccion", r"SECCI[OÓ]N"),
+    ("7_etapa", r"ETAPA"),
+    ("5_manzana", r"MANZANA|MZA\.?"),
+    ("4_lote", r"LOTE"),
+    ("1_vivienda", r"VIVIENDA"),
+    ("8_condominio", r"CONDOMINIO"),
+    ("13_colonia", r"COLONIA|FRACCIONAMIENTO|LOCALIDAD|PUEBLO"),
+    ("19_codigo_postal", r"C\.\s?P\.|C[OÓ]DIGO\s+POSTAL"),
+    ("15_municipio", r"MUNICIPIO|ALCALD[IÍ]A|DELEGACI[OÓ]N"),
+    ("16_distrito", r"DISTRITO"),
+    ("17_estado", r"ESTADO"),
+    ("18_observaciones", r"OBSERVACIONES"),
+]
+_PUNTOS_INMUEBLE = ["1_vivienda", "2_uso_de_suelo", "3_no_interior", "4_lote", "5_manzana", "6_supermanzana", "7_etapa",
+                    "8_condominio", "9_calle", "10_no_exterior", "11_denominacion_del_inmueble", "12_seccion", "13_colonia",
+                    "14_sector", "15_municipio", "16_distrito", "17_estado", "18_observaciones", "19_codigo_postal"]
+_SIN_DATO = {"", "NO CONSTA", "NO_ENCONTRADO", "N/A", "NA", "-", "--", "---", "NINGUNO", "NINGUNA", "SIN DATO", "NULL", "NONE"}
+
+
+def _valor_inmueble(valor: str) -> str:
+    """Limpia un dato del inmueble: vacío si no viene, abreviaturas a texto completo, romanos a texto."""
+    v = " ".join(str(valor or "").split()).strip(" :,.;-")
+    if v.upper() in _SIN_DATO or re.fullmatch(r"(?:TR[AÁ]MITE|VOLANTE|FECHA|CLAVE).*", v, re.I):
+        return ""
+    v = services.expandir_abreviaturas(v)
+    return corregir_numeros_compuestos(convertir_romanos_a_texto(v))
+
+
 def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "") -> Dict[str, str]:
     """
-    Extrae y organiza los datos del inmueble utilizando el texto completo o el raw.
+    Datos del inmueble por punto. Lo que no viene en el PDF queda VACÍO ("") para que no se imprima.
+    Con constancia del IFREM se lee la tabla "DATOS DE IDENTIFICACIÓN" (etiqueta: valor).
     """
-    texto_base = str(texto_completo) if texto_completo else str(texto_inmueble_raw)
-    
-    # Resto de la lógica de extracción de puntos...
-    
-    etiquetas_prohibidas = {
-        "sector", "super", "uso", "lote", "manzana", "etapa", "condominio", 
-        "calle", "exterior", "interior", "colonia", "municipio", "estado", 
-        "delegacion", "alcaldia", "cp", "codigo postal", "vivienda", "inmueble",
-        "seccion", "distrito", "observaciones", "tramite", "edificio", "mza", "sm", "ext", "int", "no"
-    }
-    
-    def buscar(patrones, default="NO_ENCONTRADO"):
+    puntos = {k: "" for k in _PUNTOS_INMUEBLE}
+    texto_base = " ".join(str(texto_completo or texto_inmueble_raw or "").split())
+
+    seccion = re.search(r"DATOS\s+DE\s+IDENTIFICACI[OÓ]N\s*:?(.*?)(?=SUPERFICIE\s*:|RUMBOS|MEDIDAS\s+Y\s+COLINDANCIAS|DATOS\s+DE\s+REGISTRO|INFORMACI[OÓ]N\s+COMPLEMENTARIA|$)", texto_base, re.I)
+    if seccion:
+        texto = seccion.group(1)
+        patron = "|".join(f"(?P<g{n}>{pat})" for n, (_, pat) in enumerate(_ETIQUETAS_INMUEBLE))
+        marcas = list(re.finditer(rf"(?<![A-ZÁÉÍÓÚÑ])(?:{patron})\s*:", texto, re.I))
+        for n, m in enumerate(marcas):
+            clave = _ETIQUETAS_INMUEBLE[int(next(g for g, v in m.groupdict().items() if v)[1:])][0]
+            fin = marcas[n + 1].start() if n + 1 < len(marcas) else len(texto)
+            valor = _valor_inmueble(texto[m.end():fin])
+            # "Lote: LOTE 21" -> "Lote: 21"
+            palabra = clave.split("_", 1)[1].split("_")[0].upper()
+            if palabra in ("LOTE", "MANZANA", "SUPERMANZANA", "ETAPA", "SECTOR", "CONDOMINIO", "CALLE"):
+                valor = re.sub(rf"^{palabra}\s+", "", valor, flags=re.I)
+            if valor and not puntos[clave]:
+                puntos[clave] = valor
+        return puntos
+
+    # Sin tabla del IFREM: se buscan las etiquetas en el texto
+    def buscar(patrones):
         for p in patrones:
             match = re.search(p, texto_base, re.IGNORECASE)
             if match:
-                val = match.group(1).strip()
-                val_limpio = re.sub(r'^[:\s\-]+|[:\s\-]+$', '', val).strip()
-                if val_limpio and val_limpio.lower() not in etiquetas_prohibidas:
-                    val_romano = convertir_romanos_a_texto(val_limpio)
-                    val_ajustado = ajustar_digitos_segun_longitud(val_romano)
-                    return corregir_numeros_compuestos(val_ajustado)
-        return default
+                valor = _valor_inmueble(match.group(1))
+                if valor and valor.lower() not in {"no", "sector", "lote", "manzana", "calle", "colonia", "municipio", "estado"}:
+                    return valor
+        return ""
 
-    return {
-        "1_vivienda": buscar([r'VIVIENDA:\s*([^\n\r]+?)(?=\s+COLONIA:|$)', r'vivienda[:\s]+([^,;\n]+)', r'departamento|casa|lote']),
-        "2_uso_de_suelo": buscar([r'USO\s+DE\s+SUELO:\s*([^\n\r]+?)(?=\s+CALLE:|$)', r'uso\s+(?:de\s+)?suelo[:\s]+([^,;\n]+)']),
-        # Corregido para evitar capturar "No" suelto cuando está vacío en el IFREM
-        "3_no_interior": buscar([r'No\.\s+INT\.?:\s*([0-9a-zA-Z\-]+)(?=\s+SECTOR:|$)', r'(?:no\.?\s*int\.?|interior)[:\s]*([0-9a-zA-Z\-]+)']),
-        "4_lote": buscar([r'LOTE:\s*([0-9a-zA-Z\-]+)(?=\s+VIVIENDA:|$)', r'\blote[:\s]*([0-9a-zA-Z\-]+)']),
-        "5_manzana": buscar([r'MANZANA:\s*([0-9a-zA-Z\-]+)', r'(?:manzana|\bmza\.?)[:\s]*([0-9a-zA-Z\-]+)']),
-        "6_supermanzana": buscar([r'SUPER\s+MZA:\s*([^\n\r]*?)(?=\s+MANZANA:|$)', r'(?:supermanzana|\bsm\.?)[:\s]*([0-9a-zA-Z\-]+)']),
-        "7_etapa": buscar([r'ETAPA:\s*([^\n\r]*?)(?=\s+SUPER\s+MZA:|$)', r'etapa[:\s]*([0-9a-zA-Z\-]+)']),
-        "8_condominio": buscar([r'(?:condominio|conjunto\s+habitacional)[:\s]+([^,;\n]+)']),
-        "9_calle": buscar([r'CALLE:\s*([^\n\r]+?)(?=\s+No\.\s+EXT:|$)', r'(?:calle|avenida|blvd\.?)[:\s]+([^,;\n]+)']),
-        # Corregido para atrapar solo valores válidos (excluyendo la etiqueta "No.")
-        "10_no_exterior": buscar([r'No\.\s+EXT\.?:\s*(?!No\.)([0-9a-zA-Z\-]+)(?=\s+No\.\s+INT:|$)', r'(?:no\.?\s*ext\.?|exterior|número)[:\s]*([0-9a-zA-Z\-]+)']),
-        "11_denominacion_del_inmueble": buscar([r'DENOMINACIÓN\s+DEL\s+INMUEBLE:\s*([^\n\r]+?)(?=\s+USO\s+DE\s+SUELO:|$)', r'(?:denominaci[oó]n\s+(?:del\s+inmueble)?|edificio)[:\s]+([^,;\n]+)']),
-        "12_seccion": buscar([r'SECCION:\s*([^\n\r]*?)(?=\s+ETAPA:|$)', r'secci[oó]n[:\s]*([0-9a-zA-Z\-]+)']),
-        "13_colonia": buscar([r'COLONIA:\s*([^\n\r]+?)(?=\s+C\.P\.:|$)', r'(?:colonia|fraccionamiento|pueblo)[:\s]+([^,;\n]+)']),
-        "14_sector": buscar([r'SECTOR:\s*([A-Za-z0-9\s]+?)(?=\s+SECCION:|$)', r'(?:sector|edf\.?)[:\s]*([0-9a-zA-Z\-]+)']),
-        "15_municipio": buscar([r'MUNICIPIO:\s*([^\n\r]+?)(?=\s+ESTADO:|$)', r'(?:municipio|alcalad[ií]a|delegaci[oó]n)[:\s]+([^,;\n]+)']),
-        "16_distrito": buscar([r'distrito[:\s]+([^,;\n]+)']),
-        "17_estado": buscar([r'ESTADO:\s*([^\n\r]+?)(?=\s+SUPERFICIE:|$)', r'(?:estado|entidad)[:\s]+([^,;\n]+)']),
-        # Corregido estrictamente para evitar que tome la palabra "TRÁMITE" de la tabla inferior
-        "18_observaciones": buscar([r'OBSERVACIONES:\s*([^\n\r]+?)(?=\s+TRÁMITE|\s+VOLANTE|RUMBOS|$)', r'observaciones[:\s]+([^.\n]+)']),
-        "19_codigo_postal": buscar([r'C\.P\.:\s*([0-9]*)(?=\s+MUNICIPIO:|$)', r'(?:c\.?p\.?|c[oó]digo\s+postal)[:\s]*(\d{5})'])
-    }
+    puntos.update({
+        "1_vivienda": buscar([r'vivienda\s*:\s*([^,;:]+?)(?=\s+[A-ZÁÉÍÓÚÑ\.\s]{3,25}:|,|;|$)']),
+        "2_uso_de_suelo": buscar([r'uso\s+(?:de\s+)?suelo\s*:\s*([^,;:]+?)(?=\s+[A-ZÁÉÍÓÚÑ\.\s]{3,25}:|,|;|$)']),
+        "4_lote": buscar([r'\blote\s*:?\s*([0-9A-Z\-]+)\b']),
+        "5_manzana": buscar([r'\b(?:manzana|mza\.?)\s*:?\s*([0-9A-Z\-]+)\b']),
+        "9_calle": buscar([r'\bcalle\s*:\s*([^,;:]+?)(?=\s+[A-ZÁÉÍÓÚÑ\.\s]{3,25}:|,|;|$)']),
+        "13_colonia": buscar([r'\b(?:colonia|fraccionamiento)\s*:\s*([^,;:]+?)(?=\s+[A-ZÁÉÍÓÚÑ\.\s]{3,25}:|,|;|$)']),
+        "15_municipio": buscar([r'\b(?:municipio|alcald[ií]a|delegaci[oó]n)\s*:\s*([^,;:]+?)(?=\s+[A-ZÁÉÍÓÚÑ\.\s]{3,25}:|,|;|$)']),
+        "17_estado": buscar([r'\bestado\s*:\s*([^,;:]+?)(?=\s+[A-ZÁÉÍÓÚÑ\.\s]{3,25}:|,|;|$)']),
+        "19_codigo_postal": buscar([r'(?:c\.\s?p\.|c[oó]digo\s+postal)\s*:?\s*(\d{5})']),
+    })
+    return puntos
+
+
+def _texto_inmueble(puntos: Dict[str, str]) -> str:
+    """'Vivienda: DEPARTAMENTO 2, Uso De Suelo: HABITACIONAL, ...' solo con los datos que sí vienen."""
+    return ", ".join(f"{k.split('_', 1)[1].replace('_', ' ').title()}: {v}" for k, v in puntos.items() if v)
+
+
+_INMUEBLE_YA_ARMADO = re.compile(r"\b(?:Vivienda|Uso De Suelo|Lote|Manzana|Calle|Colonia|Municipio|Estado|Denominacion Del Inmueble|Sector|Condominio)\s*:", re.I)
 
 
 def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallback: str = "") -> Dict[str, Any]:
@@ -521,6 +562,9 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     num_credito = datos_origen.get("numero_credito") or num_credito_fallback or ""
     oficina = corregir_numeros_compuestos(str(datos_origen.get("oficina_registral") or datos_origen.get("oficina") or ""))
     carta = corregir_numeros_compuestos(str(datos_origen.get("numero_carta") or datos_origen.get("carta") or ""))
+    # Número de carta: "0543910959" (cero cinco cuatro tres nueve uno cero nueve cinco nueve)
+    if re.fullmatch(r"\d{3,}", carta.strip()):
+        carta = services.credito_a_letras(carta.strip())
     entidad = corregir_numeros_compuestos(str(datos_origen.get("entidad_financiera") or datos_origen.get("banco") or ""))
 
     fecha = corregir_numeros_compuestos(str(datos_origen.get("fecha_liquidacion") or datos_origen.get("fecha") or ""))
@@ -539,17 +583,17 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     inmueble_raw = datos_origen.get("datos_inmueble") or datos_origen.get("inmueble") or ""
     texto_raw = datos_origen.get("texto_raw") or ""
     
-    # 🛡️ BLINDAJE ANTIRRECURRENCIA: Si el inmueble ya fue procesado y tiene etiquetas, NO volver a parsearlo
-    if inmueble_raw and ("Vivienda:" in str(inmueble_raw) or "Uso De Suelo:" in str(inmueble_raw)):
-        inmueble_str = str(inmueble_raw)
+    # Si el inmueble ya viene armado ("Lote: 2, Manzana: 10..."), se respeta (puede estar corregido a mano)
+    if inmueble_raw and _INMUEBLE_YA_ARMADO.search(str(inmueble_raw)):
+        inmueble_str = services.expandir_abreviaturas(str(inmueble_raw))
         puntos_inmueble = {}
     else:
         puntos_inmueble = procesar_19_puntos_inmueble(str(inmueble_raw), str(texto_raw))
-        inmueble_str = ", ".join([f"{k.split('_', 1)[1].replace('_', ' ').title()}: {v}" for k, v in puntos_inmueble.items() if v != "NO_ENCONTRADO"])
+        inmueble_str = _texto_inmueble(puntos_inmueble)
         if not inmueble_str:
-            inmueble_procesado = convertir_romanos_a_texto(str(inmueble_raw))
-            inmueble_procesado = ajustar_digitos_segun_longitud(inmueble_procesado)
-            inmueble_str = corregir_numeros_compuestos(inmueble_procesado)
+            texto_libre = str(inmueble_raw or "").strip()
+            inmueble_str = "" if texto_libre.upper() in _SIN_DATO else corregir_numeros_compuestos(
+                services.expandir_abreviaturas(convertir_romanos_a_texto(texto_libre)))
 
     fecha_exp = corregir_numeros_compuestos(str(datos_origen.get("fecha_expedicion") or ""))
     
@@ -563,6 +607,13 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     num_escritura = corregir_numeros_compuestos(str(datos_origen.get("numero_escritura") or ""))
     fecha_esc = corregir_numeros_compuestos(str(datos_origen.get("fecha_escritura") or ""))
     notario_completo = corregir_numeros_compuestos(str(datos_origen.get("notario_origen_completo") or ""))
+    # "del Licenciado Juan Perez, Notario Público número ..." (o "de la Licenciada ..., Notaria Pública ...")
+    if notario_completo and not re.match(r"^(del\s+licenciad|de\s+la\s+licenciad)", notario_completo, re.I) and re.search(r"NOTI?AR", notario_completo, re.I):
+        if re.search(r"\d", notario_completo):
+            notario_completo = services.extraer_notario_robusto(notario_completo, notario_completo)
+            if notario_completo == "NO_ENCONTRADO":
+                notario_completo = corregir_numeros_compuestos(str(datos_origen.get("notario_origen_completo") or ""))
+        notario_completo = services.formatear_notario(notario_completo)
     conyuge = datos_origen.get("tiene_conyuge") or "No"
     nombre_conyuge = corregir_numeros_compuestos(str(datos_origen.get("nombre_conyuge") or datos_origen.get("nombre_conyugue") or ""))
     if nombre_conyuge.strip().upper() == "NO_ENCONTRADO":
@@ -1000,10 +1051,70 @@ def leer_grupo(lista_datos: List[Dict[str, Any]], nombres: List[str], respaldo_c
     return datos_finales, actos, sugerencia
 
 
+def aplicar_tipo_indicado(datos: Dict[str, Any], tipo: str, nombre: str) -> str:
+    """
+    El usuario subió el archivo en el recuadro de "carta" o de "constancia": se usa ese tipo.
+    Si el contenido claramente dice lo contrario, se respeta el contenido y se avisa.
+    """
+    tipo = (tipo or "").strip().lower()
+    if tipo not in ("carta", "constancia"):
+        return ""
+    detectado = datos.get("_tipo_documento")
+    texto = str(datos.get("texto_raw") or "").upper()
+    seguro = (detectado == "constancia" and actos_ifrem.parece_constancia_ifrem(texto)) or \
+             (detectado == "carta" and "CARTA DE INSTRUCCI" in texto)
+    if detectado != tipo and seguro:
+        nombre_tipo = {"carta": "una carta de instrucción", "constancia": "una constancia de folio"}
+        return f"\"{nombre}\" se subió como {tipo}, pero parece {nombre_tipo[detectado]}; se tomó como {detectado}."
+    datos["_tipo_documento"] = tipo
+    if tipo == "carta":
+        datos.pop("_actos", None)
+        datos.pop("_propietarios", None)
+    return ""
+
+
+def aviso_de_grupo(grupo: List[Dict[str, Any]]) -> List[str]:
+    """Avisos del expediente: le falta la carta o la constancia."""
+    tipos_grupo = [g["datos"].get("_tipo_documento") for g in grupo if "error_extraccion" not in g["datos"]]
+    if not tipos_grupo:
+        return []
+    if "carta" not in tipos_grupo:
+        return ["No se encontró la carta de instrucción de este expediente (puedes moverla aquí)."]
+    if "constancia" not in tipos_grupo:
+        return ["No se encontró la constancia de folio de este expediente (puedes moverla aquí)."]
+    return []
+
+
+def emparejar_por_nombre(grupos: Dict[str, List[Dict[str, Any]]]):
+    """
+    Si una constancia quedó sola (su archivo no trae el número de crédito), se junta con la carta
+    cuyo acreditado aparece en la constancia.
+    """
+    def tipos_de(grupo):
+        return {g["datos"].get("_tipo_documento") for g in grupo}
+
+    solo_constancias = [k for k, g in grupos.items() if tipos_de(g) == {"constancia"}]
+    solo_cartas = [k for k, g in grupos.items() if tipos_de(g) == {"carta"}]
+    for kc in solo_constancias:
+        texto = " ".join(str(g["datos"].get("texto_raw") or "") for g in grupos[kc]).upper()
+        texto = actos_ifrem._sin_acentos(texto)
+        mejor, puntos_mejor = None, 0
+        for ka in solo_cartas:
+            nombre = actos_ifrem._sin_acentos(str(next((g["datos"].get("nombre_acreditado") for g in grupos[ka]), "") or "").upper())
+            palabras = [p for p in nombre.split() if len(p) > 2 and p != "NO_ENCONTRADO"]
+            puntos = sum(1 for p in palabras if re.search(rf"\b{re.escape(p)}\b", texto))
+            if len(palabras) >= 2 and puntos >= max(2, len(palabras) - 1) and puntos > puntos_mejor:
+                mejor, puntos_mejor = ka, puntos
+        if mejor:
+            grupos[mejor].extend(grupos.pop(kc))
+            solo_cartas.remove(mejor)
+
+
 @app.post("/api/expedientes/leer")
 async def leer_documentos(
     files: List[UploadFile] = File(...),
     agrupar: bool = Form(True),
+    tipos: Optional[List[str]] = Form(None),
     sesion: dict = Depends(require_user)
 ):
     """
@@ -1013,24 +1124,29 @@ async def leer_documentos(
     agrupar=False: todos los archivos son un solo expediente (caso individual).
     """
     archivos = []
+    tipos = tipos or []
     try:
-        for file in files:
+        for n, file in enumerate(files):
             nombre = (file.filename or "").replace('\\', '/').split('/')[-1]
             if not nombre.lower().endswith('.pdf'):
                 continue
             ruta, nombre = guardar_upload(file)
+            aviso = ""
             try:
                 datos = services.extraer_datos_pdf(ruta)
                 if not datos or (datos.get("numero_credito") == "NO_ENCONTRADO" and not datos.get("texto_raw")):
                     raise ValueError("El archivo PDF está vacío, corrupto o no contiene datos legibles.")
+                aviso = aplicar_tipo_indicado(datos, tipos[n] if n < len(tipos) else "", nombre)
             except Exception as e_file:
                 datos = {"error_extraccion": str(e_file), "numero_credito": "NO_ENCONTRADO"}
-            archivos.append({"ruta": ruta, "nombre": nombre, "datos": datos})
+            archivos.append({"ruta": ruta, "nombre": nombre, "datos": datos, "aviso": aviso})
 
         grupos: Dict[str, List[Dict[str, Any]]] = {}
         for item in archivos:
             clave = clave_de_credito(item["datos"], item["nombre"]) if agrupar else "expediente"
             grupos.setdefault(clave, []).append(item)
+        if agrupar:
+            emparejar_por_nombre(grupos)
 
         borradores = []
         for clave, grupo in grupos.items():
@@ -1041,6 +1157,8 @@ async def leer_documentos(
                     "id": uuid.uuid4().hex,
                     "clave": clave,
                     "archivos": nombres,
+                    "tipos": {g["nombre"]: g["datos"].get("_tipo_documento", "") for g in grupo},
+                    "avisos": [g["aviso"] for g in grupo if g.get("aviso")] + aviso_de_grupo(grupo),
                     "datos_extraidos": datos_finales,
                     "actos": actos,
                     "plantilla_sugerida": sugerencia,
@@ -1206,6 +1324,8 @@ def normalizar_campo(
             notario = services.extraer_notario_robusto(texto, texto)
             if notario and notario != "NO_ENCONTRADO":
                 valor = notario
+        elif campo == "numero_carta" and re.fullmatch(r"[\d\s\-]{3,}", texto):
+            valor = services.credito_a_letras(solo_digitos)
         elif campo in ("nombre_acreditado", "nombre_conyuge"):
             valor = texto.upper()
     except Exception as e:

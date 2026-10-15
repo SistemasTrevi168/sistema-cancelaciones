@@ -1990,3 +1990,126 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
     min-width: 0;
   }
 }
+
+/* ---- Recuadros separados: carta / constancia ---- */
+.zonas-tipo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.zona-tipo {
+  border: 2px dashed;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 190px;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.zona-tipo.encima {
+  transform: scale(1.01);
+  box-shadow: 0 10px 24px -14px rgba(37, 99, 235, 0.6);
+}
+.zona-tipo.con-archivos {
+  border-style: solid;
+}
+.zona-tipo-encabezado {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.zona-tipo-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.zona-tipo-titulo {
+  font-size: 15px;
+  font-weight: 700;
+}
+.zona-tipo-ayuda {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.zona-tipo-lista {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 170px;
+  overflow-y: auto;
+  flex: 1;
+}
+.zona-tipo-lista li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.zona-tipo-lista li span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zona-tipo-botones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: auto;
+}
+.carga-acciones {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  border: 1px solid;
+  border-radius: 14px;
+  padding: 16px;
+}
+.marca-tipo {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.marca-tipo.carta {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.marca-tipo.constancia {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+.fila-avisos {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #b45309;
+}
+.fila-avisos span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+@media (max-width: 760px) {
+  .zonas-tipo {
+    grid-template-columns: 1fr;
+  }
+}

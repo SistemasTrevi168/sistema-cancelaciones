@@ -130,6 +130,8 @@ def convertir_fecha_texto(texto_fecha):
         return "NO_ENCONTRADO"
     
     texto_upper = re.sub(r'\s+', ' ', str(texto_fecha)).upper().strip()
+    # El día 1 se escribe "uno" (no "primero"): "1o", "1ro.", "1er", "1º" se toman como 1
+    texto_upper = re.sub(r'\b(\d{1,2})\s*(?:O|RO|ER|º|°)\.?(?=\s+DE\b)', r'\1', texto_upper)
     
     meses = {
         "ENERO": "enero", "FEBRERO": "febrero", "MARZO": "marzo", "ABRIL": "abril",
@@ -1042,4 +1044,4 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         os.makedirs(directorio_salida, exist_ok=True)
         
     doc.save(ruta_salida)
-    return True
+    return True

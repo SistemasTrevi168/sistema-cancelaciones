@@ -125,7 +125,145 @@ def convertir_vsm_a_letras(val_str):
         return str(val_str)
     return numero_a_palabras_generico(limpio).lower()
 
+# ---------------- Números con letra o romanos -> entero ----------------
+_PALABRAS_NUM = {
+    "CERO": 0, "UN": 1, "UNO": 1, "UNA": 1, "PRIMER": 1, "PRIMERO": 1, "DOS": 2, "TRES": 3, "CUATRO": 4, "CINCO": 5,
+    "SEIS": 6, "SIETE": 7, "OCHO": 8, "NUEVE": 9, "DIEZ": 10, "ONCE": 11, "DOCE": 12, "TRECE": 13, "CATORCE": 14,
+    "QUINCE": 15, "DIECISEIS": 16, "DIECISIETE": 17, "DIECIOCHO": 18, "DIECINUEVE": 19, "VEINTE": 20,
+    "VEINTIUN": 21, "VEINTIUNO": 21, "VEINTIUNA": 21, "VEINTIDOS": 22, "VEINTITRES": 23, "VEINTICUATRO": 24,
+    "VEINTICINCO": 25, "VEINTISEIS": 26, "VEINTISIETE": 27, "VEINTIOCHO": 28, "VEINTINUEVE": 29,
+    "TREINTA": 30, "CUARENTA": 40, "CINCUENTA": 50, "SESENTA": 60, "SETENTA": 70, "OCHENTA": 80, "NOVENTA": 90,
+    "CIEN": 100, "CIENTO": 100, "DOSCIENTOS": 200, "TRESCIENTOS": 300, "CUATROCIENTOS": 400, "QUINIENTOS": 500,
+    "SEISCIENTOS": 600, "SETECIENTOS": 700, "OCHOCIENTOS": 800, "NOVECIENTOS": 900,
+}
+_ROMANO_VALIDO = re.compile(r"^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$")
+
+
+def _sin_acentos_mayus(t):
+    return str(t or "").upper().translate(str.maketrans("ÁÉÍÓÚÜ", "AEIOUU"))
+
+
+def palabras_a_entero(texto):
+    """'DOS MIL DIECIOCHO' -> 2018, 'CIENTO VEINTE' -> 120, '15' -> 15. None si no es un número."""
+    t = _sin_acentos_mayus(texto).replace(",", " ").strip()
+    if not t:
+        return None
+    if t.isdigit():
+        return int(t)
+    total, actual, alguno = 0, 0, False
+    for p in t.split():
+        if p == "Y":
+            continue
+        if p == "MIL":
+            total += (actual or 1) * 1000
+            actual, alguno = 0, True
+        elif p in _PALABRAS_NUM:
+            actual += _PALABRAS_NUM[p]
+            alguno = True
+        else:
+            return None
+    return total + actual if alguno else None
+
+
+def romano_a_entero(texto):
+    """'XXIII' -> 23, 'MMV' -> 2005. None si no es un número romano válido."""
+    t = str(texto or "").upper().strip().rstrip(".")
+    if not t or not _ROMANO_VALIDO.match(t):
+        return None
+    valores = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+    total = 0
+    for i, c in enumerate(t):
+        v = valores[c]
+        total += -v if i + 1 < len(t) and valores[t[i + 1]] > v else v
+    return total or None
+
+
+def cualquier_numero_a_entero(texto):
+    """Número con dígitos, con letra o romano."""
+    t = str(texto or "").strip()
+    if re.fullmatch(r"\d+", t):
+        return int(t)
+    return romano_a_entero(t) or palabras_a_entero(t)
+
+
+_PAL_NUM = r"(?:CERO|UNO?|UNA|DOS|TRES|CUATRO|CINCO|SEIS|SIETE|OCHO|NUEVE|DIEZ|ONCE|DOCE|TRECE|CATORCE|QUINCE|DIECI\w+|VEINT\w+|TREINTA|CUARENTA|CINCUENTA|SESENTA|SETENTA|OCHENTA|NOVENTA|CIEN|CIENTO|\w+CIENTOS|QUINIENTOS|MIL|Y)"
+
+
+def numeros_de_notaria_a_digitos(texto):
+    """'NOTARIO PÚBLICO NÚMERO XXIII' o 'NÚMERO CIENTO VEINTE' -> 'NÚMERO 23' / 'NÚMERO 120' (para poder leerlo)."""
+    def cambiar(m):
+        n = cualquier_numero_a_entero(m.group(2))
+        return f"{m.group(1)} {n}" if n else m.group(0)
+    texto = re.sub(r"(N[UÚ]M(?:ERO)?\.?|NO\.|N[º°]\.?)\s+([MDCLXVI]{1,8})(?=[\s,\.]|$)", cambiar, texto, flags=re.I)
+    texto = re.sub(rf"(N[UÚ]M(?:ERO)?\.?|NO\.|N[º°]\.?)\s+((?:{_PAL_NUM})(?:\s+(?:{_PAL_NUM}))*)(?=[\s,\.]|$)", cambiar, texto, flags=re.I)
+    return texto
+
+
+_MESES_FECHA = {
+    "ENERO": 1, "FEBRERO": 2, "MARZO": 3, "ABRIL": 4, "MAYO": 5, "JUNIO": 6, "JULIO": 7, "AGOSTO": 8,
+    "SEPTIEMBRE": 9, "SETIEMBRE": 9, "OCTUBRE": 10, "NOVIEMBRE": 11, "DICIEMBRE": 12,
+    "ENE": 1, "FEB": 2, "MAR": 3, "ABR": 4, "MAY": 5, "JUN": 6, "JUL": 7, "AGO": 8, "SEP": 9, "SEPT": 9, "SET": 9,
+    "OCT": 10, "NOV": 11, "DIC": 12,
+}
+_NOMBRE_MES = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
+               "octubre", "noviembre", "diciembre"]
+
+
+def _fecha_en_letra(dia, mes, anio):
+    if not (1 <= dia <= 31 and 1 <= mes <= 12 and 1900 <= anio <= 2100):
+        return None
+    return f"{numero_a_palabras_generico(dia).lower()} de {_NOMBRE_MES[mes]} de {numero_a_palabras_generico(anio).lower()}"
+
+
+def fecha_estructurada_a_texto(texto):
+    """
+    Lee la fecha en sus formas comunes y la regresa con letra ("diez de septiembre de dos mil dieciocho"):
+    10/09/2018, 2018-09-10, 15/IX/2008, 10-SEP-2018, 10 DE SEPTIEMBRE DE 2018, XV DE MARZO DE MMV,
+    DIEZ DE SEPTIEMBRE DEL AÑO DOS MIL DIECIOCHO. None si no la entiende.
+    """
+    t = re.sub(r"\s+", " ", _sin_acentos_mayus(texto)).strip()
+    t = re.sub(r"\b(\d{1,2})\s*(?:O|RO|ER|º|°)\.?(?=\s+DE\b)", r"\1", t)
+    m = re.search(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", t)
+    if m:
+        return _fecha_en_letra(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+    m = re.search(r"\b(\d{1,2})\s*[-/\.]\s*(\d{1,2}|[IVX]{1,4}|[A-Z]{3,10})\.?\s*[-/\.]\s*(\d{2,4})\b", t)
+    if m:
+        mes_txt = m.group(2)
+        mes = int(mes_txt) if mes_txt.isdigit() else (romano_a_entero(mes_txt) if re.fullmatch(r"[IVX]+", mes_txt) else _MESES_FECHA.get(mes_txt))
+        anio = int(m.group(3))
+        if anio < 100:
+            anio += 2000 if anio < 50 else 1900
+        if mes:
+            return _fecha_en_letra(int(m.group(1)), mes, anio)
+    meses = "|".join(sorted(_MESES_FECHA, key=len, reverse=True))
+    m = re.search(rf"(?:^|\b)([A-Z0-9]+(?:\s+Y\s+[A-Z]+)?)\s+(?:DE\s+|-\s*)?({meses})\.?\s+(?:DE(?:L)?\s+|-\s*)?(?:A[NÑ]O\s+)?"
+                  rf"(\d{{4}}|[MDCLXVI]{{2,10}}|(?:DOS\s+MIL|MIL\s+NOVECIENTOS)(?:\s+(?:Y|[A-Z]+))*)\b", t)
+    if m:
+        dia = cualquier_numero_a_entero(m.group(1))
+        mes = _MESES_FECHA.get(m.group(2))
+        anio_txt = m.group(3)
+        anio = cualquier_numero_a_entero(anio_txt)
+        if anio is None and re.match(r"(DOS\s+MIL|MIL\s+NOVECIENTOS)", anio_txt):
+            # quitar palabras sobrantes al final ("DOS MIL OCHO ANTE ...")
+            palabras = anio_txt.split()
+            while palabras and anio is None:
+                palabras.pop()
+                anio = palabras_a_entero(" ".join(palabras)) if palabras else None
+        if dia and mes and anio:
+            return _fecha_en_letra(dia, mes, anio)
+    return None
+
+
 def convertir_fecha_texto(texto_fecha):
+    if not texto_fecha or str(texto_fecha).upper() in ["NO_ENCONTRADO", "NONE", ""]:
+        return "NO_ENCONTRADO"
+    estructurada = fecha_estructurada_a_texto(texto_fecha)
+    if estructurada:
+        return estructurada
+    return _convertir_fecha_texto_anterior(texto_fecha)
+
+
+def _convertir_fecha_texto_anterior(texto_fecha):
     if not texto_fecha or str(texto_fecha).upper() in ["NO_ENCONTRADO", "NONE", ""]:
         return "NO_ENCONTRADO"
     
@@ -468,7 +606,7 @@ def determinar_genero_y_estado_civil(texto_completo, nombre_acreditado=""):
     return genero, estado_civil
 
 def extraer_notario_robusto(texto_limpio, texto_completo=""):
-    texto_upper = texto_limpio.upper()
+    texto_upper = numeros_de_notaria_a_digitos(texto_limpio.upper())
     candidatos_validos = []
 
     prohibidas = {
@@ -481,9 +619,9 @@ def extraer_notario_robusto(texto_limpio, texto_completo=""):
     }
 
     patrones = [
-        r'NOTI?AR[IÍ]O\s+P[UÚ]BLIC[OA]\s+(?:LICENCIADO|LIC\.?\s+)?([A-ZÁÉÍÓÚÑ\s]{4,45}?)\s*,?\s+(?:N[UÚ]M[EÉ]RO|NO\.?)\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\s+QUE|\.|$)',
-        r'(?:ANTE\s+LA\s+FE\s+(?:DEL?\s+)?)(?:LICENCIADO|LIC\.?\s+)?([A-ZÁÉÍÓÚÑ\s]{4,45}?)\s*,?\s*NOTI?AR[IÍ]O\s+P[UÚ]BLIC[OA]\s+(?:NO\.?|N[UÚ]M[EÉ]RO)?\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\.|$)',
-        r'NOTI?AR[IÍ]O\s+(?:P[UÚ]BLIC[OA]\s+)?(?:NO\.?|N[UÚ]M[EÉ]RO)?\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\s+EN\s+QUE|\.|$)'
+        r'NOTI?AR[IÍ][OA]\s+P[UÚ]BLIC[OA]\s+(?:LICENCIAD[OA]|LIC\.?\s+)?([A-ZÁÉÍÓÚÑ\s]{4,45}?)\s*,?\s+(?:N[UÚ]M[EÉ]RO|NO\.?)\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\s+QUE|\.|$)',
+        r'(?:ANTE\s+LA\s+FE\s+(?:DEL?\s+|DE\s+LA\s+)?)(?:LICENCIAD[OA]|LIC\.?\s+)?([A-ZÁÉÍÓÚÑ\s]{4,45}?)\s*,?\s*NOTI?AR[IÍ][OA]\s+P[UÚ]BLIC[OA]\s+(?:NO\.?|N[UÚ]M[EÉ]RO)?\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\.|$)',
+        r'NOTI?AR[IÍ][OA]\s+(?:P[UÚ]BLIC[OA]\s+)?(?:NO\.?|N[UÚ]M[EÉ]RO)?\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\s+EN\s+QUE|\.|$)'
     ]
 
     for pat in patrones[:2]:
@@ -535,14 +673,23 @@ def extraer_notario_robusto(texto_limpio, texto_completo=""):
             inicio_pos = max(0, match_not.start() - 250)
             bloque_anterior = texto_upper[inicio_pos:match_not.start()]
             
-            palabras = re.findall(r'\b[A-ZÁÉÍÓÚÑ]{3,}\b', bloque_anterior)
             palabras_validas = []
-            
-            for p in reversed(palabras):
-                if p not in prohibidas and not p.isdigit():
-                    palabras_validas.insert(0, p)
-                    if len(palabras_validas) >= 4:
-                        break
+            # Si viene "LIC. MARIA DE LA LUZ ROJAS, NOTARIA ...", el nombre es lo que está entre LIC. y NOTARIA
+            m_lic = re.search(r'LIC(?:ENCIAD[OA])?\.?\s+([A-ZÁÉÍÓÚÑ\s]{4,60}?)\s*,?\s*$', bloque_anterior)
+            if m_lic:
+                particulas = {"DE", "DEL", "LA", "LAS", "LOS", "Y"}
+                palabras_validas = [p for p in m_lic.group(1).split() if p in particulas or p not in prohibidas]
+                while palabras_validas and palabras_validas[0] in particulas:
+                    palabras_validas.pop(0)
+                while palabras_validas and palabras_validas[-1] in particulas:
+                    palabras_validas.pop()
+            if not palabras_validas:
+                palabras = re.findall(r'\b[A-ZÁÉÍÓÚÑ]{3,}\b', bloque_anterior)
+                for p in reversed(palabras):
+                    if p not in prohibidas and not p.isdigit():
+                        palabras_validas.insert(0, p)
+                        if len(palabras_validas) >= 4:
+                            break
             
             if palabras_validas:
                 nombre_notario = " ".join(palabras_validas)

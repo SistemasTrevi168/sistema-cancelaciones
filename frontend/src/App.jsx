@@ -22,6 +22,8 @@ import TabManual from './components/TabManual';
 import TabMasivo from './components/TabMasivo';
 import TabUsuarios from './components/TabUsuarios';
 import TabKpis from './components/TabKpis';
+import TabPerfil from './components/TabPerfil';
+import { COLOR_ACENTO_DEFECTO, colorLegible } from './colores';
 import { renderAsync } from 'docx-preview';
 import { AlertCircle } from 'lucide-react';
 
@@ -30,13 +32,37 @@ const navegador = { guardia: false, auth: false, tab: 'single', alSalir: null, a
 
 export default function App() {
   // --- TEMA (CLARO / OSCURO) ---
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    return localStorage.getItem('theme') === 'dark';
+  // temaPreferido: 'claro' | 'oscuro' | 'sistema' (se guarda en la cuenta y en este navegador)
+  const leerLocal = (clave, defecto) => { try { return localStorage.getItem(clave) ?? defecto; } catch { return defecto; } };
+  const guardarLocal = (clave, valor) => { try { localStorage.setItem(clave, valor); } catch { /* sin almacenamiento */ } };
+  const [temaPreferido, setTemaPreferido] = useState(() => {
+    const t = leerLocal('tema', null);
+    if (t === 'claro' || t === 'oscuro' || t === 'sistema') return t;
+    return leerLocal('theme', 'light') === 'dark' ? 'oscuro' : 'claro';
   });
-
+  const [sistemaOscuro, setSistemaOscuro] = useState(() => window.matchMedia?.('(prefers-color-scheme: dark)').matches || false);
   useEffect(() => {
-    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-  }, [isDarkMode]);
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!mq) return undefined;
+    const cambio = (e) => setSistemaOscuro(e.matches);
+    mq.addEventListener('change', cambio);
+    return () => mq.removeEventListener('change', cambio);
+  }, []);
+  const isDarkMode = temaPreferido === 'oscuro' || (temaPreferido === 'sistema' && sistemaOscuro);
+  useEffect(() => {
+    guardarLocal('tema', temaPreferido);
+    guardarLocal('theme', isDarkMode ? 'dark' : 'light');
+  }, [temaPreferido, isDarkMode]);
+
+  // Color del sistema elegido por cada usuario
+  const [colorAcento, setColorAcento] = useState(() => leerLocal('color_acento', '') || COLOR_ACENTO_DEFECTO);
+  const acento = colorLegible(colorAcento);
+  useEffect(() => {
+    guardarLocal('color_acento', colorAcento);
+    const raiz = document.documentElement;
+    raiz.style.setProperty('--acento', acento);
+    raiz.style.setProperty('--acento-suave', `${acento}1f`);
+  }, [colorAcento, acento]);
 
   // ESTADO PARA EL MENÚ DESPLEGABLE DE EXPORTACIÓN
   const [showExportMenu, setShowExportMenu] = React.useState(false);
@@ -306,6 +332,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // Validar sesión activa al recargar la página (F5), una sola vez
   useEffect(() => {
     verificarSesion();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -503,7 +530,21 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // --- FUNCIONES Y MANEJADORES ---
   // ==========================================
 
-  const toggleTheme = () => setIsDarkMode(!isDarkMode);
+  // Guarda la preferencia en la cuenta (si falla, queda al menos en este navegador)
+  const guardarPreferencias = (cambios) => {
+    api.put('/perfil', cambios).catch(() => {});
+  };
+  const cambiarTema = (tema) => {
+    setTemaPreferido(tema);
+    guardarPreferencias({ tema });
+  };
+  const toggleTheme = () => cambiarTema(isDarkMode ? 'claro' : 'oscuro');
+  // Al entrar se aplican el color y el tema guardados en la cuenta
+  const aplicarPreferenciasDe = (user) => {
+    if (!user) return;
+    if (user.color_acento) setColorAcento(user.color_acento);
+    if (user.tema === 'claro' || user.tema === 'oscuro' || user.tema === 'sistema') setTemaPreferido(user.tema);
+  };
 
   const verificarSesion = async () => {
     try {
@@ -511,6 +552,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       const res = await api.get('/auth/sesion');
       if (res.data?.autenticado && res.data?.user) {
         setCurrentUser(res.data.user);
+        aplicarPreferenciasDe(res.data.user);
         setIsAuthenticated(true);
       } else {
         guardarToken(null);
@@ -540,11 +582,12 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       if (res.data?.status === 'ok') {
         guardarToken(res.data.token);
         setCurrentUser(res.data.user);
+        aplicarPreferenciasDe(res.data.user);
         setIsAuthenticated(true);
         navegador.auth = true;
         crearGuardiaHistorial();
         // Presentación de bienvenida (se va sola)
-        setBienvenida({ nombre: res.data.user?.username, saliendo: false });
+        setBienvenida({ nombre: (res.data.user?.nombre_mostrar || res.data.user?.username || '').split(' ')[0], saliendo: false });
         setTimeout(() => {
           setBienvenida((b) => (b ? { ...b, saliendo: true } : b));
           setAnimarEntrada(true); // el sistema entra mientras se desvanece la bienvenida
@@ -1594,16 +1637,16 @@ const filteredHistorial = (historial || []).filter((item) => {
 });
 
   const theme = {
-    bg: isDarkMode ? '#0b0f19' : '#f8fafc',
-    cardBg: isDarkMode ? '#111827' : '#ffffff',
-    textPrimary: isDarkMode ? '#f9fafb' : '#0f172a',
-    textSecondary: isDarkMode ? '#9ca3af' : '#64748b',
-    border: isDarkMode ? '#1f2937' : '#e2e8f0',
-    inputBg: isDarkMode ? '#1f2937' : '#ffffff',
-    subtleBg: isDarkMode ? '#1f2937' : '#f1f5f9',
-    dropzoneBg: isDarkMode ? '#131c2e' : '#f8fafc',
-    dropzoneBorder: isDarkMode ? '#3b82f6' : '#93c5fd',
-    accent: '#2563eb'
+    bg: isDarkMode ? '#0a0f1a' : '#f8fafc',
+    cardBg: isDarkMode ? '#121a2b' : '#ffffff',
+    textPrimary: isDarkMode ? '#f1f5f9' : '#0f172a',
+    textSecondary: isDarkMode ? '#a8b3c7' : '#64748b',
+    border: isDarkMode ? '#2a3650' : '#e2e8f0',
+    inputBg: isDarkMode ? '#0d1424' : '#ffffff',
+    subtleBg: isDarkMode ? '#1b2539' : '#f1f5f9',
+    dropzoneBg: isDarkMode ? '#0f1729' : '#f8fafc',
+    dropzoneBorder: isDarkMode ? `${acento}aa` : `${acento}66`,
+    accent: acento,
   };
 
   // ---- DOCUMENTOS DEL EXPEDIENTE (visor de PDF: seleccionar texto / elegir acto) ----
@@ -1860,6 +1903,12 @@ const filteredHistorial = (historial || []).filter((item) => {
     theme,
     toggleAccordion,
     toggleTheme,
+    temaPreferido,
+    cambiarTema,
+    colorAcento,
+    setColorAcento,
+    guardarPreferencias,
+    setCurrentUser,
     unlockedFields,
     usuariosLista
   };
@@ -1923,6 +1972,7 @@ const filteredHistorial = (historial || []).filter((item) => {
               {activeTab === 'history' && <TabHistorial />}
               {activeTab === 'users' && esAdmin && <TabUsuarios />}
               {activeTab === 'kpis' && esAdmin && <TabKpis />}
+              {activeTab === 'perfil' && <TabPerfil />}
               </div>
             </div>
 

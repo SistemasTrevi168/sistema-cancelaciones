@@ -233,10 +233,13 @@ def calcular(db: Session, desde: Optional[str], hasta: Optional[str], usuario: O
         serie_dia.append({"fecha": d.isoformat(), "total": conteo_dia.get(d, 0), "por_usuario": dict(conteo_dia_usr.get(d, {}))})
         d += timedelta(days=1)
 
-    conteo_hora = Counter(e["fecha"].hour for e in exps)
-    por_hora = [{"hora": h, "total": conteo_hora.get(h, 0)} for h in range(24)]
-    conteo_sem = Counter(e["fecha"].weekday() for e in exps)
-    por_dia_semana = [{"dia": DIAS_SEMANA[i], "total": conteo_sem.get(i, 0)} for i in range(7)]
+    hora_usr: Dict[int, Counter] = defaultdict(Counter)
+    sem_usr: Dict[int, Counter] = defaultdict(Counter)
+    for e in exps:
+        hora_usr[e["fecha"].hour][e["usuario"]] += 1
+        sem_usr[e["fecha"].weekday()][e["usuario"]] += 1
+    por_hora = [{"hora": h, "total": sum(hora_usr[h].values()), "por_usuario": dict(hora_usr[h])} for h in range(24)]
+    por_dia_semana = [{"dia": DIAS_SEMANA[i], "total": sum(sem_usr[i].values()), "por_usuario": dict(sem_usr[i])} for i in range(7)]
 
     plantillas = Counter(e["plantilla"] or "Sin plantilla" for e in exps)
     campos = Counter(c for a in acts if a["tipo"] == "guardar" for c in (a["detalle"].get("corregidos") or []))
@@ -293,7 +296,7 @@ def obtener_kpis(
 ):
     datos = calcular(db, desde, hasta, usuario)
     datos.pop("_expedientes", None)
-    datos["usuarios"] = [{"username": u.username, "activo": getattr(u, "activo", True)}
+    datos["usuarios"] = [{"username": u.username, "activo": getattr(u, "activo", True), "nombre": getattr(u, "nombre_mostrar", None) or ""}
                          for u in db.query(models.Usuario).order_by(models.Usuario.username).all()]
     return datos
 

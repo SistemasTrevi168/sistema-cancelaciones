@@ -143,12 +143,38 @@ def obtener_sesion(request: Request, db: Session) -> dict:
         db.commit()
         raise HTTPException(status_code=401, detail="Sesión no válida o expirada")
 
+    # Último uso de la sesión (se actualiza como máximo cada 5 minutos)
+    try:
+        ultimo = getattr(sesion, "ultimo_uso", None)
+        if ultimo is None or _a_utc(ultimo) < _ahora() - timedelta(minutes=5):
+            sesion.ultimo_uso = _ahora()
+            db.commit()
+    except Exception:
+        db.rollback()
+
     return {
         "id": str(user.id),
         "username": user.username,
         "es_admin": bool(sesion.es_admin),
         "role": sesion.role,
+        "sesion_id": sesion.id,
+        "nombre_mostrar": getattr(user, "nombre_mostrar", None) or "",
+        "color_acento": getattr(user, "color_acento", None) or "",
+        "tema": getattr(user, "tema", None) or "",
     }
+
+
+def con_foto(usuario: dict, db: Session) -> dict:
+    """Agrega la foto de perfil (solo en las respuestas que la necesitan)."""
+    user = db.query(Usuario).filter(Usuario.username == usuario.get("username")).first()
+    datos = {k: v for k, v in usuario.items() if k != "sesion_id"}
+    datos["foto"] = getattr(user, "foto", None) or ""
+    return datos
+
+
+def datos_del_dispositivo(request: Request) -> dict:
+    ip = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or (request.client.host if request.client else "")
+    return {"user_agent": (request.headers.get("user-agent") or "")[:300], "ip": ip[:60]}
 
 
 def require_user(request: Request, db: Session = Depends(get_db)) -> dict:
@@ -170,7 +196,7 @@ get_current_user = require_user
 # --- ENDPOINTS ---
 
 @router.post("/login")
-def login(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
+def login(data: LoginRequest, response: Response, request: Request, db: Session = Depends(get_db)):
     # Inserta el usuario admin por defecto si la tabla está vacía
     inicializar_usuarios_default(db)
 
@@ -196,6 +222,8 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
         es_admin=es_administrador,
         role=rol_nombre,
         expira_en=_ahora() + DURACION_SESION,
+        ultimo_uso=_ahora(),
+        **datos_del_dispositivo(request),
     ))
     db.commit()
     try:
@@ -221,14 +249,18 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
             "id": str(user.id),
             "username": user.username,
             "es_admin": es_administrador,
-            "role": rol_nombre
+            "role": rol_nombre,
+            "nombre_mostrar": getattr(user, "nombre_mostrar", None) or "",
+            "color_acento": getattr(user, "color_acento", None) or "",
+            "tema": getattr(user, "tema", None) or "",
+            "foto": getattr(user, "foto", None) or "",
         }
     }
 
 
 @router.get("/me")
-def me(usuario: dict = Depends(require_user)):
-    return {"user": usuario}
+def me(usuario: dict = Depends(require_user), db: Session = Depends(get_db)):
+    return {"user": con_foto(usuario, db)}
 
 
 @router.get("/sesion")
@@ -238,7 +270,7 @@ def estado_sesion(request: Request, db: Session = Depends(get_db)):
     Lo usa el frontend al abrir la página para no llenar la consola de errores 401.
     """
     try:
-        return {"autenticado": True, "user": obtener_sesion(request, db)}
+        return {"autenticado": True, "user": con_foto(obtener_sesion(request, db), db)}
     except HTTPException:
         return {"autenticado": False, "user": None}
 

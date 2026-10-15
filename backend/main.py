@@ -22,6 +22,7 @@ import auth
 import actos_ifrem
 import plantilla_sugerida
 import kpis
+import perfil
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -35,6 +36,10 @@ models.Base.metadata.create_all(bind=engine)
 try:
     with engine.begin() as _conn:
         _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE"))
+        for _col in ("nombre_mostrar VARCHAR", "foto TEXT", "color_acento VARCHAR", "tema VARCHAR"):
+            _conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {_col}"))
+        for _col in ("user_agent VARCHAR", "ip VARCHAR", "ultimo_uso TIMESTAMP WITH TIME ZONE"):
+            _conn.execute(text(f"ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS {_col}"))
 except Exception as _e:
     print(f"Aviso al actualizar la tabla usuarios: {_e}")
 
@@ -558,6 +563,28 @@ def _texto_inmueble(puntos: Dict[str, str]) -> str:
 _INMUEBLE_YA_ARMADO = re.compile(r"\b(?:Vivienda|Uso De Suelo|Lote|Manzana|Calle|Colonia|Municipio|Estado|Denominacion Del Inmueble|Sector|Condominio)\s*:", re.I)
 
 
+def _fecha_con_letra(valor: str) -> str:
+    """Cualquier fecha (10/09/2018, 15/IX/2008, XV DE MARZO DE 2005...) -> 'diez de septiembre de dos mil dieciocho'."""
+    valor = str(valor or "").strip()
+    if not valor or valor.upper() in _SIN_DATO:
+        return valor
+    convertida = services.fecha_estructurada_a_texto(valor)
+    return convertida if convertida else corregir_numeros_compuestos(valor)
+
+
+def _numero_con_letra(valor: str) -> str:
+    """Número de escritura con dígitos o romano -> con letra ('6411' -> 'seis mil cuatrocientos once')."""
+    v = str(valor or "").strip()
+    limpio = v.replace(",", "").replace(".", "").strip()
+    if re.fullmatch(r"\d{1,7}", limpio):
+        return services.numero_a_palabras_generico(int(limpio)).lower()
+    if re.fullmatch(r"[MDCLXVI]{1,8}", limpio.upper()):
+        n = services.romano_a_entero(limpio)
+        if n:
+            return services.numero_a_palabras_generico(n).lower()
+    return corregir_numeros_compuestos(v)
+
+
 def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallback: str = "") -> Dict[str, Any]:
     """Filtra y devuelve los campos requeridos aplicando conversiones de romanos y dígitos."""
     acreditado = corregir_numeros_compuestos(str(datos_origen.get("nombre_acreditado") or datos_origen.get("acreditado") or datos_origen.get("cliente") or ""))
@@ -570,7 +597,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
         carta = services.credito_a_letras(carta.strip())
     entidad = corregir_numeros_compuestos(str(datos_origen.get("entidad_financiera") or datos_origen.get("banco") or ""))
 
-    fecha = corregir_numeros_compuestos(str(datos_origen.get("fecha_liquidacion") or datos_origen.get("fecha") or ""))
+    fecha = _fecha_con_letra(str(datos_origen.get("fecha_liquidacion") or datos_origen.get("fecha") or ""))
     
     folio_raw = str(datos_origen.get("folio_real") or datos_origen.get("antecedente") or "").strip()
     folio_con_romanos = convertir_romanos_a_texto(folio_raw)
@@ -598,7 +625,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
             inmueble_str = "" if texto_libre.upper() in _SIN_DATO else corregir_numeros_compuestos(
                 services.expandir_abreviaturas(convertir_romanos_a_texto(texto_libre)))
 
-    fecha_exp = corregir_numeros_compuestos(str(datos_origen.get("fecha_expedicion") or ""))
+    fecha_exp = _fecha_con_letra(str(datos_origen.get("fecha_expedicion") or ""))
     
     credito_salario = datos_origen.get("credito_a_salario") or datos_origen.get("crédito_a_salario") or ""
     credito_salario_str = str(credito_salario).strip()
@@ -607,9 +634,17 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     else:
         credito_salario = corregir_numeros_compuestos(credito_salario_str)
     
-    num_escritura = corregir_numeros_compuestos(str(datos_origen.get("numero_escritura") or ""))
-    fecha_esc = corregir_numeros_compuestos(str(datos_origen.get("fecha_escritura") or ""))
-    notario_completo = corregir_numeros_compuestos(str(datos_origen.get("notario_origen_completo") or ""))
+    num_escritura = _numero_con_letra(str(datos_origen.get("numero_escritura") or ""))
+    fecha_esc = _fecha_con_letra(str(datos_origen.get("fecha_escritura") or ""))
+    notario_completo = str(datos_origen.get("notario_origen_completo") or "")
+    if re.match(r"^\s*(del\s+licenciad|de\s+la\s+licenciad)", notario_completo, re.I):
+        # Ya tiene formato: solo se pasa a letra un número que venga con dígitos o romano
+        notario_completo = re.sub(r"(n[uú]mero)\s+([0-9]+|[MDCLXVI]{1,8})(?=[\s,\.]|$)",
+                                  lambda m: f"{m.group(1)} {services.numero_a_palabras_generico(services.cualquier_numero_a_entero(m.group(2))).lower()}"
+                                  if services.cualquier_numero_a_entero(m.group(2)) else m.group(0), notario_completo, flags=re.I)
+    else:
+        notario_completo = services.numeros_de_notaria_a_digitos(notario_completo)
+    notario_completo = corregir_numeros_compuestos(notario_completo)
     # "del Licenciado Juan Perez, Notario Público número ..." (o "de la Licenciada ..., Notaria Pública ...")
     if notario_completo and not re.match(r"^(del\s+licenciad|de\s+la\s+licenciad)", notario_completo, re.I) and re.search(r"NOTI?AR", notario_completo, re.I):
         if re.search(r"\d", notario_completo):
@@ -717,6 +752,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(kpis.router)
+app.include_router(perfil.router)
 
 
 @app.get("/")
@@ -1376,14 +1412,14 @@ def normalizar_campo(
     extra: Dict[str, Any] = {}
     try:
         solo_digitos = re.sub(r"[^\d]", "", texto)
-        if campo in ("numero_escritura",) and solo_digitos and re.fullmatch(r"[\d,\.\s]+", texto):
-            valor = services.numero_a_palabras_generico(solo_digitos).lower()
+        if campo in ("numero_escritura",) and re.fullmatch(r"[\d,\.\s]+|[MDCLXVImdclxvi]{1,8}", texto):
+            valor = _numero_con_letra(texto)
         elif campo == "folio_real" and solo_digitos and re.fullmatch(r"[\d,\.\s\-]+", texto):
             limpio = services.limpiar_ceros_izquierda(solo_digitos)
             valor = services.numero_a_palabras_generico(limpio).lower() if limpio.isdigit() else limpio
-        elif campo in ("fecha_escritura", "fecha_liquidacion", "fecha_expedicion") and re.search(r"\d", texto):
-            convertida = services.convertir_fecha_texto(texto)
-            if convertida and convertida != "NO_ENCONTRADO":
+        elif campo in ("fecha_escritura", "fecha_liquidacion", "fecha_expedicion"):
+            convertida = services.fecha_estructurada_a_texto(texto)
+            if convertida:
                 valor = convertida
         elif campo == "monto_credito":
             m = re.search(r"[\d][\d,]*(?:\.\d+)?", texto)
@@ -1395,7 +1431,7 @@ def normalizar_campo(
         elif campo == "notario_origen_completo" and re.search(r"NOTI?AR", texto, re.I):
             notario = services.extraer_notario_robusto(texto, texto)
             if notario and notario != "NO_ENCONTRADO":
-                valor = notario
+                valor = services.formatear_notario(notario)
         elif campo == "numero_carta" and re.fullmatch(r"[\d\s\-]{3,}", texto):
             valor = services.credito_a_letras(solo_digitos)
         elif campo in ("nombre_acreditado", "nombre_conyuge"):
@@ -1476,6 +1512,8 @@ def obtener_usuarios(db: Session = Depends(get_db), admin: dict = Depends(requir
             "es_admin": u.es_admin,
             "creado_en": u.creado_en.isoformat() if hasattr(u, "creado_en") and u.creado_en else None,
             "activo": bool(getattr(u, "activo", True)),
+            "nombre_mostrar": getattr(u, "nombre_mostrar", None) or "",
+            "foto": getattr(u, "foto", None) or "",
         }
         for u in usuarios
     ]

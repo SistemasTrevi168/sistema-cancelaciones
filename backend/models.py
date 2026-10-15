@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, DateTime, JSON, ForeignKey, LargeBinary, Integer
+from sqlalchemy import Column, String, Boolean, DateTime, JSON, ForeignKey, LargeBinary, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func, text
 from database import Base
@@ -14,6 +14,11 @@ class Usuario(Base):
     # Un usuario desactivado no puede iniciar sesión, pero se conserva su historial
     activo = Column(Boolean, nullable=False, default=True, server_default=text("true"))
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
+    # Perfil (cada quien edita el suyo)
+    nombre_mostrar = Column(String, nullable=True)
+    foto = Column(Text, nullable=True)            # imagen recortada (data:image/jpeg;base64,...)
+    color_acento = Column(String, nullable=True)  # color del sistema elegido por el usuario (#rrggbb)
+    tema = Column(String, nullable=True)          # claro / oscuro / sistema
 
 class Expediente(Base):
     __tablename__ = "expedientes"
@@ -40,6 +45,9 @@ class Sesion(Base):
     role = Column(String, default="operador")
     creada_en = Column(DateTime(timezone=True), server_default=func.now())
     expira_en = Column(DateTime(timezone=True), nullable=False)
+    user_agent = Column(String, nullable=True)
+    ip = Column(String, nullable=True)
+    ultimo_uso = Column(DateTime(timezone=True), nullable=True)
 
 
 class PlantillaSubida(Base):

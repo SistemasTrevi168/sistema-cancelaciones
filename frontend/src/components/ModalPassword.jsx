@@ -47,7 +47,7 @@ export default function ModalPassword({ titulo, descripcion, pedirActual, onCanc
   return (
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
       <form onSubmit={handleSubmit} className="slide-up" style={{ backgroundColor: theme.cardBg, padding: '28px', borderRadius: '16px', maxWidth: '400px', width: '100%', border: `1px solid ${theme.border}`, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
-        <div style={{ backgroundColor: isDarkMode ? '#1e293b' : '#eff6ff', width: '48px', height: '48px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
+        <div style={{ backgroundColor: `${theme.accent}${isDarkMode ? '33' : '14'}`, width: '48px', height: '48px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
           <KeyRound color={theme.accent} size={24} />
         </div>
         <h3 style={{ margin: '0 0 6px 0', color: theme.textPrimary, fontSize: '19px', fontWeight: '700' }}>{titulo}</h3>

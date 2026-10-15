@@ -1,4 +1,4 @@
-import { CheckCircle, FilePlus, Loader2, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle, FilePlus, Loader2, Upload } from 'lucide-react';
 import { useApp } from '../AppContext';
 import ZonaArchivos from './ZonaArchivos';
 import OpcionesPlantilla from './OpcionesPlantilla';
@@ -30,6 +30,8 @@ export default function TabIndividual() {
     selectedPlantilla,
     setSelectedPlantilla,
     singleFiles,
+    conflictoSingle,
+    isDarkMode,
     theme,
   } = useApp();
 
@@ -63,7 +65,7 @@ export default function TabIndividual() {
   }
 
   // ---- CARGA DE DOCUMENTOS (carta y constancia por separado) ----
-  const listo = singleFiles.length > 0 && !loading;
+  const listo = singleFiles.length > 0 && !loading && !conflictoSingle;
   return (
     <div className="carga-documentos">
       <div className="carga-encabezado">
@@ -75,6 +77,7 @@ export default function TabIndividual() {
         <ZonaArchivos
           tipo="carta"
           archivos={cartaSingle ? [cartaSingle] : []}
+          conflicto={!!conflictoSingle}
           onElegir={(fs) => elegirArchivoSingle('carta', fs)}
           onSoltar={(e) => soltarArchivoSingle('carta', e)}
           onQuitar={() => quitarArchivoSingle('carta')}
@@ -83,6 +86,7 @@ export default function TabIndividual() {
         <ZonaArchivos
           tipo="constancia"
           archivos={constanciaSingle ? [constanciaSingle] : []}
+          conflicto={!!conflictoSingle}
           onElegir={(fs) => elegirArchivoSingle('constancia', fs)}
           onSoltar={(e) => soltarArchivoSingle('constancia', e)}
           onQuitar={() => quitarArchivoSingle('constancia')}
@@ -118,7 +122,15 @@ export default function TabIndividual() {
               </div>
             </div>
           )}
-          {!loading && singleFiles.length === 1 && (
+          {conflictoSingle && (
+            <div className="aviso-conflicto" role="alert" style={isDarkMode ? { backgroundColor: '#450a0a', color: '#fecaca', borderColor: '#7f1d1d' } : { backgroundColor: '#fef2f2', color: '#991b1b', borderColor: '#fecaca' }}>
+              <AlertTriangle size={16} />
+              <span>
+                <strong>No son del mismo crédito.</strong> La carta es del <strong>{conflictoSingle.carta}</strong> y la constancia del <strong>{conflictoSingle.constancia}</strong>. Los números deben ser idénticos: cambia el archivo que no corresponde.
+              </span>
+            </div>
+          )}
+          {!loading && !conflictoSingle && singleFiles.length === 1 && (
             <p style={{ fontSize: '12px', color: '#b45309', margin: 0 }}>
               Falta {cartaSingle ? 'la constancia' : 'la carta'}. Puedes leer solo un documento, pero los datos que vienen en el otro quedarán vacíos.
             </p>

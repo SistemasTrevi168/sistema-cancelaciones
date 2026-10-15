@@ -10,7 +10,7 @@ const TIPOS = {
 
 // Recuadro para subir un tipo de documento (carta o constancia).
 // varios=false: un solo PDF (caso individual). varios=true: varios PDF o carpetas (carga masiva).
-export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir, onSoltar, onQuitar, ayuda }) {
+export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir, onSoltar, onQuitar, ayuda, conflicto = false }) {
   const { theme } = useApp();
   const [encima, setEncima] = useState(false);
   const archivoRef = useRef(null);
@@ -27,8 +27,8 @@ export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir,
 
   return (
     <div
-      className={`zona-tipo ${encima ? 'encima' : ''} ${hay ? 'con-archivos' : ''}`}
-      style={{ borderColor: encima ? info.color : (hay ? info.color + '80' : theme.dropzoneBorder), backgroundColor: theme.dropzoneBg }}
+      className={`zona-tipo ${encima ? 'encima' : ''} ${hay ? 'con-archivos' : ''} ${conflicto ? 'en-conflicto' : ''}`}
+      style={{ borderColor: conflicto ? '#dc2626' : (encima ? info.color : (hay ? info.color + '80' : theme.dropzoneBorder)), backgroundColor: theme.dropzoneBg }}
       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setEncima(true); }}
       onDragLeave={() => setEncima(false)}
       onDrop={(e) => { setEncima(false); onSoltar(e); }}

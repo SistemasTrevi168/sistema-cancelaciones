@@ -21,6 +21,7 @@ import TabIndividual from './components/TabIndividual';
 import TabManual from './components/TabManual';
 import TabMasivo from './components/TabMasivo';
 import TabUsuarios from './components/TabUsuarios';
+import TabKpis from './components/TabKpis';
 import { renderAsync } from 'docx-preview';
 import { AlertCircle } from 'lucide-react';
 
@@ -204,6 +205,8 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [actosSingle, setActosSingle] = useState([]); // actos de la constancia (caso individual)
   const [sugerenciaBase, setSugerenciaBase] = useState(null); // plantilla sugerida según los documentos
   const [avisosSingle, setAvisosSingle] = useState([]); // avisos al leer (ej. falta la constancia)
+  // Cómo venían los datos al leerlos (para medir cuántos campos se corrigieron a mano, en los KPIs)
+  const [lecturaSingle, setLecturaSingle] = useState(null); // { datos, leido_en }
   const turnoPrevia = useRef(0);                                // descarta respuestas viejas
   const hayDocumentoPrevia = useRef(false);
   const manualPreviewRef = useRef(null);
@@ -910,8 +913,20 @@ const handlePreviewExcel = async (file) => {
     await agregarArchivosLote(tipo, await pdfsDeSoltar(e));
   };
 
+  // La carta y la constancia deben ser del mismo crédito: si los dos nombres traen número, deben ser idénticos
+  const numeroEnNombre = (nombre) => (String(nombre || '').match(/(?<!\d)\d{8,12}(?!\d)/) || [null])[0];
+  const conflictoSingle = (() => {
+    const nc = numeroEnNombre(cartaSingle?.name);
+    const nk = numeroEnNombre(constanciaSingle?.name);
+    return nc && nk && nc !== nk ? { carta: nc, constancia: nk } : null;
+  })();
+
   const handleUploadSingle = async () => {
     if (singleFiles.length === 0) return;
+    if (conflictoSingle) {
+      avisar.error(`Los archivos no son del mismo crédito (${conflictoSingle.carta} y ${conflictoSingle.constancia}).`);
+      return;
+    }
     cerrarVistaPrevia();
    
     setLoading(true);
@@ -944,6 +959,7 @@ const handlePreviewExcel = async (file) => {
         setActosSingle(borrador.actos || []);
         setSugerenciaBase(borrador.plantilla_sugerida || null);
         setAvisosSingle(borrador.avisos || []);
+        setLecturaSingle({ datos: { ...rawDatos }, leido_en: borrador.leido_en || null });
         setUnlockedFields({});
         setLoading(false);
       }, 300);
@@ -961,13 +977,27 @@ const handlePreviewExcel = async (file) => {
     return res.data.resultados || [];
   };
 
+  // Datos para los KPIs: qué campos se corrigieron a mano y cuándo se leyeron los documentos
+  const camposCorregidos = (original, actual) => {
+    if (!original || !actual) return [];
+    const limpio = (v) => String(v ?? '').trim();
+    return Object.keys(actual).filter((k) => !k.startsWith('_') && k !== 'plantilla_seleccionada' && k !== 'texto_raw'
+      && typeof actual[k] !== 'object' && limpio(actual[k]) !== limpio(original[k]));
+  };
+  const metricasDe = (origen, lectura, actual, avisos) => ({
+    origen,
+    leido_en: lectura?.leido_en || null,
+    corregidos: camposCorregidos(lectura?.datos, actual),
+    avisos: (avisos || []).length,
+  });
+
   const guardarSingle = async () => {
     if (!datos) return;
     const faltan = faltantesPara(datos, selectedPlantilla);
     if (faltan.length > 0 && !(await confirmar(mensajeFaltantes(faltan, 'guardar el expediente'), { titulo: 'Faltan datos', textoConfirmar: 'Guardar de todas formas' }))) return;
     setGuardando((g) => ({ ...g, single: true }));
     try {
-      const [r] = await guardarEnBase([{ ref: 'single', datos, plantilla: selectedPlantilla, archivos: singleFiles.map((f) => f.name) }]);
+      const [r] = await guardarEnBase([{ ref: 'single', datos, plantilla: selectedPlantilla, archivos: singleFiles.map((f) => f.name), metricas: metricasDe('individual', lecturaSingle, datos, avisosSingle) }]);
       if (!r || r.error) throw new Error(r?.error || 'No se pudo guardar');
       setExpedienteId(r.expediente_id);
       avisar.exito('Expediente guardado y procesado. Ya está en Mi Historial.');
@@ -1047,6 +1077,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
     expediente_id: null,
     plantilla_seleccionada: selectedPlantilla,
     datos_extraidos: b.error ? {} : { numero_credito: b.datos_extraidos?.numero_credito || '', ...b.datos_extraidos },
+    lectura: b.error ? null : { datos: { ...(b.datos_extraidos || {}) }, leido_en: b.leido_en || null },
     actos: b.actos || [],
     plantilla_sugerida: b.plantilla_sugerida || null,
   });
@@ -1119,6 +1150,16 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
   const moverArchivoLote = async (nombre, refOrigen, refDestino) => {
     const origen = batchResults.find((r) => r.ref === refOrigen);
     if (!origen) return;
+    if (refDestino !== 'nuevo') {
+      // Solo se juntan archivos del mismo crédito: si los dos traen número, deben ser idénticos
+      const num = numeroEnNombre(nombre);
+      const destino = batchResults.find((r) => r.ref === refDestino);
+      const otro = (destino?.archivos || []).map(numeroEnNombre).find((n) => n && n !== num);
+      if (num && otro) {
+        avisar.error(`No se puede mover: "${nombre}" es del crédito ${num} y ese expediente es del ${otro}. Los números deben ser idénticos.`);
+        return;
+      }
+    }
     const restantes = origen.archivos.filter((n) => n !== nombre);
     let destinoRef = refDestino;
     let destinoArchivos;
@@ -1175,6 +1216,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
     try {
       const resultados = await guardarEnBase(items.map(({ r }) => ({
         ref: r.ref, datos: r.datos_extraidos, plantilla: r.plantilla_seleccionada || selectedPlantilla, archivos: r.archivos,
+        metricas: metricasDe('masivo', r.lectura, r.datos_extraidos, r.avisos),
       })));
       const porRef = Object.fromEntries(resultados.map((x) => [x.ref, x]));
       const guardados = resultados.filter((x) => !x.error).length;
@@ -1679,6 +1721,8 @@ const filteredHistorial = (historial || []).filter((item) => {
   // Todo lo que las pantallas (components/) necesitan leer del estado de App
   const ctx = {
     guardarSingle,
+    conflictoSingle,
+    numeroEnNombre,
     avisosSingle,
     guardando,
     guardarLote,
@@ -1878,6 +1922,7 @@ const filteredHistorial = (historial || []).filter((item) => {
               {activeTab === 'excel' && <TabExcel />}
               {activeTab === 'history' && <TabHistorial />}
               {activeTab === 'users' && esAdmin && <TabUsuarios />}
+              {activeTab === 'kpis' && esAdmin && <TabKpis />}
               </div>
             </div>
 
@@ -1914,4 +1959,4 @@ const filteredHistorial = (historial || []).filter((item) => {
     </div>
     </AppContext.Provider>
   );
-}
+}

@@ -4,6 +4,7 @@ import zipfile
 import re
 import pathlib
 import uuid
+import time
 from typing import Optional, Dict, Any, List
 from fastapi import FastAPI, UploadFile, BackgroundTasks, File, Form, Depends, HTTPException, Body, Query, Header, Request
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ from database import get_db, SessionLocal, engine
 import auth
 import actos_ifrem
 import plantilla_sugerida
+import kpis
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -301,6 +303,7 @@ def descargar_zip(
                 nombres_usados.add(nombre_archivo)
                 zipf.write(ruta_word, arcname=nombre_archivo)
 
+    kpis.registrar(usuario["username"], "zip", expedientes=len(nombres_usados))
     if background_tasks:
         background_tasks.add_task(eliminar_archivo_temporal, ruta_zip)
 
@@ -709,6 +712,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(kpis.router)
 
 
 @app.get("/")
@@ -1020,8 +1024,13 @@ async def procesar_masivo(
 # LEER (sin guardar) y GUARDAR: primero se revisan los datos, después se guardan
 # =====================================================================
 def clave_de_credito(datos: Dict[str, Any], nombre: str) -> str:
-    """Número de crédito con el que se agrupan la carta y la constancia del mismo expediente."""
-    clave = None
+    """
+    Número de crédito con el que se agrupan la carta y la constancia del mismo expediente.
+    Primero el número del nombre del archivo (deben ser idénticos); si no trae, el que viene dentro del PDF.
+    """
+    clave = numero_en_nombre(nombre)
+    if clave:
+        return clave
     credito = datos.get("numero_credito")
     if credito and credito != "NO_ENCONTRADO":
         clave = re.sub(r'\D', '', str(credito))
@@ -1093,7 +1102,12 @@ def emparejar_por_nombre(grupos: Dict[str, List[Dict[str, Any]]]):
     def tipos_de(grupo):
         return {g["datos"].get("_tipo_documento") for g in grupo}
 
-    solo_constancias = [k for k, g in grupos.items() if tipos_de(g) == {"constancia"}]
+    def sin_numero(grupo):
+        return all(not numero_en_nombre(g["nombre"]) for g in grupo)
+
+    # Solo se emparejan por nombre las constancias cuyo archivo NO trae número de crédito
+    # (si trae número, debe ser idéntico al de la carta)
+    solo_constancias = [k for k, g in grupos.items() if tipos_de(g) == {"constancia"} and sin_numero(g)]
     solo_cartas = [k for k, g in grupos.items() if tipos_de(g) == {"carta"}]
     for kc in solo_constancias:
         texto = " ".join(str(g["datos"].get("texto_raw") or "") for g in grupos[kc]).upper()
@@ -1108,6 +1122,48 @@ def emparejar_por_nombre(grupos: Dict[str, List[Dict[str, Any]]]):
         if mejor:
             grupos[mejor].extend(grupos.pop(kc))
             solo_cartas.remove(mejor)
+
+
+def numero_en_nombre(nombre: str) -> Optional[str]:
+    """Número de crédito del nombre del archivo (8 a 12 dígitos seguidos)."""
+    base = (nombre or "").replace("\\", "/").split("/")[-1]
+    m = re.search(r"(?<!\d)\d{8,12}(?!\d)", base)
+    return m.group(0) if m else None
+
+
+def verificar_mismo_credito_por_nombre(archivos: List[tuple]):
+    """
+    Caso individual: la carta y la constancia deben ser del mismo crédito.
+    Si los dos nombres de archivo traen número y no son idénticos, no se leen.
+    """
+    numeros: Dict[str, List[str]] = {}
+    for nombre, _tipo in archivos:
+        num = numero_en_nombre(nombre)
+        if num:
+            numeros.setdefault(num, []).append((nombre or "").replace("\\", "/").split("/")[-1])
+    if len(numeros) > 1:
+        detalle = " y ".join(f'"{v[0]}"' for v in numeros.values())
+        raise HTTPException(status_code=409, detail=f"Los archivos no son del mismo crédito: {detalle}. "
+                                                    "Los números deben ser idénticos; cambia el archivo que no corresponde.")
+
+
+def verificar_mismo_credito_por_contenido(archivos: List[Dict[str, Any]]):
+    """Si el nombre no trae número, se compara el número de crédito que viene dentro de cada PDF."""
+    por_tipo: Dict[str, set] = {}
+    for a in archivos:
+        d = a["datos"]
+        if "error_extraccion" in d:
+            continue
+        num = numero_en_nombre(a["nombre"])
+        if not num:
+            c = re.sub(r"\D", "", str(d.get("numero_credito") or ""))
+            num = c if 8 <= len(c) <= 12 else None
+        if num:
+            por_tipo.setdefault(d.get("_tipo_documento") or "", set()).add(num)
+    cartas, constancias = por_tipo.get("carta", set()), por_tipo.get("constancia", set())
+    if cartas and constancias and not (cartas & constancias):
+        raise HTTPException(status_code=409, detail=f"La carta es del crédito {', '.join(sorted(cartas))} y la constancia "
+                                                    f"del crédito {', '.join(sorted(constancias))}. Los números deben ser idénticos.")
 
 
 @app.post("/api/expedientes/leer")
@@ -1125,7 +1181,10 @@ async def leer_documentos(
     """
     archivos = []
     tipos = tipos or []
+    t_inicio = time.time()
     try:
+        if not agrupar:
+            verificar_mismo_credito_por_nombre([(f.filename or "", tipos[n] if n < len(tipos) else "") for n, f in enumerate(files)])
         for n, file in enumerate(files):
             nombre = (file.filename or "").replace('\\', '/').split('/')[-1]
             if not nombre.lower().endswith('.pdf'):
@@ -1140,6 +1199,9 @@ async def leer_documentos(
             except Exception as e_file:
                 datos = {"error_extraccion": str(e_file), "numero_credito": "NO_ENCONTRADO"}
             archivos.append({"ruta": ruta, "nombre": nombre, "datos": datos, "aviso": aviso})
+
+        if not agrupar:
+            verificar_mismo_credito_por_contenido(archivos)
 
         grupos: Dict[str, List[Dict[str, Any]]] = {}
         for item in archivos:
@@ -1162,9 +1224,13 @@ async def leer_documentos(
                     "datos_extraidos": datos_finales,
                     "actos": actos,
                     "plantilla_sugerida": sugerencia,
+                    "leido_en": int(time.time() * 1000),
                 })
             except Exception as e_grupo:
                 borradores.append({"id": uuid.uuid4().hex, "clave": clave, "archivos": nombres, "error": str(e_grupo)})
+        kpis.registrar(sesion["username"], "leer", modo="masivo" if agrupar else "individual",
+                       archivos=len(archivos), expedientes=len([b for b in borradores if not b.get("error")]),
+                       errores=len([b for b in borradores if b.get("error")]), segundos=round(time.time() - t_inicio, 1))
         return {"status": "exito", "borradores": borradores}
     except HTTPException:
         raise
@@ -1204,6 +1270,8 @@ def guardar_expedientes(
             db.add(expediente)
             db.flush()
             regenerar_word_expediente(expediente, {"datos": datos, "plantilla": plantilla}, db)
+            kpis.registrar(sesion["username"], "guardar", expediente.id, num_credito, plantilla=plantilla,
+                           **kpis.metricas_de_guardado(item.get("metricas")))
             resultados.append({
                 "ref": ref,
                 "expediente_id": str(expediente.id),
@@ -1379,6 +1447,7 @@ def generar_word(
     try:
         expediente = obtener_expediente_autorizado(db, expediente_id, sesion)
         ruta_salida, num_credito = regenerar_word_expediente(expediente, datos_payload, db)
+        kpis.registrar(sesion["username"], "word", expediente.id, num_credito)
         
         return FileResponse(
             path=ruta_salida,
@@ -1609,6 +1678,7 @@ def generar_expediente_manual(
         db.add(nuevo_expediente)
         db.commit()
         db.refresh(nuevo_expediente)
+        kpis.registrar(usuario, "manual", nuevo_expediente.id, num_credito, origen="manual", plantilla=plantilla)
 
         return {
             "status": "exito",
@@ -1726,6 +1796,7 @@ async def procesar_excel(
                 db.add(nuevo_expediente)
                 db.commit()
                 db.refresh(nuevo_expediente)
+                kpis.registrar(usuario_propietario, "excel", nuevo_expediente.id, num_credito, origen="excel", plantilla=plantilla)
 
                 resultados.append({
                     "id": str(nuevo_expediente.id),

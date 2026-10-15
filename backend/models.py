@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, DateTime, JSON, ForeignKey, LargeBinary
+from sqlalchemy import Column, String, Boolean, DateTime, JSON, ForeignKey, LargeBinary, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func, text
 from database import Base
@@ -50,3 +50,17 @@ class PlantillaSubida(Base):
     contenido = Column(LargeBinary, nullable=False)
     subida_por = Column(String, nullable=True)
     actualizada_en = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Actividad(Base):
+    """Bitácora de lo que hace cada usuario (para los KPIs del panel de administración)."""
+    __tablename__ = "actividad"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, index=True, nullable=False)
+    # login, leer, guardar, word, zip, manual, excel
+    tipo = Column(String, index=True, nullable=False)
+    expediente_id = Column(String, index=True, nullable=True)
+    numero_credito = Column(String, nullable=True)
+    detalle = Column(JSON, nullable=True)
+    creado_en = Column(DateTime(timezone=True), index=True, server_default=func.now())

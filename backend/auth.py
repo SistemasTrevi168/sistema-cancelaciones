@@ -198,6 +198,11 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
         expira_en=_ahora() + DURACION_SESION,
     ))
     db.commit()
+    try:
+        import kpis
+        kpis.registrar(user.username, "login")
+    except Exception:
+        pass
 
     response.set_cookie(
         key="session_id",

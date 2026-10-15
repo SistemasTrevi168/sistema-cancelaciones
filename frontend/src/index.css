@@ -2113,3 +2113,98 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Carta y constancia de créditos distintos ---- */
+.aviso-conflicto {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.4;
+  border: 1px solid;
+}
+.aviso-conflicto svg { flex-shrink: 0; margin-top: 1px; }
+.zona-tipo.en-conflicto { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12); }
+
+/* ================= KPIs (rendimiento de operadores) ================= */
+.girando { animation: spin 1s linear infinite; }
+.kpis { display: flex; flex-direction: column; gap: 16px; }
+.kpi-filtros {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 12px; border: 1px solid; border-radius: 12px;
+}
+.kpi-periodos { display: flex; flex-wrap: wrap; gap: 6px; }
+.kpi-periodos button {
+  border: 1px solid; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+.kpi-fechas { display: flex; align-items: center; gap: 6px; }
+.kpi-fechas input { border: 1px solid; border-radius: 8px; padding: 6px 8px; font-size: 13px; }
+.kpi-filtros-acciones { display: flex; gap: 8px; margin-left: auto; }
+.kpi-cargando { display: flex; align-items: center; gap: 8px; padding: 32px; justify-content: center; }
+.kpi-contenido { display: flex; flex-direction: column; gap: 16px; transition: opacity .2s ease; }
+.kpi-contenido.actualizando { opacity: .55; }
+.kpi-periodo-texto { margin: 0; font-size: 13px; }
+.kpi-nota { margin: 0; font-size: 12.5px; padding: 10px 12px; border: 1px dashed; border-radius: 10px; }
+.kpi-vacio { margin: 8px 0; font-size: 13px; }
+
+.kpi-indicadores { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.kpi-indicador *, .kpi-ranking li * { line-height: 1.35; }
+.kpi-indicador { border: 1px solid; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.kpi-indicador-titulo { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+.kpi-indicador-valor { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.kpi-indicador-nota { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+
+.kpi-tarjeta { border: 1px solid; border-radius: 12px; padding: 16px; min-width: 0; }
+.kpi-tarjeta > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.kpi-tarjeta h3 { margin: 0; font-size: 14px; font-weight: 700; }
+.kpi-dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.kpi-tres { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+
+/* Columnas */
+.kpi-columnas { display: flex; gap: 8px; }
+.kpi-eje-y { display: flex; flex-direction: column; justify-content: space-between; height: var(--alto); font-size: 11px; text-align: right; min-width: 18px; font-variant-numeric: tabular-nums; }
+.kpi-eje-y span { line-height: 0; }
+.kpi-area { position: relative; flex: 1; min-width: 0; }
+.kpi-linea { position: absolute; left: 0; right: 0; border-top: 1px solid; opacity: .7; pointer-events: none; }
+.kpi-barras { position: relative; display: flex; align-items: flex-end; gap: 2px; height: var(--alto); }
+.kpi-col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; justify-content: center; cursor: default; outline: none; }
+.kpi-barra { width: 100%; max-width: 28px; border-radius: 4px 4px 0 0; transition: filter .12s ease, opacity .12s ease; }
+.kpi-col.activa .kpi-barra { filter: brightness(1.15); }
+.kpi-col:focus-visible .kpi-barra { outline: 2px solid currentColor; outline-offset: 2px; }
+.kpi-barras:hover .kpi-col:not(.activa) .kpi-barra { opacity: .55; }
+.kpi-eje-x { display: flex; gap: 2px; margin-top: 6px; font-size: 11px; }
+.kpi-eje-x span { flex: 1; text-align: center; white-space: nowrap; overflow: visible; min-width: 0; }
+.kpi-tooltip {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 5;
+  border: 1px solid; border-radius: 8px; padding: 8px 10px; font-size: 12px; white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(0,0,0,.12); pointer-events: none; text-align: left;
+}
+.kpi-col .kpi-tooltip { bottom: auto; top: 0; transform: translate(-50%, -100%); }
+.kpi-tooltip.izq { left: auto; right: 0; transform: translateY(-100%); }
+.kpi-tooltip ul { margin: 4px 0 0 0; padding: 0; list-style: none; }
+.kpi-tooltip li { font-size: 11.5px; }
+
+/* Ranking */
+.kpi-ranking { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.kpi-ranking li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 10px; row-gap: 4px; font-size: 12.5px; }
+.kpi-ranking-nombre { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi-ranking-pista { height: 8px; border-radius: 4px; overflow: hidden; }
+.kpi-ranking-pista span { display: block; height: 100%; border-radius: 4px; }
+.kpi-ranking-valor { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 24px; text-align: right; }
+
+/* Tabla por operador */
+.kpi-tabla-contenedor { overflow-x: auto; margin: 0 -4px; }
+.kpi-tabla { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.kpi-tabla th, .kpi-tabla td { padding: 9px 8px; text-align: right; border-bottom: 1px solid; white-space: nowrap; vertical-align: top; }
+.kpi-tabla td { border-color: inherit; }
+.kpi-tabla .texto { text-align: left; }
+.kpi-tabla th { font-size: 11.5px; font-weight: 600; }
+.kpi-tabla th button { background: none; border: none; padding: 0; font: inherit; cursor: pointer; }
+.kpi-tabla td small { display: block; font-size: 11px; margin-top: 2px; }
+.kpi-tabla tbody tr { cursor: pointer; transition: background-color .12s ease; }
+.kpi-tabla tbody tr:hover { background-color: rgba(37, 99, 235, .06); }
+.kpi-tabla tbody tr.elegida { background-color: rgba(37, 99, 235, .12); }
+
+@media (max-width: 640px) {
+  .kpi-filtros-acciones { margin-left: 0; }
+  .kpi-indicador-valor { font-size: 22px; }
+  .kpi-dos, .kpi-tres { grid-template-columns: 1fr; }
+}

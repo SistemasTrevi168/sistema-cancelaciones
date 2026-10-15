@@ -47,7 +47,20 @@ export default function TabMasivo() {
     moverArchivoLote,
     quitarArchivoLote,
     quitarExpedienteLote,
+    numeroEnNombre,
   } = useApp();
+
+  // Archivos cuyo número (en el nombre) no tiene pareja idéntica en el otro recuadro
+  const sinPareja = (() => {
+    const nums = (lista) => new Set(lista.map((f) => numeroEnNombre(f.name)).filter(Boolean));
+    const nCartas = nums(cartasLote);
+    const nConst = nums(constanciasLote);
+    if (nCartas.size === 0 || nConst.size === 0) return [];
+    return [
+      ...cartasLote.filter((f) => { const n = numeroEnNombre(f.name); return n && !nConst.has(n); }),
+      ...constanciasLote.filter((f) => { const n = numeroEnNombre(f.name); return n && !nCartas.has(n); }),
+    ].map((f) => f.name);
+  })();
 
   const [abierto, setAbierto] = useState(null); // expediente en revisión (índice)
   const [cargaAbierta, setCargaAbierta] = useState(false);
@@ -157,7 +170,12 @@ export default function TabMasivo() {
                   </div>
                 </div>
               )}
-              {!batchLoading && batchFiles.length > 0 && cartasLote.length !== constanciasLote.length && (
+              {!batchLoading && sinPareja.length > 0 && (
+                <p className="aviso-sin-pareja" style={{ fontSize: '12px', color: '#b45309', margin: 0 }}>
+                  Sin pareja con el mismo número ({sinPareja.length}): {sinPareja.slice(0, 4).join(', ')}{sinPareja.length > 4 ? '…' : ''}. Se leerán como expedientes incompletos.
+                </p>
+              )}
+              {!batchLoading && batchFiles.length > 0 && sinPareja.length === 0 && cartasLote.length !== constanciasLote.length && (
                 <p style={{ fontSize: '12px', color: '#b45309', margin: 0 }}>
                   Hay {cartasLote.length} carta(s) y {constanciasLote.length} constancia(s): algunos expedientes quedarán incompletos.
                 </p>

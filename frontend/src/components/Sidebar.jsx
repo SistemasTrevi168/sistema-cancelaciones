@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
-  Edit3, FileSpreadsheet, FileText, FolderPlus, History, KeyRound, LogOut, Moon, Sun, Users,
+  BarChart3, Edit3, FileSpreadsheet, FileText, FolderPlus, History, KeyRound, LogOut, Moon, Sun, Users,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 
@@ -232,6 +232,30 @@ export default function Sidebar() {
                       }}
                     >
                       <Users size={18} /> Usuarios
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('kpis')}
+                      data-tab="kpis"
+                      aria-current={activeTab === 'kpis' ? 'page' : undefined}
+                      className="nav-item"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        color: activeTab === 'kpis' ? '#fff' : theme.textSecondary,
+                        fontWeight: '600',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        textAlign: 'left',
+                        transition: 'color 0.25s ease', position: 'relative', zIndex: 1
+                      }}
+                    >
+                      <BarChart3 size={18} /> Rendimiento (KPIs)
                     </button>
                   </>
                 )}

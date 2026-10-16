@@ -1,4 +1,4 @@
-import { Clock, LogIn, MonitorSmartphone, ShieldAlert } from 'lucide-react';
+import { Clock, LogIn, MonitorSmartphone, RefreshCw, ShieldAlert } from 'lucide-react';
 
 const MENSAJES = {
   inactividad: {
@@ -39,6 +39,21 @@ export function AvisoSesionCerrada({ motivo, segundos = 120, onAceptar, theme, i
           <LogIn size={16} /> Iniciar sesión
         </button>
       </div>
+    </div>
+  );
+}
+
+// Aviso de que hay una versión nueva del sistema publicada
+export function AvisoVersionNueva({ onActualizar, onDespues, theme }) {
+  return (
+    <div className="aviso-version" role="status" style={{ backgroundColor: theme.cardBg, borderColor: theme.accent, color: theme.textPrimary }}>
+      <RefreshCw size={18} color={theme.accent} style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <strong>Hay una versión nueva del sistema</strong>
+        <small style={{ color: theme.textSecondary }}>Actualiza para ver los últimos cambios.</small>
+      </div>
+      <button type="button" className="aviso-version-despues" onClick={onDespues} style={{ color: theme.textSecondary }}>Después</button>
+      <button type="button" onClick={onActualizar} style={{ backgroundColor: theme.accent }}>Actualizar</button>
     </div>
   );
 }

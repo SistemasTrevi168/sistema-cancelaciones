@@ -36,21 +36,53 @@ export default function NavegacionMovil() {
   const [cuenta, setCuenta] = useState(false);
   const [mas, setMas] = useState(false);
   const botonCuenta = useRef(null);
+  // Arrastre de la hoja "Más" (se baja con el dedo desde la barrita o el título)
+  const [arrastre, setArrastre] = useState(0);
+  const [cerrandoMas, setCerrandoMas] = useState(false);
+  const toque = useRef(null);
+
+  const cerrarMas = () => {
+    if (!mas || cerrandoMas) return;
+    setCerrandoMas(true);
+    setTimeout(() => { setMas(false); setCerrandoMas(false); setArrastre(0); }, 220);
+  };
+  const alEmpezarArrastre = (e) => {
+    if (e.target.closest('button:not(.hoja-mas-asa)')) return;
+    toque.current = { y: e.clientY, t: Date.now(), movio: false, enAsa: !!e.target.closest('.hoja-mas-asa') };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const alArrastrar = (e) => {
+    if (!toque.current) return;
+    const dy = Math.max(0, e.clientY - toque.current.y);
+    if (dy > 4) toque.current.movio = true;
+    setArrastre(dy);
+  };
+  const alSoltarArrastre = (e) => {
+    if (!toque.current) return;
+    const dy = Math.max(0, e.clientY - toque.current.y);
+    const rapido = dy / Math.max(1, Date.now() - toque.current.t) > 0.5;
+    const toco = !toque.current.movio && toque.current.enAsa;
+    toque.current = null;
+    if (dy > 70 || (rapido && dy > 20) || toco) cerrarMas();
+    else setArrastre(0);
+  };
 
   const masVisibles = MAS.filter((m) => !m.admin || esAdmin);
   const enMas = masVisibles.some((m) => m.id === activeTab);
 
   useEffect(() => {
     if (!cuenta && !mas) return undefined;
-    const alTeclear = (e) => { if (e.key === 'Escape') { setCuenta(false); setMas(false); } };
+    const alTeclear = (e) => { if (e.key === 'Escape') { setCuenta(false); cerrarMas(); } };
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cuenta, mas]);
 
   const ir = (id) => {
     setActiveTab(id);
     setCuenta(false);
     setMas(false);
+    setArrastre(0);
     window.scrollTo({ top: 0 });
   };
   const nombre = currentUser?.nombre_mostrar || currentUser?.username || '';
@@ -112,12 +144,19 @@ export default function NavegacionMovil() {
           {/* HOJA "MÁS" */}
           {mas && (
             <>
-              <div className="nav-movil-fondo" onClick={() => setMas(false)} aria-hidden="true" />
-              <div className="hoja-mas" role="dialog" aria-label="Más secciones" style={superficie}>
-                <div className="hoja-mas-asa" style={{ backgroundColor: theme.border }} />
-                <div className="hoja-mas-encabezado">
-                  <strong>Más secciones</strong>
-                  <button type="button" onClick={() => setMas(false)} aria-label="Cerrar" style={{ color: theme.textSecondary }}><X size={20} /></button>
+              <div className={`nav-movil-fondo ${cerrandoMas ? 'cerrando' : ''}`} onClick={cerrarMas} aria-hidden="true"
+                style={arrastre ? { opacity: Math.max(0.2, 1 - arrastre / 300) } : undefined} />
+              <div className={`hoja-mas ${cerrandoMas ? 'cerrando' : ''} ${arrastre ? 'arrastrando' : ''}`} role="dialog" aria-label="Más secciones"
+                style={{ ...superficie, ...(arrastre && !cerrandoMas ? { transform: `translateY(${arrastre}px)` } : {}) }}>
+                <div className="hoja-mas-arrastre" onPointerDown={alEmpezarArrastre} onPointerMove={alArrastrar}
+                  onPointerUp={alSoltarArrastre} onPointerCancel={alSoltarArrastre}>
+                  <button type="button" className="hoja-mas-asa" aria-label="Desliza hacia abajo para cerrar" data-sin-onda>
+                    <i style={{ backgroundColor: isDarkMode ? '#475569' : '#cbd5e1' }} />
+                  </button>
+                  <div className="hoja-mas-encabezado">
+                    <strong>Más secciones</strong>
+                    <button type="button" onClick={cerrarMas} aria-label="Cerrar" style={{ color: theme.textSecondary }}><X size={20} /></button>
+                  </div>
                 </div>
                 {masVisibles.map((m) => {
                   const Icono = m.icono;
@@ -151,7 +190,7 @@ export default function NavegacionMovil() {
                 </button>
               );
             })}
-            <button type="button" onClick={() => { setMas((v) => !v); setCuenta(false); }} aria-expanded={mas}
+            <button type="button" onClick={() => { if (mas) cerrarMas(); else { setArrastre(0); setMas(true); } setCuenta(false); }} aria-expanded={mas}
               className={enMas || mas ? 'activa' : ''} style={{ color: enMas || mas ? theme.accent : theme.textSecondary }}>
               <span className="pestana-icono" style={enMas || mas ? { backgroundColor: `${theme.accent}1f` } : undefined}><LayoutGrid size={21} /></span>
               <span>Más</span>

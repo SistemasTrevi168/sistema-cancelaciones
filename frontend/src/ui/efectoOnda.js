@@ -5,6 +5,8 @@ export function instalarEfectoOnda() {
   const alPresionar = (e) => {
     const boton = e.target.closest?.('button');
     if (!boton || boton.disabled || boton.dataset.sinOnda !== undefined) return;
+    // En celular / tablet (toque) no hay onda: Safari de iPhone no la recorta y deja manchas de color
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') return;
     // La navegación del celular tiene su propia respuesta al toque (sin onda)
     if (boton.closest('.nav-movil-raiz, .barra-movil')) return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;

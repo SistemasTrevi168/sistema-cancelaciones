@@ -24,7 +24,8 @@ import TabUsuarios from './components/TabUsuarios';
 import TabKpis from './components/TabKpis';
 import TabPerfil from './components/TabPerfil';
 import NavegacionMovil from './components/NavegacionMovil';
-import { AvisoInactividad, AvisoSesionCerrada } from './components/AvisosSesion';
+import { AvisoInactividad, AvisoSesionCerrada, AvisoVersionNueva } from './components/AvisosSesion';
+import useVersionNueva from './ui/versionNueva';
 import useVigilanciaSesion from './vigilanciaSesion';
 import useCelular from './usarCelular';
 import { COLOR_ACENTO_DEFECTO, colorLegible } from './colores';
@@ -1807,6 +1808,12 @@ const filteredHistorial = (historial || []).filter((item) => {
 
   // Aviso del navegador si se cierra o recarga la página con expedientes sin guardar
   const hayBorradores = (!!datos && !expedienteId) || batchResults.some((r) => !r.error && !r.expediente_id);
+  const hayVersionNueva = useVersionNueva();
+  const [versionPospuesta, setVersionPospuesta] = useState(false);
+  const actualizarVersion = async () => {
+    if (hayBorradores && !(await confirmar('Tienes expedientes leídos sin guardar; si actualizas ahora se pierden.', { titulo: '¿Actualizar el sistema?', textoConfirmar: 'Actualizar de todas formas', peligro: true }))) return;
+    window.location.reload();
+  };
   useEffect(() => {
     if (!hayBorradores) return;
     const alSalirPagina = (e) => { e.preventDefault(); e.returnValue = ''; };
@@ -2071,6 +2078,9 @@ const filteredHistorial = (historial || []).filter((item) => {
       <Notificaciones />
       {isAuthenticated && avisoInactividad !== null && (
         <AvisoInactividad segundos={avisoInactividad} onSeguir={() => { seguirTrabajando(); setAvisoInactividad(null); }} theme={theme} />
+      )}
+      {hayVersionNueva && !versionPospuesta && (
+        <AvisoVersionNueva onActualizar={actualizarVersion} onDespues={() => setVersionPospuesta(true)} theme={theme} />
       )}
       {!isAuthenticated && avisoSesion && (
         <AvisoSesionCerrada motivo={avisoSesion.motivo} segundos={avisoSesion.segundos} onAceptar={() => setAvisoSesion(null)} theme={theme} isDarkMode={isDarkMode} />

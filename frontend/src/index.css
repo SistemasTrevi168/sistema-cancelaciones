@@ -2521,7 +2521,13 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   box-shadow: 0 -18px 40px -14px rgba(15, 23, 42, .45);
   animation: subirBarra .25s cubic-bezier(.2, .8, .3, 1) both;
 }
-.hoja-mas-asa { width: 40px; height: 5px; border-radius: 999px; margin: 2px auto 10px; }
+.hoja-mas-arrastre { touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.hoja-mas-asa { display: flex; justify-content: center; width: 100%; padding: 6px 0 12px; margin: 0; background: none; border: none; cursor: grab; }
+.hoja-mas-asa i { display: block; width: 42px; height: 5px; border-radius: 999px; }
+.hoja-mas.arrastrando { animation: none; transition: none; }
+.hoja-mas { transition: transform .22s cubic-bezier(.2, .8, .3, 1); }
+.hoja-mas.cerrando { animation: none; transform: translateY(105%) !important; transition: transform .22s ease-in; }
+.nav-movil-fondo.cerrando { opacity: 0 !important; transition: opacity .22s ease-in; }
 .hoja-mas-encabezado { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .hoja-mas-encabezado strong { font-size: 17px; }
 .hoja-mas-encabezado button { background: none; border: none; cursor: pointer; padding: 6px; }
@@ -2576,6 +2582,19 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
 .tema-oscuro .aviso-inactividad-contador { background: radial-gradient(closest-side, #121a2b 78%, transparent 80% 100%), conic-gradient(#f59e0b var(--avance), #78350f 0); color: #fbbf24; }
 @media (max-width: 1024px) { .aviso-inactividad { top: calc(64px + env(safe-area-inset-top)); } }
 
+/* Versión nueva publicada */
+.aviso-version {
+  position: fixed; z-index: 1150; left: 12px; right: 12px; bottom: 20px; margin: 0 auto;
+  max-width: 520px; box-sizing: border-box; display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border: 1px solid; border-radius: 14px;
+  box-shadow: 0 16px 36px -14px rgba(15, 23, 42, .45); animation: subirBarra .25s ease-out both;
+}
+.aviso-version strong { display: block; font-size: 13.5px; }
+.aviso-version small { display: block; font-size: 12px; }
+.aviso-version button { border: none; border-radius: 9px; padding: 8px 12px; font-weight: 700; font-size: 13px; color: #fff; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.aviso-version .aviso-version-despues { background: none; padding: 8px 6px; font-weight: 600; }
+@media (max-width: 1024px) { .aviso-version { bottom: calc(var(--alto-pestanas) + 12px); } }
+
 /* En pantallas táctiles no se queda "pegado" el efecto de pasar el mouse */
 @media (hover: none) {
   button:not(:disabled):hover, .tema-oscuro button:not(:disabled):hover { filter: none; }
@@ -2587,6 +2606,12 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
 @media (max-width: 1024px) {
   /* Los botones de Captura Manual quedan arriba de las pestañas (no detrás) */
   .manual-botones { bottom: var(--alto-pestanas) !important; }
+  /* Limpiar, Vista previa y Generar en una sola fila, siempre a la vista */
+  .manual-botones { flex-wrap: nowrap !important; gap: 8px !important; padding: 8px !important; }
+  .manual-botones > button { flex: 1 1 0 !important; min-width: 0; justify-content: center; padding-left: 8px !important; padding-right: 8px !important; white-space: nowrap; }
+  .manual-botones .boton-principal { flex: 1.25 1 0 !important; flex-basis: 0 !important; }
+  .manual-botones .texto-largo { display: none; }
+  .manual-botones svg { flex-shrink: 0; }
   .tema-claro .pestanas-movil { background-color: rgba(255, 255, 255, .97) !important; }
   .tema-oscuro .pestanas-movil { background-color: rgba(18, 26, 43, .97) !important; }
 }

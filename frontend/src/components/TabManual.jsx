@@ -253,7 +253,7 @@ export default function TabManual() {
           </button>
           <button type="submit" disabled={cargando} className="boton-principal" style={{ backgroundColor: theme.accent, color: '#fff' }}>
             {cargando ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle size={16} />}
-            {cargando ? 'Generando…' : 'Generar expediente'}
+            {cargando ? 'Generando…' : <>Generar<span className="texto-largo"> expediente</span></>}
           </button>
         </div>
       </form>

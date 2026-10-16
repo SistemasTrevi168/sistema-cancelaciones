@@ -24,13 +24,15 @@ import TabUsuarios from './components/TabUsuarios';
 import TabKpis from './components/TabKpis';
 import TabPerfil from './components/TabPerfil';
 import NavegacionMovil from './components/NavegacionMovil';
+import { AvisoInactividad, AvisoSesionCerrada } from './components/AvisosSesion';
+import useVigilanciaSesion from './vigilanciaSesion';
 import useCelular from './usarCelular';
 import { COLOR_ACENTO_DEFECTO, colorLegible } from './colores';
 import { renderAsync } from 'docx-preview';
 import { AlertCircle } from 'lucide-react';
 
 // Estado de los botones atrás/adelante del navegador (fuera de React: solo lo usan los eventos del navegador)
-const navegador = { guardia: false, auth: false, tab: 'single', alSalir: null, alVolverPestana: null, alRevisar: null };
+const navegador = { guardia: false, auth: false, tab: 'single', alSalir: null, alExpirar: null, alVolverPestana: null, alRevisar: null };
 
 
 export default function App() {
@@ -212,6 +214,9 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  // Sesión cerrada sola (inactividad u otro dispositivo) y aviso de los últimos segundos
+  const [avisoSesion, setAvisoSesion] = useState(null);
+  const [avisoInactividad, setAvisoInactividad] = useState(null);
   // Ventana de contraseña: null, { modo: 'propio' } o { modo: 'reset', usuario }
   const [modalPassword, setModalPassword] = useState(null);
   // Evitan doble clic mientras se descarga o guarda algo
@@ -459,12 +464,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
 
   // Si cualquier llamada responde "sesión no válida", se regresa al login con un aviso
   useEffect(() => {
-    alExpirarSesion(() => {
-      if (!navegador.auth) return;
-      navegador.auth = false;
-      avisar.aviso('Tu sesión expiró o se cerró. Vuelve a ingresar.');
-      navegador.alSalir?.();
-    });
+    alExpirarSesion((motivo) => navegador.alExpirar?.(motivo || 'cerrada'));
     return () => alExpirarSesion(null);
   }, []);
 
@@ -612,6 +612,21 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setIsLoggingIn(false);
     }
   };
+
+  // La sesión se cerró sola: se avisa por qué y se regresa al login
+  const expirarSesion = (motivo) => {
+    if (!navegador.auth) return;
+    navegador.auth = false;
+    setAvisoInactividad(null);
+    setAvisoSesion(motivo);
+    handleConfirmLogout();
+  };
+  useEffect(() => { navegador.alExpirar = expirarSesion; });
+  const seguirTrabajando = useVigilanciaSesion({
+    activo: isAuthenticated,
+    onExpirar: (motivo) => navegador.alExpirar?.(motivo),
+    onAviso: setAvisoInactividad,
+  });
 
   const handleConfirmLogout = async () => {
     cerrarVistaPrevia();
@@ -2001,6 +2016,12 @@ const filteredHistorial = (historial || []).filter((item) => {
 
       {/* AVISOS FLOTANTES Y CONFIRMACIONES */}
       <Notificaciones />
+      {isAuthenticated && avisoInactividad !== null && (
+        <AvisoInactividad segundos={avisoInactividad} onSeguir={() => { seguirTrabajando(); setAvisoInactividad(null); }} theme={theme} />
+      )}
+      {!isAuthenticated && avisoSesion && (
+        <AvisoSesionCerrada motivo={avisoSesion} onAceptar={() => setAvisoSesion(null)} theme={theme} isDarkMode={isDarkMode} />
+      )}
 
       {/* VENTANA DE CONTRASEÑA */}
       {modalPassword && (

@@ -15,7 +15,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
-from auth import _a_utc, _ahora, require_user, session_id_de
+from auth import _a_utc, _ahora, anotar_cierre, require_user, session_id_de
 from database import get_db
 
 router = APIRouter(prefix="/api/perfil", tags=["perfil"])
@@ -179,6 +179,7 @@ def cerrar_sesion(prefijo: str, request: Request, db: Session = Depends(get_db),
     objetivo = [s for s in filas if s.id.startswith(prefijo) and s.id != actual]
     if not objetivo:
         raise HTTPException(status_code=404, detail="No se encontró esa sesión (o es la sesión actual).")
+    anotar_cierre([s.id for s in objetivo], "otro_dispositivo")
     for s in objetivo:
         db.delete(s)
     db.commit()
@@ -188,7 +189,8 @@ def cerrar_sesion(prefijo: str, request: Request, db: Session = Depends(get_db),
 @router.post("/sesiones/cerrar-otras")
 def cerrar_otras(request: Request, db: Session = Depends(get_db), sesion: dict = Depends(require_user)):
     actual = session_id_de(request)
-    db.query(models.Sesion).filter(models.Sesion.username == sesion["username"], models.Sesion.id != actual) \
-        .delete(synchronize_session=False)
+    q = db.query(models.Sesion).filter(models.Sesion.username == sesion["username"], models.Sesion.id != actual)
+    anotar_cierre([s.id for s in q.all()], "otro_dispositivo")
+    q.delete(synchronize_session=False)
     db.commit()
     return _perfil(db, _usuario(db, sesion), request)

@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
+import os
+import time
 import uuid
 
 from database import get_db
@@ -15,6 +17,28 @@ pwd_context = CryptContext(
 
 # Duración de la sesión (igual que la cookie: 24 horas)
 DURACION_SESION = timedelta(hours=24)
+
+# Inactividad: el navegador avisa y cierra la sesión al minuto sin actividad.
+# El servidor la invalida si pasan INACTIVIDAD + GRACIA segundos sin saber nada del navegador
+# (por ejemplo, si cerraron la pestaña o el celular se bloqueó).
+INACTIVIDAD_SEGUNDOS = int(os.getenv("INACTIVIDAD_SEGUNDOS", "60"))
+GRACIA_SEGUNDOS = int(os.getenv("GRACIA_SEGUNDOS", "45"))
+
+# Por qué se cerró una sesión (para avisarle al otro dispositivo). Se guarda en memoria unas horas.
+_MOTIVOS_CIERRE: dict = {}
+
+
+def anotar_cierre(ids, motivo: str):
+    ahora = time.time()
+    for sid in ids:
+        _MOTIVOS_CIERRE[sid] = (motivo, ahora)
+    for sid, (_, t) in list(_MOTIVOS_CIERRE.items()):
+        if ahora - t > 6 * 3600:
+            _MOTIVOS_CIERRE.pop(sid, None)
+
+
+def motivo_de_cierre(sid: str) -> str:
+    return (_MOTIVOS_CIERRE.get(sid) or ("expirada", 0))[0]
 
 
 def hash_password(password: str) -> str:
@@ -45,12 +69,31 @@ def validar_password_nueva(password: str):
         raise HTTPException(status_code=400, detail="La contraseña es demasiado larga (máximo 72 caracteres).")
 
 
-def cerrar_sesiones_de(db: Session, username: str, excepto: str = None):
+def cerrar_sesiones_de(db: Session, username: str, excepto: str = None, motivo: str = "cerrada"):
     """Cierra todas las sesiones abiertas de un usuario (opcionalmente menos una)."""
     q = db.query(Sesion).filter(Sesion.username == username)
     if excepto:
         q = q.filter(Sesion.id != excepto)
+    anotar_cierre([s.id for s in q.all()], motivo)
     q.delete(synchronize_session=False)
+
+
+def _inactiva(sesion) -> bool:
+    ultimo = getattr(sesion, "ultimo_uso", None) or sesion.creada_en
+    if not ultimo:
+        return False
+    return (_ahora() - _a_utc(ultimo)).total_seconds() > INACTIVIDAD_SEGUNDOS + GRACIA_SEGUNDOS
+
+
+def _marcar_uso(sesion, db: Session):
+    """Guarda el último uso de la sesión (como máximo cada 10 segundos)."""
+    try:
+        ultimo = getattr(sesion, "ultimo_uso", None)
+        if ultimo is None or (_ahora() - _a_utc(ultimo)).total_seconds() >= min(10, INACTIVIDAD_SEGUNDOS / 4):
+            sesion.ultimo_uso = _ahora()
+            db.commit()
+    except Exception:
+        db.rollback()
 
 
 def comprobar_password(user: Usuario, password: str, db: Session) -> bool:
@@ -136,6 +179,12 @@ def obtener_sesion(request: Request, db: Session) -> dict:
         db.commit()
         raise HTTPException(status_code=401, detail="Sesión no válida o expirada")
 
+    if _inactiva(sesion):
+        anotar_cierre([sesion.id], "inactividad")
+        db.delete(sesion)
+        db.commit()
+        raise HTTPException(status_code=401, detail="Tu sesión expiró por inactividad")
+
     user = db.query(Usuario).filter(Usuario.username == sesion.username).first()
     if not user or getattr(user, "activo", True) is False:
         # El usuario fue eliminado o desactivado: la sesión deja de valer
@@ -143,14 +192,7 @@ def obtener_sesion(request: Request, db: Session) -> dict:
         db.commit()
         raise HTTPException(status_code=401, detail="Sesión no válida o expirada")
 
-    # Último uso de la sesión (se actualiza como máximo cada 5 minutos)
-    try:
-        ultimo = getattr(sesion, "ultimo_uso", None)
-        if ultimo is None or _a_utc(ultimo) < _ahora() - timedelta(minutes=5):
-            sesion.ultimo_uso = _ahora()
-            db.commit()
-    except Exception:
-        db.rollback()
+    _marcar_uso(sesion, db)
 
     return {
         "id": str(user.id),
@@ -275,6 +317,37 @@ def estado_sesion(request: Request, db: Session = Depends(get_db)):
         return {"autenticado": False, "user": None}
 
 
+@router.get("/ping")
+def ping(request: Request, activo: int = 0, db: Session = Depends(get_db)):
+    """
+    El navegador pregunta cada pocos segundos si su sesión sigue abierta.
+    activo=1 indica que la persona estuvo usando el sistema (cuenta como actividad);
+    activo=0 solo revisa, sin alargar la sesión.
+    Responde 200 siempre: {"activa": bool, "motivo": "cerrada" | "inactividad" | "expirada"}.
+    """
+    sid = session_id_de(request)
+    if not sid:
+        return {"activa": False, "motivo": "expirada"}
+    sesion = db.query(Sesion).filter(Sesion.id == sid).first()
+    if not sesion:
+        return {"activa": False, "motivo": motivo_de_cierre(sid)}
+    user = db.query(Usuario).filter(Usuario.username == sesion.username).first()
+    if not user or getattr(user, "activo", True) is False:
+        anotar_cierre([sid], "cerrada")
+        db.delete(sesion)
+        db.commit()
+        return {"activa": False, "motivo": "cerrada"}
+    if _a_utc(sesion.expira_en) < _ahora() or _inactiva(sesion):
+        motivo = "inactividad" if _inactiva(sesion) else "expirada"
+        anotar_cierre([sid], motivo)
+        db.delete(sesion)
+        db.commit()
+        return {"activa": False, "motivo": motivo}
+    if activo:
+        _marcar_uso(sesion, db)
+    return {"activa": True, "inactividad_segundos": INACTIVIDAD_SEGUNDOS}
+
+
 @router.post("/logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     session_id = session_id_de(request)
@@ -317,6 +390,6 @@ def cambiar_password(
 
     user_db.password_hash = hash_password(data.password_nueva)
     # Por seguridad se cierran sus otras sesiones abiertas (otras computadoras)
-    cerrar_sesiones_de(db, user_db.username, excepto=session_id_de(request))
+    cerrar_sesiones_de(db, user_db.username, excepto=session_id_de(request), motivo="contrasena")
     db.commit()
     return {"status": "exito", "mensaje": "Contraseña actualizada correctamente."}

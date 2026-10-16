@@ -2539,3 +2539,28 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   .historial-buscar { flex: 1 1 100%; min-width: 0; }
   .historial-buscar input { flex: 1; min-width: 0; width: 100% !important; }
 }
+
+/* ===== Sesión cerrada sola e inactividad ===== */
+.aviso-sesion-fondo { z-index: 3500 !important; align-items: center !important; }
+.aviso-sesion { width: min(420px, 100%); border: 1px solid; border-radius: 18px; padding: 26px; text-align: center; box-shadow: 0 24px 48px -16px rgba(0,0,0,.4); }
+.aviso-sesion-icono { width: 56px; height: 56px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+.aviso-sesion h3 { margin: 0 0 8px; font-size: 20px; font-weight: 700; }
+.aviso-sesion p { margin: 0 0 22px; font-size: 14px; line-height: 1.5; }
+.aviso-sesion-boton { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px; border: none; border-radius: 12px; color: #fff; font-weight: 700; font-size: 15px; cursor: pointer; font-family: inherit; }
+.aviso-inactividad {
+  position: fixed; z-index: 3000; left: 50%; top: max(16px, env(safe-area-inset-top)); transform: translateX(-50%);
+  width: min(460px, calc(100vw - 24px)); box-sizing: border-box;
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 2px solid; border-radius: 14px;
+  box-shadow: 0 18px 36px -14px rgba(0,0,0,.45); animation: bajarAviso .25s ease-out both;
+}
+@keyframes bajarAviso { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.aviso-inactividad strong { display: block; font-size: 14px; }
+.aviso-inactividad small { display: block; font-size: 12.5px; }
+.aviso-inactividad button { border: none; color: #fff; border-radius: 10px; padding: 9px 12px; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; font-family: inherit; }
+.aviso-inactividad-contador {
+  flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 16px; color: #b45309;
+  background: radial-gradient(closest-side, #fffbeb 78%, transparent 80% 100%), conic-gradient(#f59e0b var(--avance), #fde68a 0);
+}
+.tema-oscuro .aviso-inactividad-contador { background: radial-gradient(closest-side, #121a2b 78%, transparent 80% 100%), conic-gradient(#f59e0b var(--avance), #78350f 0); color: #fbbf24; }
+@media (max-width: 1024px) { .aviso-inactividad { top: calc(64px + env(safe-area-inset-top)); } }

@@ -49,11 +49,17 @@ export function encabezadosSesion(extra = {}) {
   return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
 }
 
+// Peticiones en curso (leer PDFs, guardar, etc.): mientras haya alguna, la sesión no se cierra por inactividad
+let peticionesEnCurso = 0;
+export const hayPeticionesEnCurso = () => peticionesEnCurso > 0;
+
 api.interceptors.request.use((config) => {
   const token = leerToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (!config.sinActividad) { peticionesEnCurso += 1; config._contada = true; }
   return config;
 });
+const terminarPeticion = (config) => { if (config?._contada) { config._contada = false; peticionesEnCurso = Math.max(0, peticionesEnCurso - 1); } };
 
 // Si el servidor dice que la sesión ya no es válida, la app regresa al login
 let alExpirar = null;
@@ -61,10 +67,12 @@ export function alExpirarSesion(fn) {
   alExpirar = fn;
 }
 api.interceptors.response.use(
-  (response) => response,
+  (response) => { terminarPeticion(response.config); return response; },
   (error) => {
+    terminarPeticion(error.config);
     const url = error.config?.url || '';
-    if (error.response?.status === 401 && !url.includes('/auth/login') && alExpirar) alExpirar();
+    const detalle = String(error.response?.data?.detail || '');
+    if (error.response?.status === 401 && !url.includes('/auth/login') && alExpirar) alExpirar(/inactividad/i.test(detalle) ? 'inactividad' : 'cerrada');
     return Promise.reject(error);
   }
 );

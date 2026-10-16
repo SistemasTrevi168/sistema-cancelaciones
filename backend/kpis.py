@@ -69,6 +69,14 @@ def metricas_de_guardado(metricas: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     except (TypeError, ValueError):
         pass
     corregidos = [str(c) for c in (metricas.get("corregidos") or []) if c][:60]
+    # Valores antes -> después de lo que se corrigió a mano (para el historial de cambios del expediente)
+    cambios = metricas.get("cambios") or {}
+    if isinstance(cambios, dict):
+        salida["cambios"] = {str(k)[:60]: [str(v[0] if isinstance(v, (list, tuple)) and v else "")[:300],
+                                           str(v[1] if isinstance(v, (list, tuple)) and len(v) > 1 else "")[:300]]
+                             for k, v in list(cambios.items())[:60]}
+    if leido_en:
+        salida["leido_en"] = leido_en
     salida["corregidos"] = corregidos
     salida["num_corregidos"] = len(corregidos)
     try:

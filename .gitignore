@@ -16,3 +16,9 @@ Claude outputs/
 
 # Variables de entorno
 .env
+
+# Ejemplos con datos personales (no se suben a GitHub)
+EJEMPLOS COACREDITADOS/
+
+# Copias de versiones de plantillas que el servidor arma solo
+backend/templates/_versiones/

@@ -28,7 +28,7 @@ class Expediente(Base):
     usuario_propietario = Column(String, ForeignKey("usuarios.username"), nullable=False, default="admin")
     numero_credito = Column(String, index=True, nullable=False)
     manera = Column(String, default="MANERA_2")  # MANERA_1 o MANERA_2
-    estado = Column(String, default="PENDIENTE")  # PENDIENTE, EN_REVISION, COMPLETADO, INCIDENCIA
+    estado = Column(String, default="GENERADO")  # GENERADO, REVISADO, ENTREGADO (los antiguos PENDIENTE cuentan como GENERADO)
     datos_extraidos = Column(JSON, nullable=True)
     ruta_pdf_constancia = Column(String, nullable=True)
     ruta_pdf_carta = Column(String, nullable=True)
@@ -72,3 +72,25 @@ class Actividad(Base):
     numero_credito = Column(String, nullable=True)
     detalle = Column(JSON, nullable=True)
     creado_en = Column(DateTime(timezone=True), index=True, server_default=func.now())
+
+
+class PlantillaVersion(Base):
+    """Copia de cada versión de plantilla con la que se generó algún Word (por su huella sha256)."""
+    __tablename__ = "plantilla_versiones"
+
+    huella = Column(String, primary_key=True)
+    nombre = Column(String, nullable=True)
+    contenido = Column(LargeBinary, nullable=False)
+    creada_en = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Respaldo(Base):
+    """Respaldos (ZIP) de toda la información; el admin los descarga desde el sistema."""
+    __tablename__ = "respaldos"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    creado_en = Column(DateTime(timezone=True), index=True, server_default=func.now())
+    automatico = Column(Boolean, default=True)
+    creado_por = Column(String, nullable=True)
+    tamano = Column(Integer, nullable=True)
+    contenido = Column(LargeBinary, nullable=False)

@@ -1,8 +1,14 @@
+import { useCallback, useState } from 'react';
 import {
-  ArrowUpDown, Download, Eye, Filter, History, Loader2, Search,
+  ArrowUpDown, Download, Eye, Filter, History, ListChecks, Loader2, RefreshCw, Search, X,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
+import EstadoExpediente from './EstadoExpediente';
+import BitacoraExpediente from './BitacoraExpediente';
+import { ESTADOS, colorEstado } from '../estadosExpediente';
+import usePresencia from '../ui/usarPresencia';
+import Selector from './Selector';
 
 export default function TabHistorial() {
   const {
@@ -32,8 +38,24 @@ export default function TabHistorial() {
     setSortAscending,
     showExportMenu,
     sortAscending,
+    filtroEstado,
+    setFiltroEstado,
+    conteoEstados,
+    cambiarEstado,
     theme
   } = useApp();
+  const exportar = usePresencia(showExportMenu, 150);
+  const [bitacora, setBitacora] = useState(null); // { id, titulo, datos }
+  const [marcados, setMarcados] = useState({});    // id -> true
+  const idDe = (item) => String(item.id || item.expediente_id);
+  const visiblesIds = filteredHistorial.map(idDe);
+  const marcadosIds = visiblesIds.filter((i) => marcados[i]);
+  const todosMarcados = visiblesIds.length > 0 && marcadosIds.length === visiblesIds.length;
+  const totalEstados = Object.values(conteoEstados || {}).reduce((a, b) => a + b, 0);
+  const cerrarBitacora = useCallback(() => setBitacora(null), []);
+  const marcarVarios = async (estado) => {
+    if (await cambiarEstado(marcadosIds, estado)) setMarcados({});
+  };
 
   return (
 <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}` }}>
@@ -48,17 +70,21 @@ export default function TabHistorial() {
                     <Search size={16} color={theme.textSecondary} />
                     <input
                       type="text"
-                      placeholder="Buscar por acreditado o crédito..."
+                      placeholder="Buscar nombre, crédito, folio o carta…"
+                      aria-label="Buscar en el historial por nombre, crédito, folio o número de carta"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      style={{ padding: '8px', border: 'none', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '13px', width: '200px' }}
+                      style={{ padding: '8px', border: 'none', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '13px', width: '250px', outline: 'none' }}
                     />
+                    {searchQuery && (
+                      <button type="button" onClick={() => setSearchQuery('')} aria-label="Limpiar búsqueda" className="buscar-limpiar" style={{ color: theme.textSecondary }}><X size={14} /></button>
+                    )}
                   </div>
 
                   {/* Selector de Periodo */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '0 8px', backgroundColor: theme.inputBg }}>
                     <Filter size={14} color={theme.textSecondary} />
-                    <select
+                    <Selector
                       value={filterPeriod}
                       onChange={(e) => setFilterPeriod(e.target.value)}
                       style={{ border: 'none', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '13px', padding: '8px 0', cursor: 'pointer' }}
@@ -67,12 +93,12 @@ export default function TabHistorial() {
                       <option value="day">Por Día</option>
                       <option value="month">Por Mes</option>
                       <option value="year">Por Año</option>
-                    </select>
+                    </Selector>
                   </div>
 
                   {/* Filtro Dinámico: Año */}
                   {filterPeriod !== 'all' && (
-                    <select
+                    <Selector
                       value={selectedYear}
                       onChange={(e) => setSelectedYear(e.target.value)}
                       style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', padding: '8px', cursor: 'pointer' }}
@@ -80,12 +106,12 @@ export default function TabHistorial() {
                       {[2024, 2025, 2026, 2027].map((y) => (
                         <option key={y} value={y}>{y}</option>
                       ))}
-                    </select>
+                    </Selector>
                   )}
 
                   {/* Filtro Dinámico: Mes */}
                   {(filterPeriod === 'day' || filterPeriod === 'month') && (
-                    <select
+                    <Selector
                       value={selectedMonth}
                       onChange={(e) => setSelectedMonth(e.target.value)}
                       style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', padding: '8px', cursor: 'pointer' }}
@@ -93,12 +119,12 @@ export default function TabHistorial() {
                       {mesesNombres.map((m, idx) => (
                         <option key={idx} value={idx}>{m}</option>
                       ))}
-                    </select>
+                    </Selector>
                   )}
 
                   {/* Filtro Dinámico: Día */}
                   {filterPeriod === 'day' && (
-                    <select
+                    <Selector
                       value={selectedDay}
                       onChange={(e) => setSelectedDay(e.target.value)}
                       style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', padding: '8px', cursor: 'pointer' }}
@@ -107,7 +133,7 @@ export default function TabHistorial() {
                       {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
                         <option key={d} value={d}>Día {d}</option>
                       ))}
-                    </select>
+                    </Selector>
                   )}
 
                   {/* Orden A-Z / Z-A */}
@@ -121,6 +147,42 @@ export default function TabHistorial() {
                   </button>
                 </div>
               </div>
+
+              {/* FILTRO POR ESTADO */}
+              <div className="filtro-estados" role="tablist" aria-label="Filtrar por estado">
+                {[{ id: 'todos', nombre: 'Todos' }, ...ESTADOS].map((e) => {
+                  const activo = filtroEstado === e.id;
+                  const n = e.id === 'todos' ? totalEstados : (conteoEstados?.[e.id] || 0);
+                  const c = e.id === 'todos' ? null : colorEstado(e.id, isDarkMode);
+                  const Icono = e.icono;
+                  return (
+                    <button key={e.id} type="button" role="tab" aria-selected={activo} onClick={() => { setFiltroEstado(e.id); setMarcados({}); }}
+                      className={`filtro-estado ${activo ? 'activo' : ''}`}
+                      style={activo
+                        ? (c ? { ...c, boxShadow: `0 0 0 2px ${c.borderColor}` } : { backgroundColor: theme.accent, color: '#fff', borderColor: theme.accent })
+                        : { backgroundColor: theme.cardBg, color: theme.textSecondary, borderColor: theme.border }}>
+                      {Icono && <Icono size={14} />} {e.nombre} <span className="filtro-estado-n">{n}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {marcadosIds.length > 0 && (
+                <div className="barra-marcados" style={{ borderColor: theme.accent, backgroundColor: `${theme.accent}12`, color: theme.textPrimary }}>
+                  <ListChecks size={16} color={theme.accent} />
+                  <strong>{marcadosIds.length} marcado(s)</strong>
+                  <span style={{ color: theme.textSecondary }}>Marcar como:</span>
+                  {ESTADOS.map((e) => {
+                    const Icono = e.icono;
+                    return (
+                      <button key={e.id} type="button" className="chip-estado" style={colorEstado(e.id, isDarkMode)} onClick={() => marcarVarios(e.id)}>
+                        <Icono size={13} /> {e.nombre}
+                      </button>
+                    );
+                  })}
+                  <button type="button" className="enlace-pequeno" onClick={() => setMarcados({})} style={{ marginLeft: 'auto' }}>Quitar marcas</button>
+                </div>
+              )}
 
               {/* BARRA DE CONTEO Y BOTÓN GLOBAL DE EXPORTACIÓN */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: theme.subtleBg, borderRadius: '8px', marginBottom: '16px', border: `1px solid ${theme.border}`, flexWrap: 'wrap', gap: '12px' }}>
@@ -136,11 +198,11 @@ export default function TabHistorial() {
                   >
                     <Download size={14} color={theme.accent} />
                     Exportar Reporte
-                    <span style={{ fontSize: '10px' }}>▼</span>
+                    <span className={`flecha-menu ${showExportMenu ? 'abierta' : ''}`} style={{ fontSize: '10px' }}>▼</span>
                   </button>
 
-                  {showExportMenu && (
-                    <div className="menu-exportar" style={{ position: 'absolute', right: 0, top: '110%', backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: '10px', boxShadow: '0 10px 24px rgba(0,0,0,0.15)', zIndex: 100, minWidth: '220px', overflow: 'hidden', padding: '6px' }}>
+                  {exportar.montado && (
+                    <div className={`menu-exportar ${exportar.saliendo ? 'saliendo' : ''}`} style={{ position: 'absolute', right: 0, top: '110%', backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: '10px', boxShadow: '0 10px 24px rgba(0,0,0,0.15)', zIndex: 100, minWidth: '220px', overflow: 'hidden', padding: '6px' }}>
                       {[
                         ['csv', 'csv', 'Excel', '.csv'],
                         ['word', 'doc', 'Word', '.doc'],
@@ -179,11 +241,16 @@ export default function TabHistorial() {
                   <table className="tabla-tarjetas" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textSecondary }}>
+                        <th style={{ padding: '12px 4px 12px 12px', width: '28px' }} className="celda-marca">
+                          <input type="checkbox" aria-label="Marcar todos" checked={todosMarcados}
+                            onChange={() => setMarcados(todosMarcados ? {} : Object.fromEntries(visiblesIds.map((i) => [i, true])))} />
+                        </th>
                         <th style={{ padding: '12px' }}>Acreditado</th>
                         <th style={{ padding: '12px' }}>No. Crédito</th>
                         <th style={{ padding: '12px', textAlign: 'right' }}>Monto</th>
                         <th style={{ padding: '12px' }}>Fecha</th>
                         <th style={{ padding: '12px' }}>Hora</th>
+                        <th style={{ padding: '12px' }}>Estado</th>
                         <th style={{ padding: '12px', textAlign: 'right' }}>Acciones</th>
                       </tr>
                     </thead>
@@ -199,12 +266,26 @@ export default function TabHistorial() {
                         const montoStr = formatearMonto(dExtra.monto_credito || item.monto);
 
                         return (
-                          <tr key={idx} className="fila-historial" style={{ borderBottom: `1px solid ${theme.border}` }}>
-                            <td className="celda-titulo" style={{ padding: '12px', fontWeight: '600', color: theme.textPrimary }}>{nombre}</td>
+                          <tr key={idDe(item) || idx} className={`fila-historial ${marcados[idDe(item)] ? 'marcada' : ''}`} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                            <td className="celda-marca" style={{ padding: '12px 4px 12px 12px' }}>
+                              <input type="checkbox" aria-label={`Marcar ${nombre}`} checked={!!marcados[idDe(item)]}
+                                onChange={() => setMarcados((m) => ({ ...m, [idDe(item)]: !m[idDe(item)] }))} />
+                            </td>
+                            <td className="celda-titulo" style={{ padding: '12px', fontWeight: '600', color: theme.textPrimary }}>
+                              {nombre}
+                              {item.plantilla_cambio && (
+                                <span className="chip-plantilla-cambio" title="La plantilla cambió después de generar este Word. Se sigue descargando con la versión original; en el historial de cambios puedes descargarlo con la plantilla actual.">
+                                  <RefreshCw size={11} /> Plantilla actualizada
+                                </span>
+                              )}
+                            </td>
                             <td data-etiqueta="Crédito" style={{ padding: '12px', color: theme.textSecondary }}>{numCred}</td>
                             <td style={{ padding: '12px', color: montoStr === '—' ? theme.textSecondary : (isDarkMode ? '#34d399' : '#059669'), fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }} data-etiqueta="Monto">{montoStr}</td>
                             <td data-etiqueta="Fecha" style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{fechaStr}</td>
                             <td data-etiqueta="Hora" style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{horaStr}</td>
+                            <td data-etiqueta="Estado" style={{ padding: '12px', whiteSpace: 'nowrap' }}>
+                              <EstadoExpediente id={idDe(item)} estado={item.estado || 'GENERADO'} />
+                            </td>
                             <td className="celda-acciones" style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               <button
                                 onClick={() => abrirVistaPrevia({
@@ -221,6 +302,15 @@ export default function TabHistorial() {
                                 <Eye size={13} />
                               </button>
                               <button
+                                type="button"
+                                onClick={() => setBitacora({ id: idDe(item), titulo: nombre, datos: dExtra })}
+                                title="Historial de cambios"
+                                aria-label={`Historial de cambios de ${nombre}`}
+                                style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, border: `1px solid ${theme.border}`, padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', marginRight: '6px', verticalAlign: 'middle' }}
+                              >
+                                <History size={13} />
+                              </button>
+                              <button
                                 onClick={() => handleDownloadWord(item.id || item.expediente_id, dExtra, dExtra.plantilla_seleccionada || dExtra.plantilla)}
                                 disabled={descargandoId === (item.id || item.expediente_id)}
                                 style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, border: `1px solid ${theme.border}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
@@ -234,6 +324,9 @@ export default function TabHistorial() {
                     </tbody>
                   </table>
                 </div>
+              )}
+              {bitacora && (
+                <BitacoraExpediente expedienteId={bitacora.id} titulo={bitacora.titulo} datos={bitacora.datos} onCerrar={cerrarBitacora} />
               )}
             </div>
   );

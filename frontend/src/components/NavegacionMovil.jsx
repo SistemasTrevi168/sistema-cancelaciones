@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
+import usePresencia from '../ui/usarPresencia';
 
 // Navegación del celular:
 //  - Arriba: logo y sección actual; a la derecha la foto con el menú de la cuenta (Mi perfil, tema, Cerrar sesión).
@@ -40,6 +41,7 @@ export default function NavegacionMovil() {
   const [arrastre, setArrastre] = useState(0);
   const [cerrandoMas, setCerrandoMas] = useState(false);
   const toque = useRef(null);
+  const menuCuenta = usePresencia(cuenta, 150);
 
   const cerrarMas = () => {
     if (!mas || cerrandoMas) return;
@@ -116,10 +118,10 @@ export default function NavegacionMovil() {
       {createPortal(
         <div className={`nav-movil-raiz ${isDarkMode ? 'tema-oscuro' : 'tema-claro'}`}>
           {/* MENÚ DE LA CUENTA (esquina superior derecha) */}
-          {cuenta && (
+          {menuCuenta.montado && (
             <>
-              <div className="nav-movil-fondo transparente" onClick={() => setCuenta(false)} aria-hidden="true" />
-              <div className="menu-cuenta" role="menu" style={superficie}>
+              <div className={`nav-movil-fondo transparente ${menuCuenta.saliendo ? 'cerrando' : ''}`} onClick={() => setCuenta(false)} aria-hidden="true" />
+              <div className={`menu-cuenta ${menuCuenta.saliendo ? 'saliendo' : ''}`} role="menu" style={superficie}>
                 <div className="menu-cuenta-usuario">
                   <Avatar usuario={currentUser} tam={44} color={theme.accent} />
                   <div style={{ minWidth: 0 }}>

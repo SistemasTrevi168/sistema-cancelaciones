@@ -5,7 +5,8 @@ import { pausarAviso, quitarAviso, reanudarAviso, suscribir } from '../ui/notifi
 
 const ESTILOS = {
   exito: { fondo: '#ecfdf5', borde: '#6ee7b7', texto: '#065f46', icono: CheckCircle, color: '#10b981' },
-  info: { fondo: '#eff6ff', borde: '#93c5fd', texto: '#1e3a8a', icono: Info, color: '#3b82f6' },
+  // Los avisos informativos usan el color de cada usuario
+  info: { fondo: 'color-mix(in srgb, var(--acento, #2563eb) 8%, white)', borde: 'color-mix(in srgb, var(--acento, #2563eb) 40%, white)', texto: 'color-mix(in srgb, var(--acento, #2563eb) 70%, black)', icono: Info, color: 'var(--acento, #2563eb)' },
   aviso: { fondo: '#fffbeb', borde: '#fcd34d', texto: '#92400e', icono: AlertTriangle, color: '#d97706' },
   error: { fondo: '#fef2f2', borde: '#fca5a5', texto: '#991b1b', icono: AlertCircle, color: '#ef4444' },
 };
@@ -50,7 +51,7 @@ export default function Notificaciones() {
                 color: isDarkMode ? theme.textPrimary : e.texto,
               }}
             >
-              <Icono size={18} color={e.color} style={{ flexShrink: 0, marginTop: '1px' }} />
+              <Icono size={18} color="currentColor" style={{ flexShrink: 0, marginTop: '1px', color: e.color }} />
               <span style={{ flex: 1, whiteSpace: 'pre-line' }}>{a.mensaje}</span>
               <button type="button" onClick={() => quitarAviso(a.id)} aria-label="Cerrar aviso" style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, opacity: 0.6, display: 'flex' }}>
                 <X size={16} />

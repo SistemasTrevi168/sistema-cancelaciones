@@ -97,11 +97,12 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       monto: formatearMonto(dExtra.monto_credito || item.monto),
       fecha: p ? p.fechaTexto : (item.fecha || 'N/A'),
       hora: p ? p.horaTexto : (item.hora || ''),
+      estado: { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' }[item.estado] || 'Generado',
     };
   });
   const COLUMNAS_REPORTE = [
     ['numero', '#'], ['propietario', 'Propietario'], ['acreditado', 'Acreditado'], ['credito', 'No. Crédito'],
-    ['monto', 'Monto'], ['fecha', 'Fecha'], ['hora', 'Hora'],
+    ['monto', 'Monto'], ['fecha', 'Fecha'], ['hora', 'Hora'], ['estado', 'Estado'],
   ];
 
   const descargarBlob = (contenido, tipo, nombre) => {
@@ -151,7 +152,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         const encabezado = COLUMNAS_REPORTE.map(([, t]) => `<th>${escaparHtml(t)}</th>`).join('');
         const cuerpo = filas.map((f) => `<tr>${COLUMNAS_REPORTE.map(([k]) => `<td>${escaparHtml(f[k])}</td>`).join('')}</tr>`).join('');
         const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>Reporte</title>
-<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt}h1{font-size:16pt;color:#1e3a8a}table{border-collapse:collapse;width:100%}th{background:#1e3a8a;color:#fff;padding:6px;text-align:left}td{border-bottom:1px solid #cbd5e1;padding:5px}</style></head>
+<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt}h1{font-size:16pt;color:${acento}}table{border-collapse:collapse;width:100%}th{background:${acento};color:#fff;padding:6px;text-align:left}td{border-bottom:1px solid #cbd5e1;padding:5px}</style></head>
 <body><h1>Reporte de Historial de Expedientes</h1><p>Fecha de emisión: ${escaparHtml(fechaEmision)}<br>Total de registros: ${filas.length}</p>
 <table><thead><tr>${encabezado}</tr></thead><tbody>${cuerpo}</tbody></table></body></html>`;
         descargarBlob('\uFEFF' + html, 'application/msword', `${nombreBase}.doc`);
@@ -279,6 +280,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // --- 8. ESTADOS - Historial & Filtros Dinámicos ---
   const [historial, setHistorial] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('todos'); // todos / GENERADO / REVISADO / ENTREGADO
   const [filterPeriod, setFilterPeriod] = useState('all'); // 'all', 'day', 'week', 'month', 'year'
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()); // 0 - 11
@@ -1078,17 +1080,53 @@ const handlePreviewExcel = async (file) => {
     return Object.keys(actual).filter((k) => !k.startsWith('_') && k !== 'plantilla_seleccionada' && k !== 'texto_raw'
       && typeof actual[k] !== 'object' && limpio(actual[k]) !== limpio(original[k]));
   };
-  const metricasDe = (origen, lectura, actual, avisos) => ({
-    origen,
-    leido_en: lectura?.leido_en || null,
-    corregidos: camposCorregidos(lectura?.datos, actual),
-    avisos: (avisos || []).length,
-  });
+  const metricasDe = (origen, lectura, actual, avisos) => {
+    const corregidos = camposCorregidos(lectura?.datos, actual);
+    const limpio = (v) => String(v ?? '').trim().replace(/^NO_ENCONTRADO$/i, '');
+    return {
+      origen,
+      leido_en: lectura?.leido_en || null,
+      corregidos,
+      // Antes -> después de lo que se corrigió a mano (queda en el historial de cambios del expediente)
+      cambios: Object.fromEntries(corregidos.map((k) => [k, [limpio(lectura?.datos?.[k]), limpio(actual?.[k])]])),
+      avisos: (avisos || []).length,
+    };
+  };
+
+  // ---- CRÉDITO REPETIDO: antes de guardar se revisa si ese crédito ya se procesó ----
+  const confirmarRepetidos = async (creditos, accion = 'guardar') => {
+    const nums = [...new Set((creditos || []).map((c) => String(c || '').replace(/\D/g, '')).filter((c) => c.length >= 6))];
+    if (nums.length === 0) return true;
+    let repetidos = {};
+    try {
+      repetidos = (await api.get('/expedientes/repetidos', { params: { creditos: nums.join(',') } })).data?.repetidos || {};
+    } catch {
+      return true; // si no se puede revisar, no se detiene el trabajo
+    }
+    const claves = Object.keys(repetidos);
+    if (claves.length === 0) return true;
+    const ESTADO_TXT = { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' };
+    const fechaTxt = (iso) => {
+      const d = iso ? new Date(iso) : null;
+      return d && !Number.isNaN(d.getTime()) ? d.toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'antes';
+    };
+    const lineas = claves.slice(0, 8).map((c) => {
+      const r = repetidos[c][0];
+      const veces = repetidos[c].length > 1 ? ` (${repetidos[c].length} veces)` : '';
+      return `• ${c}${r.acreditado ? ` · ${r.acreditado}` : ''}\n   ${fechaTxt(r.fecha)} por ${r.nombre_usuario}${veces} — ${ESTADO_TXT[r.estado] || r.estado}`;
+    });
+    const cap = accion.charAt(0).toUpperCase() + accion.slice(1);
+    return confirmar(
+      `${claves.length === 1 ? 'Este crédito ya se procesó antes' : `${claves.length} créditos ya se procesaron antes`}:\n\n${lineas.join('\n')}${claves.length > 8 ? '\n…' : ''}\n\n¿Quieres ${accion} de todas formas?`,
+      { titulo: 'Crédito repetido', textoConfirmar: `${cap} de todas formas` },
+    );
+  };
 
   const guardarSingle = async () => {
     if (!datos) return;
     const faltan = faltantesPara(datos, selectedPlantilla);
     if (faltan.length > 0 && !(await confirmar(mensajeFaltantes(faltan, 'guardar el expediente'), { titulo: 'Faltan datos', textoConfirmar: 'Guardar de todas formas' }))) return;
+    if (!(await confirmarRepetidos([datos.numero_credito]))) return;
     setGuardando((g) => ({ ...g, single: true }));
     try {
       const [r] = await guardarEnBase([{ ref: 'single', datos, plantilla: selectedPlantilla, archivos: singleFiles.map((f) => f.name), metricas: metricasDe('individual', lecturaSingle, datos, avisosSingle) }]);
@@ -1304,6 +1342,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
       `${conFaltantes.length} de ${items.length} expediente(s) tienen datos faltantes (marcados con ⚠).\n\n¿Quieres guardarlos de todas formas?`,
       { titulo: 'Expedientes incompletos', textoConfirmar: 'Guardar de todas formas' }
     ))) return {};
+    if (!(await confirmarRepetidos(items.map(({ r }) => r.datos_extraidos?.numero_credito)))) return {};
     const refs = Object.fromEntries(items.map(({ r }) => [r.ref, true]));
     setGuardando((g) => ({ ...g, ...refs }));
     const nuevosIds = {};
@@ -1331,7 +1370,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
   };
 
 // 📥 Función de descarga con el nombre basado en el Número de Crédito
-const handleDownloadWord = async (expedienteId, datosParam = null, plantillaParam = null) => {
+const handleDownloadWord = async (expedienteId, datosParam = null, plantillaParam = null, opciones = {}) => {
   try {
     const idReal = expedienteId;
     if (!idReal) {
@@ -1350,7 +1389,9 @@ const handleDownloadWord = async (expedienteId, datosParam = null, plantillaPara
       `/expedientes/${idReal}/generar-word`,
       {
         plantilla: plantillaUsar,
-        datos: datosParam || datos 
+        datos: datosParam || datos,
+        // true: con la plantilla actual; si no, con la misma versión con la que se generó la primera vez
+        plantilla_actual: !!opciones.plantillaActual,
       },
       { responseType: 'blob' }
     );
@@ -1372,6 +1413,9 @@ const handleDownloadWord = async (expedienteId, datosParam = null, plantillaPara
     a.remove();
     window.URL.revokeObjectURL(downloadUrl);
     avisar.exito(`Word del crédito ${numeroCredito} descargado.`);
+    if (opciones.plantillaActual) {
+      setHistorial((prev) => prev.map((h) => (String(h.id || h.expediente_id) === String(idReal) ? { ...h, plantilla_cambio: false } : h)));
+    }
 
   } catch (err) {
     console.error("Error al descargar el archivo Word:", err);
@@ -1635,19 +1679,23 @@ const parsearFechaExpediente = (item) => {
 };
 
 // LÓGICA DE FILTRADO CORREGIDA
-const filteredHistorial = (historial || []).filter((item) => {
+const sinAcentos = (t) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const historialSinEstado = (historial || []).filter((item) => {
   const parsed = parsearFechaExpediente(item);
 
-  // Filtro por Búsqueda de Texto (Acreditado o Crédito)
+  // Búsqueda rápida: nombre (acreditado, cónyuge o trabajador dos), crédito, folio o número de carta
   if (searchQuery && searchQuery.trim() !== '') {
-    const q = searchQuery.toLowerCase();
-    const dExtra = item.datos_extraidos || {};
-    const nombre = (dExtra.acreditado || dExtra.nombre_acreditado || item.nombre_acreditado || '').toLowerCase();
-    const numCred = (dExtra.numero_credito || item.numero_credito || '').toString().toLowerCase();
-    
-    if (!nombre.includes(q) && !numCred.includes(q)) {
-      return false;
-    }
+    const q = sinAcentos(searchQuery.trim());
+    const qDigitos = searchQuery.replace(/\D/g, '');
+    const d = item.datos_extraidos || {};
+    const textos = [d.acreditado, d.nombre_acreditado, item.nombre_acreditado, d.nombre_conyuge, d.nombre_acreditado_2, item.acreditado].map(sinAcentos);
+    const numeros = [d.numero_credito, item.numero_credito, d.numero_credito_2, d.folio_real, d.numero_carta, d.numero_carta_2]
+      .map((v) => String(v ?? ''));
+    const porTexto = textos.some((t) => t.includes(q)) || numeros.some((n) => sinAcentos(n).includes(q));
+    // Con números se busca dentro de los dígitos (el folio y la carta vienen como "37509" (treinta y siete...))
+    const porNumero = qDigitos.length >= 3 && qDigitos.length === searchQuery.replace(/[\s"]/g, '').length
+      && numeros.some((n) => (n.match(/\d+/g) || []).some((g) => g.includes(qDigitos)));
+    if (!porTexto && !porNumero) return false;
   }
 
   // Si no se eligió un periodo específico, mostrar todo
@@ -1686,6 +1734,32 @@ const filteredHistorial = (historial || []).filter((item) => {
   
   return sortAscending ? nomA.localeCompare(nomB) : nomB.localeCompare(nomA);
 });
+const filteredHistorial = filtroEstado === 'todos'
+  ? historialSinEstado
+  : historialSinEstado.filter((item) => (item.estado || 'GENERADO') === filtroEstado);
+const conteoEstados = historialSinEstado.reduce((acc, item) => {
+  const e = item.estado || 'GENERADO';
+  acc[e] = (acc[e] || 0) + 1;
+  return acc;
+}, {});
+
+// Cambia el estado de uno o varios expedientes (Generado -> Revisado -> Entregado)
+const cambiarEstado = async (ids, estado) => {
+  const lista = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
+  if (!lista.length) return false;
+  try {
+    if (lista.length === 1) await api.put(`/expedientes/${lista[0]}/estado`, { estado });
+    else await api.post('/expedientes/estado', { ids: lista, estado });
+    const set = new Set(lista.map(String));
+    setHistorial((prev) => prev.map((h) => (set.has(String(h.id || h.expediente_id)) ? { ...h, estado } : h)));
+    const txt = { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' }[estado];
+    avisar.exito(lista.length === 1 ? `Estado: ${txt}` : `${lista.length} expedientes marcados como ${txt}`);
+    return true;
+  } catch (err) {
+    avisar.error(`No se pudo cambiar el estado: ${err.response?.data?.detail || err.message}`);
+    return false;
+  }
+};
 
   const theme = {
     bg: isDarkMode ? '#0a0f1a' : '#f8fafc',
@@ -1858,6 +1932,12 @@ const filteredHistorial = (historial || []).filter((item) => {
     archivosSingle,
     archivosDeLote,
     nuevoExpedienteSingle,
+    filtroEstado,
+    setFiltroEstado,
+    conteoEstados,
+    cambiarEstado,
+    confirmarRepetidos,
+    setHistorial,
     carta2Single,
     coacSingle,
     setCoacManual,

@@ -1,6 +1,7 @@
 import { KeyRound, Loader2, Plus, Power, Trash2, Users } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
+import PanelRespaldos from './PanelRespaldos';
 
 export default function TabUsuarios() {
   const {
@@ -18,6 +19,7 @@ export default function TabUsuarios() {
   } = useApp();
 
   return (
+<>
 <div className="grid-usuarios" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
               {/* Formulario Crear Usuario */}
               <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}` }}>
@@ -142,6 +144,7 @@ export default function TabUsuarios() {
                 )}
               </div>
             </div>
+<PanelRespaldos />
+</>
   );
 }
-

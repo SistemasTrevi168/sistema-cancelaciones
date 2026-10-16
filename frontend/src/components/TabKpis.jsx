@@ -6,6 +6,7 @@ import { api } from '../api';
 import { useApp } from '../AppContext';
 import { avisar } from '../ui/notificaciones';
 import { nombrePlantilla } from '../plantillasCatalogo';
+import Selector from './Selector';
 
 // ---------- Fechas ----------
 const aISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -313,10 +314,10 @@ export default function TabKpis() {
             <input id="kpi-hasta" type="date" value={rango[1]} min={rango[0]} onChange={(e) => e.target.value && setRango([rango[0], e.target.value])} style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }} />
           </div>
         )}
-        <select id="kpi-usuario" value={usuario} onChange={(e) => setUsuario(e.target.value)} className="selector-plantilla" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary, width: 'auto', minWidth: '180px' }}>
+        <Selector id="kpi-usuario" value={usuario} onChange={(e) => setUsuario(e.target.value)} className="selector-plantilla" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary, width: 'auto', minWidth: '180px' }}>
           <option value="">Todos los usuarios</option>
           {(datos?.usuarios || []).map((u) => <option key={u.username} value={u.username}>{u.nombre || u.username}{u.activo === false ? ' (desactivado)' : ''}</option>)}
-        </select>
+        </Selector>
         <div className="kpi-filtros-acciones">
           <button type="button" className="boton-barra" onClick={cargar} disabled={cargando} title="Actualizar" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
             <RefreshCw size={14} className={cargando ? 'girando' : ''} />

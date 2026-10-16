@@ -23,6 +23,8 @@ import actos_ifrem
 import plantilla_sugerida
 import kpis
 import perfil
+import versiones
+import respaldos
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -157,7 +159,8 @@ def asegurar_word(expediente, db: Session) -> Optional[str]:
     nombre_plantilla = datos.get("plantilla_seleccionada") or datos.get("plantilla") or "plantilla_manera2.docx"
     ruta_salida = ruta_word_unica(num_credito)
     try:
-        exito = services.generar_word_cancelacion(resolver_ruta_plantilla(nombre_plantilla), datos, ruta_salida)
+        # Se usa la misma versión de plantilla con la que se generó la primera vez
+        exito = generar_word_versionado(db, nombre_plantilla, datos, ruta_salida, version=datos.get("_plantilla_version"))
     except Exception as e:
         print(f"No se pudo regenerar el Word de {expediente.id}: {e}")
         return None
@@ -337,6 +340,46 @@ def resolver_ruta_plantilla(nombre_o_clave: Optional[str]) -> str:
         return ruta_directa
 
     return os.path.join(TEMPLATES_DIR, "plantilla_manera2.docx")
+
+
+def generar_word_versionado(db: Session, nombre_plantilla: Optional[str], datos_finales: Dict[str, Any],
+                            ruta_salida: str, version: Optional[str] = None) -> bool:
+    """
+    Genera el Word y anota en los datos la versión de plantilla usada ("_plantilla_version").
+    Si se pide una versión guardada (la del Word original), se usa esa aunque la plantilla haya cambiado.
+    """
+    ruta = versiones.ruta_de(db, version) if version else None
+    if ruta:
+        usada = version
+    else:
+        ruta = resolver_ruta_plantilla(nombre_plantilla)
+        usada = versiones.registrar(nombre_plantilla or ruta, ruta)
+    exito = services.generar_word_cancelacion(ruta, datos_finales, ruta_salida)
+    if exito and usada:
+        datos_finales["_plantilla_version"] = usada
+    return exito
+
+
+# --- ESTADOS DEL EXPEDIENTE ---
+ESTADOS = ["GENERADO", "REVISADO", "ENTREGADO"]
+
+
+def estado_de(expediente) -> str:
+    """Los expedientes de antes (PENDIENTE, etc.) cuentan como GENERADO."""
+    e = str(getattr(expediente, "estado", "") or "").upper()
+    return e if e in ESTADOS else "GENERADO"
+
+
+def diferencias(antes: Dict[str, Any], despues: Dict[str, Any]) -> Dict[str, List[str]]:
+    """Datos que cambiaron (para el historial de cambios del expediente)."""
+    cambios = {}
+    for k in sorted(CAMPOS_EDITABLES | {"plantilla_seleccionada"}):
+        a, d = str(antes.get(k) or "").strip(), str(despues.get(k) or "").strip()
+        if a.upper() == "NO_ENCONTRADO":
+            a = ""
+        if a != d:
+            cambios[k] = [a[:300], d[:300]]
+    return cambios
 
 
 # --- FUNCIONES DE CONVERSIÓN Y EXTRACCIÓN ---
@@ -788,6 +831,12 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(kpis.router)
 app.include_router(perfil.router)
+app.include_router(respaldos.router)
+
+
+@app.on_event("startup")
+def programar_respaldos():
+    respaldos.iniciar_programador()
 
 
 @app.get("/")
@@ -889,7 +938,10 @@ def obtener_historial(
             "monto": monto,
             "hora": hora_sola,
             "manera": exp.manera,
-            "estado": exp.estado,
+            "estado": estado_de(exp),
+            # Versión de plantilla con la que se generó, y si la plantilla cambió desde entonces
+            "plantilla_version": datos_raw.get("_plantilla_version"),
+            "plantilla_cambio": plantilla_cambio(datos_raw),
             "datos_extraidos": datos,
             "ruta_pdf_constancia": exp.ruta_pdf_constancia,
             "ruta_pdf_carta": exp.ruta_pdf_carta,
@@ -1057,7 +1109,7 @@ async def procesar_masivo(
                 datos_finales["plantilla_seleccionada"] = plantilla
 
                 ruta_salida = ruta_word_unica(num_credito)
-                services.generar_word_cancelacion(ruta_plantilla, datos_finales, ruta_salida)
+                generar_word_versionado(db, plantilla, datos_finales, ruta_salida)
 
                 rutas_pdf = ";".join([item[2] for item in grupo])
                 nuevo_expediente = models.Expediente(
@@ -1476,9 +1528,11 @@ def regenerar_word_expediente(expediente, datos_payload: Optional[Dict[str, Any]
     datos_payload = datos_payload or {}
     datos_modificados = datos_payload.get("datos", datos_payload)
 
-    datos_actuales = dict(expediente.datos_extraidos or {})
+    datos_anteriores = dict(expediente.datos_extraidos or {})
+    datos_actuales = dict(datos_anteriores)
     if isinstance(datos_modificados, dict):
         datos_actuales.update(datos_modificados)
+    plantilla_anterior = datos_anteriores.get("plantilla_seleccionada") or datos_anteriores.get("plantilla")
 
     nombre_plantilla = (
         datos_payload.get("plantilla")
@@ -1487,21 +1541,28 @@ def regenerar_word_expediente(expediente, datos_payload: Optional[Dict[str, Any]
         or "plantilla_manera2.docx"
     )
 
-    ruta_plantilla = resolver_ruta_plantilla(nombre_plantilla)
-
     num_credito = datos_actuales.get("numero_credito") or expediente.numero_credito
     datos_finales = limpiar_datos_para_plantilla(datos_actuales, num_credito)
     datos_finales["plantilla_seleccionada"] = nombre_plantilla
+    if datos_actuales.get("_coacreditados"):
+        datos_finales["_coacreditados"] = True
+
+    # Versión de plantilla: la misma del Word original (si es la misma plantilla), salvo que se pida la actual
+    version_previa = datos_anteriores.get("_plantilla_version")
+    usar_version = version_previa if (version_previa and plantilla_anterior == nombre_plantilla
+                                      and not datos_payload.get("plantilla_actual")) else None
+    # Lo que cambió (para el historial de cambios); al guardar por primera vez no aplica
+    expediente._cambios = diferencias(datos_anteriores, datos_finales) if version_previa else {}
+
+    ruta_salida = ruta_word_unica(num_credito)
+    exito = generar_word_versionado(db, nombre_plantilla, datos_finales, ruta_salida, version=usar_version)
+
+    if not exito or not os.path.exists(ruta_salida):
+        raise HTTPException(status_code=500, detail="Error al reescribir la plantilla Word")
 
     expediente.datos_extraidos = datos_finales
     expediente.numero_credito = num_credito
     flag_modified(expediente, "datos_extraidos")
-
-    ruta_salida = ruta_word_unica(num_credito)
-    exito = services.generar_word_cancelacion(ruta_plantilla, datos_finales, ruta_salida)
-
-    if not exito or not os.path.exists(ruta_salida):
-        raise HTTPException(status_code=500, detail="Error al reescribir la plantilla Word")
 
     reemplazar_word_anterior(expediente.ruta_word_generado, ruta_salida)
     expediente.ruta_word_generado = ruta_salida
@@ -1604,7 +1665,11 @@ def generar_word(
     try:
         expediente = obtener_expediente_autorizado(db, expediente_id, sesion)
         ruta_salida, num_credito = regenerar_word_expediente(expediente, datos_payload, db)
-        kpis.registrar(sesion["username"], "word", expediente.id, num_credito)
+        detalle = {"plantilla": (expediente.datos_extraidos or {}).get("plantilla_seleccionada"),
+                   "version": (expediente.datos_extraidos or {}).get("_plantilla_version")}
+        if getattr(expediente, "_cambios", None):
+            detalle["cambios"] = expediente._cambios
+        kpis.registrar(sesion["username"], "word", expediente.id, num_credito, **detalle)
         
         return FileResponse(
             path=ruta_salida,
@@ -1617,6 +1682,131 @@ def generar_word(
         db.rollback()
         print(f"ERROR EN /generar-word: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def plantilla_cambio(datos: Dict[str, Any]) -> bool:
+    """True si la plantilla del expediente cambió desde que se generó su Word."""
+    version = datos.get("_plantilla_version")
+    if not version:
+        return False
+    nombre = datos.get("plantilla_seleccionada") or datos.get("plantilla")
+    actual = versiones.huella(resolver_ruta_plantilla(nombre))
+    return bool(actual and actual != version)
+
+
+# --- CRÉDITOS REPETIDOS: avisar antes de guardar si ese crédito ya se procesó ---
+@app.get("/api/expedientes/repetidos")
+def creditos_repetidos(
+    creditos: str = Query(""),
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user),
+):
+    numeros = {re.sub(r"\D", "", c) for c in (creditos or "").split(",")}
+    numeros = {n for n in numeros if len(n) >= 6}
+    if not numeros:
+        return {"repetidos": {}}
+    numeros = set(sorted(numeros)[:300])
+    filas = (db.query(models.Expediente).filter(models.Expediente.numero_credito.in_(numeros))
+             .order_by(models.Expediente.fecha_creacion.desc()).all())
+    nombres = {u.username: (u.nombre_mostrar or u.username) for u in db.query(models.Usuario).all()}
+    repetidos: Dict[str, List[Dict[str, Any]]] = {}
+    for exp in filas:
+        d = exp.datos_extraidos or {}
+        repetidos.setdefault(exp.numero_credito, []).append({
+            "expediente_id": str(exp.id),
+            "usuario": exp.usuario_propietario,
+            "nombre_usuario": nombres.get(exp.usuario_propietario, exp.usuario_propietario),
+            "fecha": exp.fecha_creacion.isoformat() if exp.fecha_creacion else None,
+            "acreditado": str(d.get("nombre_acreditado") or ""),
+            "estado": estado_de(exp),
+        })
+    return {"repetidos": repetidos}
+
+
+# --- ESTADOS: Generado -> Revisado -> Entregado ---
+def _cambiar_estado(db: Session, expediente, estado: str, usuario: str):
+    anterior = estado_de(expediente)
+    if anterior == estado:
+        return False
+    expediente.estado = estado
+    kpis.registrar(usuario, "estado", expediente.id, expediente.numero_credito, de=anterior, a=estado)
+    return True
+
+
+def _estado_valido(estado: Any) -> str:
+    estado = str(estado or "").strip().upper()
+    if estado not in ESTADOS:
+        raise HTTPException(status_code=400, detail="Estado no válido (Generado, Revisado o Entregado).")
+    return estado
+
+
+@app.put("/api/expedientes/{expediente_id}/estado")
+def cambiar_estado_expediente(
+    expediente_id: str,
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user),
+):
+    estado = _estado_valido(payload.get("estado"))
+    expediente = obtener_expediente_autorizado(db, expediente_id, sesion)
+    _cambiar_estado(db, expediente, estado, sesion["username"])
+    db.commit()
+    return {"expediente_id": str(expediente.id), "estado": estado_de(expediente)}
+
+
+@app.post("/api/expedientes/estado")
+def cambiar_estado_varios(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user),
+):
+    estado = _estado_valido(payload.get("estado"))
+    cambiados = 0
+    for exp_id in (payload.get("ids") or [])[:500]:
+        try:
+            expediente = obtener_expediente_autorizado(db, exp_id, sesion)
+        except HTTPException:
+            continue
+        cambiados += 1 if _cambiar_estado(db, expediente, estado, sesion["username"]) else 0
+    db.commit()
+    return {"estado": estado, "cambiados": cambiados}
+
+
+# --- HISTORIAL DE CAMBIOS DE UN EXPEDIENTE ---
+@app.get("/api/expedientes/{expediente_id}/bitacora")
+def bitacora_expediente(
+    expediente_id: str,
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user),
+):
+    expediente = obtener_expediente_autorizado(db, expediente_id, sesion)
+    filas = (db.query(models.Actividad).filter(models.Actividad.expediente_id == str(expediente.id))
+             .order_by(models.Actividad.creado_en.asc(), models.Actividad.id.asc()).all())
+    nombres = {u.username: (u.nombre_mostrar or u.username) for u in db.query(models.Usuario).all()}
+    eventos = [{
+        "tipo": a.tipo,
+        "usuario": a.username,
+        "nombre_usuario": nombres.get(a.username, a.username),
+        "fecha": a.creado_en.isoformat() if a.creado_en else None,
+        "detalle": a.detalle or {},
+    } for a in filas]
+    if not any(e["tipo"] in ("guardar", "manual", "excel") for e in eventos):
+        # Expedientes de antes de la bitácora: al menos se muestra cuándo y quién lo creó
+        eventos.insert(0, {
+            "tipo": "creado", "usuario": expediente.usuario_propietario,
+            "nombre_usuario": nombres.get(expediente.usuario_propietario, expediente.usuario_propietario),
+            "fecha": expediente.fecha_creacion.isoformat() if expediente.fecha_creacion else None, "detalle": {},
+        })
+    d = expediente.datos_extraidos or {}
+    return {
+        "expediente_id": str(expediente.id),
+        "numero_credito": expediente.numero_credito,
+        "estado": estado_de(expediente),
+        "plantilla": d.get("plantilla_seleccionada") or d.get("plantilla"),
+        "version": versiones.info(db, d.get("_plantilla_version")),
+        "plantilla_cambio": plantilla_cambio(d),
+        "eventos": eventos,
+    }
 
 
 @app.get("/api/admin/usuarios")
@@ -1820,10 +2010,9 @@ def generar_expediente_manual(
         datos_limpios = limpiar_datos_para_plantilla(payload, num_credito)
         datos_limpios["plantilla_seleccionada"] = plantilla
 
-        ruta_plantilla = resolver_ruta_plantilla(plantilla)
         ruta_salida = ruta_word_unica(num_credito)
-        
-        exito = services.generar_word_cancelacion(ruta_plantilla, datos_limpios, ruta_salida)
+
+        exito = generar_word_versionado(db, plantilla, datos_limpios, ruta_salida)
         if not exito:
             raise HTTPException(status_code=500, detail="Error al generar el documento Word")
 
@@ -1940,8 +2129,8 @@ async def procesar_excel(
                 datos_finales["plantilla_seleccionada"] = plantilla
 
                 ruta_salida = ruta_word_unica(num_credito)
-                exito = services.generar_word_cancelacion(ruta_plantilla, datos_finales, ruta_salida)
-                
+                exito = generar_word_versionado(db, plantilla, datos_finales, ruta_salida)
+
                 if not exito:
                     raise ValueError(f"No se pudo generar el documento Word para el crédito {num_credito}")
 

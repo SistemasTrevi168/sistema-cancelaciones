@@ -9,6 +9,7 @@ import IconoArchivo from './IconoArchivo';
 import OpcionesPlantilla from './OpcionesPlantilla';
 import SugerenciaPlantilla from './SugerenciaPlantilla';
 import VisorDocumentos from './VisorDocumentos';
+import Selector from './Selector';
 
 // Espacio de trabajo de un expediente: arriba la barra (nombre, plantilla sugerida y botones);
 // abajo, lado a lado, el PDF (con sus actos) y los datos extraídos.
@@ -86,7 +87,7 @@ export default function EspacioExpediente({
 
         <div className="espacio-fila espacio-plantilla">
           <label htmlFor={`${prefijo}_plantilla`} style={{ color: theme.textSecondary }}>Plantilla</label>
-          <select
+          <Selector
             id={`${prefijo}_plantilla`}
             value={plantilla || ''}
             onChange={(e) => onPlantilla(e.target.value)}
@@ -95,7 +96,7 @@ export default function EspacioExpediente({
           >
             <option value="" disabled>Seleccionar plantilla...</option>
             <OpcionesPlantilla />
-          </select>
+          </Selector>
           <SugerenciaPlantilla sugerencia={sugerencia} actual={plantilla} onUsar={onUsarSugerida} compacto />
         </div>
       </header>

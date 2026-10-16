@@ -3,6 +3,7 @@ import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
 import { tipoDeArchivo } from '../tiposArchivo';
 import { avisar } from '../ui/notificaciones';
+import Selector from './Selector';
 
 export default function TabExcel() {
   const {
@@ -80,13 +81,13 @@ export default function TabExcel() {
         <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: theme.textPrimary, marginBottom: '8px' }}>
           📜 Plantilla Notarial Global por Defecto (Modelo 2026):
         </label>
-        <select
+        <Selector
           value={selectedPlantilla}
           onChange={(e) => setSelectedPlantilla(e.target.value)}
           style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg || '#fff', color: theme.textPrimary, fontSize: '13px', fontWeight: '600', cursor: 'pointer', outline: 'none' }}
         >
           <OpcionesPlantillas />
-        </select>
+        </Selector>
       </div>
 
       {/* ZONA DE ARRASTRE O TABLA DE PREVISUALIZACIÓN */}
@@ -196,7 +197,7 @@ export default function TabExcel() {
                       <td style={{ padding: '12px', color: theme.textPrimary }}>{fila.nombre_acreditado || fila.acreditado || '-'}</td>
                       <td style={{ padding: '12px', color: theme.textPrimary }}>{fila.monto_credito || fila.monto || '-'}</td>
                       <td style={{ padding: '8px 12px' }}>
-                        <select
+                        <Selector
                           value={plantillasFilas?.[fila.index] || selectedPlantilla}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -205,7 +206,7 @@ export default function TabExcel() {
                           style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg || '#fff', color: theme.textPrimary, fontSize: '12px', cursor: 'pointer', outline: 'none' }}
                         >
                           <OpcionesPlantillas />
-                        </select>
+                        </Selector>
                       </td>
                       <td style={{ padding: '12px', textAlign: 'center' }}>
                         {estadoFila === 'completado' ? (

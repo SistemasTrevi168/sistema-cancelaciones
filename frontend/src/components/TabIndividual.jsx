@@ -5,6 +5,7 @@ import { useApp } from '../AppContext';
 import ZonaArchivos from './ZonaArchivos';
 import OpcionesPlantilla from './OpcionesPlantilla';
 import EspacioExpediente from './EspacioExpediente';
+import Selector from './Selector';
 
 export default function TabIndividual() {
   const {
@@ -150,7 +151,7 @@ export default function TabIndividual() {
       <div className="carga-acciones" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
         <div style={{ flex: 1, minWidth: '240px' }}>
           <label htmlFor="plantilla-individual" className="carga-subtitulo" style={{ color: theme.textSecondary }}>Plantilla</label>
-          <select
+          <Selector
             id="plantilla-individual"
             value={selectedPlantilla}
             onChange={(e) => setSelectedPlantilla(e.target.value)}
@@ -158,7 +159,7 @@ export default function TabIndividual() {
             style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}
           >
             <OpcionesPlantilla />
-          </select>
+          </Selector>
           <p style={{ fontSize: '12px', color: theme.textSecondary, margin: '6px 0 0 0' }}>
             Al leer los documentos, el sistema te sugiere la plantilla.
           </p>

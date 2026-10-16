@@ -8,6 +8,7 @@ import OpcionesPlantilla from './OpcionesPlantilla';
 import ZonaArchivos from './ZonaArchivos';
 import EspacioExpediente from './EspacioExpediente';
 import { nombrePlantilla } from '../plantillasCatalogo';
+import Selector from './Selector';
 
 export default function TabMasivo() {
   const {
@@ -151,9 +152,9 @@ export default function TabMasivo() {
           <div className="carga-acciones" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
             <div style={{ flex: 1, minWidth: '240px' }}>
               <label htmlFor="plantilla-lote" className="carga-subtitulo" style={{ color: theme.textSecondary }}>Plantilla inicial del lote</label>
-              <select id="plantilla-lote" value={selectedPlantilla} onChange={(e) => setSelectedPlantilla(e.target.value)} className="selector-plantilla selector-grande" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}>
+              <Selector id="plantilla-lote" value={selectedPlantilla} onChange={(e) => setSelectedPlantilla(e.target.value)} className="selector-plantilla selector-grande" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}>
                 <OpcionesPlantilla />
-              </select>
+              </Selector>
               <p style={{ fontSize: '12px', color: theme.textSecondary, margin: '6px 0 0 0' }}>
                 Cada carta se junta con su constancia por el número de crédito (o por el nombre del acreditado). Después puedes mover archivos entre expedientes.
               </p>
@@ -228,7 +229,7 @@ export default function TabMasivo() {
               {conFaltantes > 0 && <span className="chip-dato chip-falta"><AlertTriangle size={12} /> {conFaltantes} con faltantes</span>}
             </div>
             <div className="resultados-acciones">
-              <select
+              <Selector
                 value=""
                 disabled={selectedBatchIndices.length === 0}
                 onChange={(e) => handleApplyTemplateToSelected(e.target.value)}
@@ -240,7 +241,7 @@ export default function TabMasivo() {
                   {selectedBatchIndices.length === 0 ? 'Marca expedientes para cambiar su plantilla' : `Plantilla para ${selectedBatchIndices.length} marcado(s)…`}
                 </option>
                 <OpcionesPlantilla />
-              </select>
+              </Selector>
               {validos.some((i) => sugerenciaDeLote(batchResults[i])?.plantilla) && (
                 <button type="button" onClick={usarSugeridasEnLote} className="chip-sugerida" style={{ padding: '7px 12px', fontSize: '12px' }} title="Pone a cada expediente la plantilla que le corresponde según sus documentos">
                   <Sparkles size={13} /> Usar las plantillas sugeridas
@@ -312,7 +313,7 @@ export default function TabMasivo() {
                         <span className="chip-archivo-nombre">{n}</span>
                         {!guardado && !res.leyendo && (
                           <>
-                            <select
+                            <Selector
                               value=""
                               aria-label={`Mover ${n} a otro expediente`}
                               title="Mover a otro expediente"
@@ -323,7 +324,7 @@ export default function TabMasivo() {
                               <option value="" disabled>Mover…</option>
                               {otros.map((o) => <option key={o.ref} value={o.ref}>{nombreDe(o)}</option>)}
                               {(res.archivos || []).length > 1 && <option value="nuevo">Expediente nuevo</option>}
-                            </select>
+                            </Selector>
                             <button type="button" className="quitar-archivo" title={`Quitar ${n}`} onClick={() => quitarArchivoLote(n, res.ref)}><X size={12} /></button>
                           </>
                         )}
@@ -332,7 +333,7 @@ export default function TabMasivo() {
                   </div>
 
                   <div className="fila-plantilla">
-                    <select
+                    <Selector
                       value={res.plantilla_seleccionada || ''}
                       onChange={(e) => handleBatchPlantillaChange(idx, e.target.value)}
                       className="selector-plantilla"
@@ -341,7 +342,7 @@ export default function TabMasivo() {
                     >
                       <option value="" disabled>Seleccionar plantilla...</option>
                       <OpcionesPlantilla />
-                    </select>
+                    </Selector>
                     {sug?.plantilla && (enUsoSug ? (
                       <span className="chip-sugerida chip-sugerida-ok" title={`Plantilla sugerida en uso\n\n${sug.razones.join('\n')}`}><CheckCircle size={12} /> Sugerida</span>
                     ) : (

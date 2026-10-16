@@ -11,6 +11,7 @@ import { esPlantillaCoac } from '../camposExpediente';
 import IconoArchivo from './IconoArchivo';
 import OpcionesPlantilla from './OpcionesPlantilla';
 import PanelVistaPrevia from './PanelVistaPrevia';
+import Selector from './Selector';
 
 // Secciones del formulario (mismo orden y nombres que en los datos extraídos)
 const SECCIONES = [
@@ -81,6 +82,7 @@ export default function TabManual() {
     handleDownloadWord,
     descargandoId,
     mensajeFaltantesManual,
+    confirmarRepetidos,
     cargando,
     expedientes,
     formData,
@@ -136,6 +138,7 @@ export default function TabManual() {
     }
     const pendientes = faltan.filter((c) => c !== 'numero_credito');
     if (pendientes.length > 0 && !(await confirmar(mensajeFaltantesManual(pendientes), { titulo: 'Faltan datos', textoConfirmar: 'Generar de todas formas' }))) return;
+    if (!(await confirmarRepetidos([formData.numero_credito], 'generar'))) return;
     setCargando(true);
     try {
       const res = await fetch(`${API_BASE}/api/expedientes/generar-manual`, {
@@ -175,9 +178,9 @@ export default function TabManual() {
         <div className="manual-plantilla" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg }}>
           <div style={{ flex: 1, minWidth: '220px' }}>
             <label htmlFor="manual_plantilla" className="carga-subtitulo" style={{ color: theme.textSecondary }}>Plantilla</label>
-            <select id="manual_plantilla" value={plantilla} onChange={(e) => setSelectedPlantilla(e.target.value)} className="selector-plantilla selector-grande" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}>
+            <Selector id="manual_plantilla" value={plantilla} onChange={(e) => setSelectedPlantilla(e.target.value)} className="selector-plantilla selector-grande" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}>
               <OpcionesPlantilla />
-            </select>
+            </Selector>
           </div>
           <div className="manual-avance">
             <div style={{ fontSize: '12px', fontWeight: 700, color: theme.textSecondary }}>

@@ -10,7 +10,7 @@ import PanelVistaPrevia from './components/PanelVistaPrevia';
 import PantallaCarga from './components/PantallaCarga';
 import { avisar, confirmar } from './ui/notificaciones';
 import { instalarEfectoOnda } from './ui/efectoOnda';
-import { CAMPOS_DEL_ACTO, etiquetaDe } from './camposExpediente';
+import { CAMPOS_DEL_ACTO, esPlantillaCoac, etiquetaDe } from './camposExpediente';
 import { sugerenciaActual } from './sugerenciaPlantilla';
 import { nombrePlantilla } from './plantillasCatalogo';
 import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla } from './datosFaltantes';
@@ -254,7 +254,10 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // Caso individual: la carta y la constancia se suben por separado
   const [cartaSingle, setCartaSingle] = useState(null);
   const [constanciaSingle, setConstanciaSingle] = useState(null);
-  const singleFiles = [cartaSingle, constanciaSingle].filter(Boolean);
+  // Coacreditados: segunda carta (la del "TRABAJADOR DOS")
+  const [carta2Single, setCarta2Single] = useState(null);
+  const [coacManual, setCoacManual] = useState(false); // la persona pidió el recuadro de la carta dos
+  const singleFiles = [cartaSingle, carta2Single, constanciaSingle].filter(Boolean);
   const [loading, setLoading] = useState(false);
   const [progressSingle, setProgressSingle] = useState(0);
   const [expedienteId, setExpedienteId] = useState('');
@@ -602,7 +605,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         setTimeout(() => setBienvenida(null), 2100);
         setTimeout(() => setAnimarEntrada(false), 3000);
         setLoginPassword('');
-        setCartaSingle(null); setConstanciaSingle(null);
+        setCartaSingle(null); setConstanciaSingle(null); setCarta2Single(null); setCoacManual(false);
         setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]);
         setBatchResults([]);
       }
@@ -614,17 +617,17 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   };
 
   // La sesión se cerró sola: se avisa por qué y se regresa al login
-  const expirarSesion = (motivo) => {
+  const expirarSesion = (motivo, segundos) => {
     if (!navegador.auth) return;
     navegador.auth = false;
     setAvisoInactividad(null);
-    setAvisoSesion(motivo);
+    setAvisoSesion({ motivo, segundos: segundos || 120 });
     handleConfirmLogout();
   };
   useEffect(() => { navegador.alExpirar = expirarSesion; });
   const seguirTrabajando = useVigilanciaSesion({
     activo: isAuthenticated,
-    onExpirar: (motivo) => navegador.alExpirar?.(motivo),
+    onExpirar: (motivo, segundos) => navegador.alExpirar?.(motivo, segundos),
     onAviso: setAvisoInactividad,
   });
 
@@ -932,17 +935,20 @@ const handlePreviewExcel = async (file) => {
   };
 
   // Tipo de cada archivo según el recuadro donde se subió
-  const tipoDeArchivo = (f) => (f === cartaSingle || cartasLote.includes(f) ? 'carta' : 'constancia');
+  const tipoDeArchivo = (f) => {
+    if (f && f === carta2Single) return 'carta2';
+    return f === cartaSingle || cartasLote.includes(f) ? 'carta' : 'constancia';
+  };
 
   // ---- Caso individual ----
   const elegirArchivoSingle = (tipo, archivos) => {
     const pdf = Array.from(archivos || []).find((f) => f.name.toLowerCase().endsWith('.pdf'));
     if (!pdf) { avisar.aviso('Elige un archivo PDF.'); return; }
-    if (tipo === 'carta') setCartaSingle(pdf); else setConstanciaSingle(pdf);
+    if (tipo === 'carta') setCartaSingle(pdf); else if (tipo === 'carta2') setCarta2Single(pdf); else setConstanciaSingle(pdf);
     setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]); setError('');
   };
   const quitarArchivoSingle = (tipo) => {
-    if (tipo === 'carta') setCartaSingle(null); else setConstanciaSingle(null);
+    if (tipo === 'carta') setCartaSingle(null); else if (tipo === 'carta2') setCarta2Single(null); else setConstanciaSingle(null);
   };
   const soltarArchivoSingle = async (tipo, e) => {
     e.preventDefault(); e.stopPropagation();
@@ -983,16 +989,34 @@ const handlePreviewExcel = async (file) => {
   const numeroEnNombre = (nombre) => (String(nombre || '').match(/(?<!\d)\d{8,12}(?!\d)/) || [null])[0];
   const conflictoSingle = (() => {
     const nc = numeroEnNombre(cartaSingle?.name);
+    const nc2 = numeroEnNombre(carta2Single?.name);
     const nk = numeroEnNombre(constanciaSingle?.name);
+    if (carta2Single) {
+      // Coacreditados: las dos cartas y la constancia llevan el mismo número en el nombre (igual que las demás plantillas)
+      if (cartaSingle && cartaSingle.name === carta2Single.name && cartaSingle.size === carta2Single.size) return { coac: true, mismoArchivo: true };
+      const nums = [['carta del trabajador uno', nc], ['carta del trabajador dos', nc2], ['constancia', nk]].filter(([, n]) => n);
+      const distintos = new Set(nums.map(([, n]) => n));
+      return distintos.size > 1 ? { coac: true, detalle: nums } : null;
+    }
     return nc && nk && nc !== nk ? { carta: nc, constancia: nk } : null;
   })();
+  // Se muestran tres recuadros (dos cartas y la constancia) con plantilla de coacreditados
+  const coacSingle = esPlantillaCoac(selectedPlantilla) || coacManual || !!carta2Single;
 
   const handleUploadSingle = async () => {
     if (singleFiles.length === 0) return;
     if (conflictoSingle) {
-      avisar.error(`Los archivos no son del mismo crédito (${conflictoSingle.carta} y ${conflictoSingle.constancia}).`);
+      avisar.error(conflictoSingle.mismoArchivo
+        ? 'Subiste el mismo archivo en las dos cartas. Pon la carta del trabajador dos en su recuadro.'
+        : conflictoSingle.coac
+          ? `Los archivos no tienen el mismo número (${conflictoSingle.detalle.map(([, n]) => n).join(', ')}). Deben ser idénticos.`
+          : `Los archivos no son del mismo crédito (${conflictoSingle.carta} y ${conflictoSingle.constancia}).`);
       return;
     }
+    await leerSingle(singleFiles);
+  };
+
+  const leerSingle = async (archivosLeer, tipoDe = tipoDeArchivo) => {
     cerrarVistaPrevia();
    
     setLoading(true);
@@ -1005,7 +1029,7 @@ const handlePreviewExcel = async (file) => {
 
     // Solo se LEEN los datos (no se guarda nada): primero se revisan y después se guardan
     const formDataObj = new FormData();
-    singleFiles.forEach((f) => { formDataObj.append('files', f); formDataObj.append('tipos', tipoDeArchivo(f)); });
+    archivosLeer.forEach((f) => { formDataObj.append('files', f); formDataObj.append('tipos', tipoDe(f)); });
     formDataObj.append('agrupar', 'false');
 
     try {
@@ -1027,6 +1051,9 @@ const handlePreviewExcel = async (file) => {
         setAvisosSingle(borrador.avisos || []);
         setLecturaSingle({ datos: { ...rawDatos }, leido_en: borrador.leido_en || null });
         setUnlockedFields({});
+        // Con dos cartas se usa directamente la plantilla de coacreditados
+        const sug = borrador.plantilla_sugerida;
+        if (rawDatos._coacreditados && sug?.plantilla && esPlantillaCoac(sug.plantilla)) setSelectedPlantilla(sug.plantilla);
         setLoading(false);
       }, 300);
     } catch (err) {
@@ -1700,8 +1727,30 @@ const filteredHistorial = (historial || []).filter((item) => {
     if (datos && !expedienteId && !(await confirmar('Este expediente todavía no está guardado; si continúas se pierden los datos leídos y lo que hayas corregido.', { titulo: '¿Descartar el expediente?', textoConfirmar: 'Descartar', peligro: true }))) return;
     cerrarVistaPrevia();
     setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]);
-    setCartaSingle(null); setConstanciaSingle(null); setExpedienteId(''); setError(''); setProgressSingle(0);
+    setCartaSingle(null); setConstanciaSingle(null); setCarta2Single(null); setCoacManual(false); setExpedienteId(''); setError(''); setProgressSingle(0);
     setUnlockedFields({});
+  };
+
+  // Coacreditados: ya leído el expediente, se agrega la carta del trabajador dos y se vuelve a leer
+  const agregarCarta2Single = async (archivos) => {
+    const pdf = Array.from(archivos || []).find((f) => f.name.toLowerCase().endsWith('.pdf'));
+    if (!pdf) { avisar.aviso('Elige un archivo PDF.'); return; }
+    if (cartaSingle && pdf.name === cartaSingle.name && pdf.size === cartaSingle.size) {
+      avisar.error('Es la misma carta del trabajador uno. Elige la carta del trabajador dos.');
+      return;
+    }
+    // Igual que las demás plantillas: el número del nombre debe ser idéntico al de los otros archivos
+    const nuevo = numeroEnNombre(pdf.name);
+    const otro = [cartaSingle, constanciaSingle].map((f) => numeroEnNombre(f?.name)).find((n) => n && n !== nuevo);
+    if (nuevo && otro) {
+      avisar.error(`La carta del trabajador dos es del ${nuevo} y los otros archivos del ${otro}. Los números deben ser idénticos.`);
+      return;
+    }
+    const corregidos = camposCorregidos(lecturaSingle?.datos, datos).length;
+    if (corregidos > 0 && !(await confirmar(`Se vuelven a leer los documentos con la carta del trabajador dos y se pierden ${corregidos} dato(s) que corregiste.`, { titulo: '¿Volver a leer?', textoConfirmar: 'Sí, volver a leer' }))) return;
+    setCarta2Single(pdf);
+    const lista = [cartaSingle, pdf, constanciaSingle].filter(Boolean);
+    await leerSingle(lista, (f) => (f === pdf ? 'carta2' : (f === cartaSingle ? 'carta' : 'constancia')));
   };
 
   // Da al texto el mismo formato que la extracción automática (si el servidor no responde, se usa tal cual)
@@ -1802,6 +1851,10 @@ const filteredHistorial = (historial || []).filter((item) => {
     archivosSingle,
     archivosDeLote,
     nuevoExpedienteSingle,
+    carta2Single,
+    coacSingle,
+    setCoacManual,
+    agregarCarta2Single,
     normalizarCampo,
     camposDePlantilla: (plantilla) => camposPorPlantilla[normalizarPlantilla(plantilla)] || null,
     actosSingle,
@@ -2020,7 +2073,7 @@ const filteredHistorial = (historial || []).filter((item) => {
         <AvisoInactividad segundos={avisoInactividad} onSeguir={() => { seguirTrabajando(); setAvisoInactividad(null); }} theme={theme} />
       )}
       {!isAuthenticated && avisoSesion && (
-        <AvisoSesionCerrada motivo={avisoSesion} onAceptar={() => setAvisoSesion(null)} theme={theme} isDarkMode={isDarkMode} />
+        <AvisoSesionCerrada motivo={avisoSesion.motivo} segundos={avisoSesion.segundos} onAceptar={() => setAvisoSesion(null)} theme={theme} isDarkMode={isDarkMode} />
       )}
 
       {/* VENTANA DE CONTRASEÑA */}

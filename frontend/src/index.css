@@ -1996,6 +1996,17 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
+/* Coacreditados: carta del trabajador uno, carta del trabajador dos y constancia */
+.zonas-tipo.zonas-tres {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.coac-interruptor {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 2px 0;
+}
+.coac-interruptor .enlace-pequeno { gap: 5px; font-size: 12.5px; }
+.aviso-coac .boton-barra { font-size: 12.5px; }
 .zona-tipo {
   border: 2px dashed;
   border-radius: 14px;
@@ -2564,3 +2575,18 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
 }
 .tema-oscuro .aviso-inactividad-contador { background: radial-gradient(closest-side, #121a2b 78%, transparent 80% 100%), conic-gradient(#f59e0b var(--avance), #78350f 0); color: #fbbf24; }
 @media (max-width: 1024px) { .aviso-inactividad { top: calc(64px + env(safe-area-inset-top)); } }
+
+/* En pantallas táctiles no se queda "pegado" el efecto de pasar el mouse */
+@media (hover: none) {
+  button:not(:disabled):hover, .tema-oscuro button:not(:disabled):hover { filter: none; }
+  .perfil-mini:hover, .kpi-tabla tbody tr:hover, .fila-lote:hover, .fila-historial:hover { background-color: inherit; }
+}
+.pestanas-movil button, .pestanas-movil button:active, .menu-cuenta-opcion:active, .hoja-mas-opcion:active, .barra-movil-perfil:active { transform: none !important; filter: none !important; }
+.pestanas-movil button:active .pestana-icono { transform: scale(.9); }
+.hoja-mas-opcion:active { opacity: .85; }
+@media (max-width: 1024px) {
+  /* Los botones de Captura Manual quedan arriba de las pestañas (no detrás) */
+  .manual-botones { bottom: var(--alto-pestanas) !important; }
+  .tema-claro .pestanas-movil { background-color: rgba(255, 255, 255, .97) !important; }
+  .tema-oscuro .pestanas-movil { background-color: rgba(18, 26, 43, .97) !important; }
+}

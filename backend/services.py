@@ -1222,6 +1222,22 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         "nombre_conyugue": obtener_valor("nombre_conyuge") or obtener_valor("nombre_conyugue"),
     }
 
+    # Coacreditados: datos del "TRABAJADOR DOS" (los del uno son los de siempre)
+    credito2 = obtener_valor("numero_credito_2")
+    monto2 = obtener_valor("monto_credito_2")
+    letras2 = obtener_valor("monto_letras_2")
+    if monto2 and not letras2:
+        letras2 = numero_a_letras(monto2)
+    context.update({
+        "nombre_acreditado_2": obtener_valor("nombre_acreditado_2"),
+        "numero_carta_2": obtener_valor("numero_carta_2"),
+        "fecha_expedicion_2": obtener_valor("fecha_expedicion_2"),
+        "fecha_liquidacion_2": obtener_valor("fecha_liquidacion_2"),
+        "credito_a_salario_2": obtener_valor("credito_a_salario_2"),
+        "numero_credito_2": (credito2 if ('"' in credito2 or '(' in credito2) else credito_a_letras(credito2)) if credito2 else "",
+        "monto_credito_2": f"{monto2} M.N. ({letras2})" if monto2 else "",
+    })
+
     doc.render(context)
 
     directorio_salida = os.path.dirname(ruta_salida)

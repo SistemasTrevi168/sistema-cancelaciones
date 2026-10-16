@@ -22,10 +22,10 @@ export const GRUPOS_PLANTILLAS = [
   {
     grupo: 'MODELOS COACREDITADOS',
     opciones: [
-      ['COAC_CDMX_AP', 'CDMX - Ap. Crédito'],
-      ['COAC_CDMX_MUTUO', 'CDMX - C. Mutuo'],
-      ['COAC_EDOMEX_AP', 'EDOMEX - Ap. Crédito'],
-      ['COAC_EDOMEX_MUTUO', 'EDOMEX - C. Mutuo'],
+      ['COAC_CDMX_AP', 'Coacreditados · CDMX - Ap. Crédito'],
+      ['COAC_CDMX_MUTUO', 'Coacreditados · CDMX - C. Mutuo'],
+      ['COAC_EDOMEX_AP', 'Coacreditados · EDOMEX - Ap. Crédito'],
+      ['COAC_EDOMEX_MUTUO', 'Coacreditados · EDOMEX - C. Mutuo'],
     ],
   },
   {
@@ -54,7 +54,7 @@ export function nombrePlantilla(valor) {
   for (const g of GRUPOS_PLANTILLAS) {
     const op = g.opciones.find(([v]) => v === clave);
     if (op) {
-      if (clave.startsWith('COAC_')) return `Coacreditados · ${op[1]}`;
+      if (clave.startsWith('COAC_')) return op[1];
       return `${clave.startsWith('EDOMEX') ? 'EDOMEX' : 'CDMX'} · ${op[1]}`;
     }
   }

@@ -4,7 +4,7 @@ const MENSAJES = {
   inactividad: {
     icono: Clock,
     titulo: 'Tu sesión expiró',
-    texto: 'Pasó 1 minuto sin actividad en el sistema y la sesión se cerró para proteger la información. Vuelve a iniciar sesión para continuar.',
+    texto: (t) => `Pasaron ${t} sin actividad en el sistema y la sesión se cerró para proteger la información. Vuelve a iniciar sesión para continuar.`,
   },
   otro_dispositivo: {
     icono: MonitorSmartphone,
@@ -24,15 +24,17 @@ const MENSAJES = {
 };
 
 // Ventana que aparece sobre el login cuando la sesión se cerró sola
-export function AvisoSesionCerrada({ motivo, onAceptar, theme, isDarkMode }) {
+export function AvisoSesionCerrada({ motivo, segundos = 120, onAceptar, theme, isDarkMode }) {
   const m = MENSAJES[motivo] || MENSAJES.cerrada;
+  const minutos = Math.round(segundos / 60);
+  const tiempo = segundos < 60 ? `${segundos} segundos` : `${minutos} minuto${minutos === 1 ? '' : 's'}`;
   const Icono = m.icono;
   return (
     <div className="fondo-modal aviso-sesion-fondo" role="alertdialog" aria-modal="true" aria-labelledby="aviso-sesion-titulo">
       <div className="aviso-sesion modal-entrada" style={{ backgroundColor: theme.cardBg, borderColor: theme.border, color: theme.textPrimary }}>
         <span className="aviso-sesion-icono" style={{ backgroundColor: isDarkMode ? '#422006' : '#fffbeb', color: '#d97706' }}><Icono size={26} /></span>
         <h3 id="aviso-sesion-titulo">{m.titulo}</h3>
-        <p style={{ color: theme.textSecondary }}>{m.texto}</p>
+        <p style={{ color: theme.textSecondary }}>{typeof m.texto === 'function' ? m.texto(tiempo) : m.texto}</p>
         <button type="button" autoFocus onClick={onAceptar} className="aviso-sesion-boton" style={{ backgroundColor: theme.accent }}>
           <LogIn size={16} /> Iniciar sesión
         </button>

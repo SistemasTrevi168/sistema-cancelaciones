@@ -28,6 +28,13 @@ const ETIQUETAS = {
   oficina_registral: 'Oficina registral',
   entidad_financiera: 'Entidad financiera',
   nombre_conyuge: 'Nombre del cónyuge',
+  nombre_acreditado_2: 'Nombre del trabajador dos',
+  numero_credito_2: 'Número de crédito (trabajador dos)',
+  numero_carta_2: 'Número de carta (trabajador dos)',
+  fecha_expedicion_2: 'Fecha de expedición (trabajador dos)',
+  fecha_liquidacion_2: 'Fecha de liquidación (trabajador dos)',
+  credito_a_salario_2: 'Crédito a salario (trabajador dos)',
+  monto_credito_2: 'Monto del crédito (trabajador dos)',
 };
 
 const VALORES_VACIOS = ['', 'NO_ENCONTRADO', 'N/A', 'NULL', 'NONE', 'UNDEFINED'];

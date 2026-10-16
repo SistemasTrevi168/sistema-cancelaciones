@@ -4,6 +4,7 @@ import useCelular from '../usarCelular';
 import { AlertTriangle, CheckCircle, Eye, FileText, Hash, ListChecks, Loader2, PencilLine, Save } from 'lucide-react';
 import { useApp } from '../AppContext';
 import CamposDatos from './CamposDatos';
+import { esPlantillaCoac } from '../camposExpediente';
 import IconoArchivo from './IconoArchivo';
 import OpcionesPlantilla from './OpcionesPlantilla';
 import SugerenciaPlantilla from './SugerenciaPlantilla';
@@ -15,7 +16,7 @@ import VisorDocumentos from './VisorDocumentos';
 export default function EspacioExpediente({
   destino, prefijo, datos, archivos, actos, plantilla, onPlantilla, sugerencia, onUsarSugerida,
   onCambio, expedienteId, navegacion = null, accionesExtra = null, previaActiva = false, onPrevia,
-  onGuardar, guardandoAhora = false, avisos = [],
+  onGuardar, guardandoAhora = false, avisos = [], avisoCoac = null,
 }) {
   const { theme, isDarkMode, faltantesPara, etiquetaCampo, handleDownloadWord, descargandoId } = useApp();
   const faltan = faltantesPara(datos, plantilla);
@@ -137,7 +138,8 @@ export default function EspacioExpediente({
               <CheckCircle size={16} style={{ flexShrink: 0 }} /> Están completos todos los datos que usa la plantilla.
             </div>
           )}
-          <CamposDatos datos={datos} prefijo={prefijo} faltantes={faltan} onCambio={onCambio} />
+          {avisoCoac}
+          <CamposDatos datos={datos} prefijo={prefijo} faltantes={faltan} onCambio={onCambio} coac={esPlantillaCoac(plantilla)} />
         </div>
       </div>
       {/* En celular los botones quedan fijos abajo de la pantalla */}

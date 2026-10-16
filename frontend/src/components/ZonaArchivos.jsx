@@ -6,11 +6,12 @@ import IconoArchivo from './IconoArchivo';
 const TIPOS = {
   carta: { titulo: 'Carta de instrucción', icono: ScrollText, color: '#2563eb' },
   constancia: { titulo: 'Constancia de folio', icono: FileText, color: '#7c3aed' },
+  carta2: { titulo: 'Carta de instrucción · trabajador dos', icono: ScrollText, color: '#0891b2' },
 };
 
 // Recuadro para subir un tipo de documento (carta o constancia).
 // varios=false: un solo PDF (caso individual). varios=true: varios PDF o carpetas (carga masiva).
-export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir, onSoltar, onQuitar, ayuda, conflicto = false }) {
+export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir, onSoltar, onQuitar, ayuda, conflicto = false, titulo = '' }) {
   const { theme } = useApp();
   const [encima, setEncima] = useState(false);
   const archivoRef = useRef(null);
@@ -36,7 +37,7 @@ export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir,
       <div className="zona-tipo-encabezado">
         <span className="zona-tipo-icono" style={{ backgroundColor: info.color + '18', color: info.color }}><Icono size={20} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="zona-tipo-titulo" style={{ color: theme.textPrimary }}>{varios ? `${info.titulo.replace('Carta', 'Cartas').replace('Constancia', 'Constancias')}` : info.titulo}</div>
+          <div className="zona-tipo-titulo" style={{ color: theme.textPrimary }}>{titulo || (varios ? `${info.titulo.replace('Carta', 'Cartas').replace('Constancia', 'Constancias')}` : info.titulo)}</div>
           <div className="zona-tipo-ayuda" style={{ color: theme.textSecondary }}>
             {ayuda || (varios ? 'Arrastra aquí los PDF o una carpeta' : 'Arrastra aquí el PDF')}
           </div>

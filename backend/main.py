@@ -585,6 +585,40 @@ def _numero_con_letra(valor: str) -> str:
     return corregir_numeros_compuestos(v)
 
 
+CAMPOS_TRABAJADOR_DOS = ["nombre_acreditado_2", "numero_credito_2", "numero_carta_2", "fecha_expedicion_2",
+                         "fecha_liquidacion_2", "credito_a_salario_2", "monto_credito_2"]
+
+
+def _datos_trabajador_dos(datos: Dict[str, Any]) -> Dict[str, Any]:
+    """Coacreditados: datos del "TRABAJADOR DOS" con el mismo formato que los del uno."""
+    if not any(str(datos.get(c) or "").strip() for c in CAMPOS_TRABAJADOR_DOS):
+        return {}
+    v = lambda c: str(datos.get(c) or "").strip()
+    carta = v("numero_carta_2")
+    if re.fullmatch(r"\d{3,}", carta):
+        carta = services.credito_a_letras(carta)
+    salario = v("credito_a_salario_2")
+    if re.fullmatch(r"[\d,]+(?:\.\d+)?", salario):
+        salario = services.convertir_vsm_a_letras(salario.replace(",", ""))
+    monto = v("monto_credito_2")
+    m = re.search(r"\d[\d,]*(?:\.\d+)?", monto)
+    if m and not monto.startswith("$"):
+        try:
+            monto = f"${float(m.group(0).replace(',', '')):,.2f}"
+        except ValueError:
+            pass
+    return {
+        "nombre_acreditado_2": corregir_numeros_compuestos(v("nombre_acreditado_2")).upper(),
+        "numero_credito_2": re.sub(r"[^\d]", "", v("numero_credito_2")) or v("numero_credito_2"),
+        "numero_carta_2": corregir_numeros_compuestos(carta),
+        "fecha_expedicion_2": _fecha_con_letra(v("fecha_expedicion_2")),
+        "fecha_liquidacion_2": _fecha_con_letra(v("fecha_liquidacion_2")),
+        "credito_a_salario_2": corregir_numeros_compuestos(salario),
+        "monto_credito_2": monto,
+        "monto_letras_2": numero_a_letras(monto) if monto else "",
+    }
+
+
 def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallback: str = "") -> Dict[str, Any]:
     """Filtra y devuelve los campos requeridos aplicando conversiones de romanos y dígitos."""
     acreditado = corregir_numeros_compuestos(str(datos_origen.get("nombre_acreditado") or datos_origen.get("acreditado") or datos_origen.get("cliente") or ""))
@@ -679,6 +713,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
         "nombre_conyuge": nombre_conyuge,
     }
     resultado.update(puntos_inmueble)
+    resultado.update(_datos_trabajador_dos(datos_origen))
     # Lo que no se encontró se deja vacío (en pantalla se marca en rojo para llenarlo)
     for clave, valor in resultado.items():
         if isinstance(valor, str) and valor.strip().upper() in ("NO_ENCONTRADO", "NONE", "NULL", "N/A"):
@@ -779,6 +814,9 @@ CAMPOS_EDITABLES = {
     "nombre_acreditado", "monto_credito", "numero_credito", "oficina_registral", "numero_carta",
     "entidad_financiera", "fecha_liquidacion", "folio_real", "datos_inmueble", "fecha_expedicion",
     "credito_a_salario", "numero_escritura", "fecha_escritura", "notario_origen_completo", "nombre_conyuge",
+    # Coacreditados (trabajador dos)
+    "nombre_acreditado_2", "numero_credito_2", "numero_carta_2", "fecha_expedicion_2", "fecha_liquidacion_2",
+    "credito_a_salario_2", "monto_credito_2",
 }
 ALIAS_VARIABLES = {"crédito_a_salario": "credito_a_salario", "nombre_conyugue": "nombre_conyuge"}
 _cache_campos: Dict[str, Any] = {}
@@ -1089,6 +1127,12 @@ def leer_grupo(lista_datos: List[Dict[str, Any]], nombres: List[str], respaldo_c
         raise ValueError("Los archivos PDF de este expediente están corruptos o vacíos.")
     validos = [d for d in lista_datos if "error_extraccion" not in d]
     nombres_validos = [n for n, d in zip(nombres, lista_datos) if "error_extraccion" not in d]
+    # Coacreditados: con dos cartas, la del "TRABAJADOR DOS" se aparta y sus datos van en los campos *_2
+    carta_dos, nombre_dos = separar_carta_trabajador_dos(validos, nombres_validos, respaldo_credito)
+    if carta_dos is not None:
+        i = next(k for k, d in enumerate(validos) if d is carta_dos)
+        validos = validos[:i] + validos[i + 1:]
+        nombres_validos = nombres_validos[:i] + nombres_validos[i + 1:]
     actos = reunir_actos(validos, nombres_validos)
     datos_raw = services.combinar_datos_pareja(validos)
     aplicar_acto_elegido(datos_raw, actos)
@@ -1096,8 +1140,67 @@ def leer_grupo(lista_datos: List[Dict[str, Any]], nombres: List[str], respaldo_c
     num_credito = re.sub(r'\D', '', str(datos_raw.get("numero_credito") or ""))
     if not num_credito or datos_raw.get("numero_credito") == "NO_ENCONTRADO":
         num_credito = respaldo_credito if re.fullmatch(r"\d{6,}", respaldo_credito or "") else ""
+    if carta_dos is not None:
+        datos_raw.update(datos_de_trabajador_dos(carta_dos, datos_raw))
+        sugerencia = sugerencia_coacreditados(datos_raw, sugerencia)
     datos_finales = limpiar_datos_para_plantilla(datos_raw, num_credito)
+    if carta_dos is not None:
+        datos_finales["_coacreditados"] = True
     return datos_finales, actos, sugerencia
+
+
+def separar_carta_trabajador_dos(validos, nombres, clave=""):
+    """Si hay dos cartas (dos créditos distintos), regresa la del "TRABAJADOR DOS"."""
+    cartas = [d for d in validos if d.get("_tipo_documento") == "carta"]
+    if len(cartas) < 2:
+        return None, None
+    marcada = next((d for d in cartas if d.get("_trabajador") == 2), None)
+    if marcada is None:
+        creditos = [re.sub(r"\D", "", str(d.get("numero_credito") or "")) for d in cartas]
+        if len(set(c for c in creditos if c)) < 2:
+            return None, None  # las dos cartas son del mismo crédito: no es coacreditado
+        # El "TRABAJADOR UNO" es el del número de crédito del expediente; el otro es el dos
+        uno = next((d for d, c in zip(cartas, creditos) if c and c == clave), cartas[0])
+        marcada = next(d for d in cartas if d is not uno)
+    return marcada, nombres[validos.index(marcada)] if marcada in validos else None
+
+
+def datos_de_trabajador_dos(carta: Dict[str, Any], datos: Dict[str, Any]) -> Dict[str, Any]:
+    """Datos de la carta del "TRABAJADOR DOS"."""
+    v = lambda c: "" if str(carta.get(c) or "").upper() in ("", "NO_ENCONTRADO") else str(carta.get(c)).strip()
+    nombre = v("nombre_acreditado")
+    if not nombre:
+        # Si la carta no trae el nombre, se usa la otra persona que aparece en la constancia
+        otro = str(datos.get("nombre_conyuge") or "")
+        nombre = "" if otro.upper() == "NO_ENCONTRADO" else otro
+    resultado = {
+        "nombre_acreditado_2": nombre,
+        "numero_credito_2": v("numero_credito"),
+        "numero_carta_2": v("numero_carta"),
+        "fecha_expedicion_2": v("fecha_expedicion"),
+        "fecha_liquidacion_2": v("fecha_liquidacion"),
+    }
+    # En coacreditados la otra persona de la constancia es el trabajador dos, no un cónyuge
+    if nombre and actos_ifrem._sin_acentos(nombre).upper() == actos_ifrem._sin_acentos(str(datos.get("nombre_conyuge") or "")).upper():
+        datos["nombre_conyuge"] = ""
+        datos["tiene_conyuge"] = "No"
+    return resultado
+
+
+def sugerencia_coacreditados(datos: Dict[str, Any], sugerencia):
+    """Con dos cartas la plantilla es de coacreditados (misma entidad y tipo de crédito)."""
+    try:
+        sug = dict(sugerencia or {})
+        anterior = sug.get("plantilla") or ""
+        region = sug.get("region") or ("CDMX" if "CDMX" in anterior else "EDOMEX")
+        tipo = sug.get("tipo") or ("MUTUO" if "MUTUO" in anterior else "AP")
+        sug.update({
+            "plantilla": f"COAC_{region}_{tipo}", "region": region, "tipo": tipo, "coacreditados": True,
+            "razones": ["Se cargaron dos cartas de instrucción (dos créditos): son coacreditados"] + list(sug.get("razones") or []),
+        })
+        return sug
+    except Exception:
+        return sugerencia
 
 
 def aplicar_tipo_indicado(datos: Dict[str, Any], tipo: str, nombre: str) -> str:
@@ -1106,6 +1209,13 @@ def aplicar_tipo_indicado(datos: Dict[str, Any], tipo: str, nombre: str) -> str:
     Si el contenido claramente dice lo contrario, se respeta el contenido y se avisa.
     """
     tipo = (tipo or "").strip().lower()
+    if tipo in ("carta2", "carta_2"):
+        # Coacreditados: carta del "TRABAJADOR DOS"
+        datos["_trabajador"] = 2
+        tipo = "carta"
+    elif tipo in ("carta1", "carta_1"):
+        datos["_trabajador"] = 1
+        tipo = "carta"
     if tipo not in ("carta", "constancia"):
         return ""
     detectado = datos.get("_tipo_documento")
@@ -1173,9 +1283,10 @@ def numero_en_nombre(nombre: str) -> Optional[str]:
 
 def verificar_mismo_credito_por_nombre(archivos: List[tuple]):
     """
-    Caso individual: la carta y la constancia deben ser del mismo crédito.
-    Si los dos nombres de archivo traen número y no son idénticos, no se leen.
+    Caso individual: la carta y la constancia (y en coacreditados las dos cartas) deben ser del mismo expediente.
+    Si los nombres de archivo traen número y no son idénticos, no se leen.
     """
+    # También en coacreditados: las dos cartas y la constancia llevan el mismo número en el nombre
     numeros: Dict[str, List[str]] = {}
     for nombre, _tipo in archivos:
         num = numero_en_nombre(nombre)
@@ -1201,6 +1312,9 @@ def verificar_mismo_credito_por_contenido(archivos: List[Dict[str, Any]]):
         if num:
             por_tipo.setdefault(d.get("_tipo_documento") or "", set()).add(num)
     cartas, constancias = por_tipo.get("carta", set()), por_tipo.get("constancia", set())
+    n_cartas = sum(1 for a in archivos if a["datos"].get("_tipo_documento") == "carta" and "error_extraccion" not in a["datos"])
+    if n_cartas >= 2:
+        return  # coacreditados: ya se revisó por nombre de archivo
     if cartas and constancias and not (cartas & constancias):
         raise HTTPException(status_code=409, detail=f"La carta es del crédito {', '.join(sorted(cartas))} y la constancia "
                                                     f"del crédito {', '.join(sorted(constancias))}. Los números deben ser idénticos.")
@@ -1406,7 +1520,10 @@ def normalizar_campo(
     Da al texto seleccionado en el PDF el mismo formato que usa la extracción automática
     (números y fechas con letra, monto con formato de pesos, etc.).
     """
-    campo = str(payload.get("campo") or "")
+    campo_pedido = str(payload.get("campo") or "")
+    # Coacreditados: los datos del trabajador dos (*_2) llevan el mismo formato que los del uno
+    sufijo = "_2" if campo_pedido.endswith("_2") else ""
+    campo = campo_pedido[:-2] if sufijo else campo_pedido
     texto = " ".join(str(payload.get("texto") or "").split())
     valor = texto
     extra: Dict[str, Any] = {}
@@ -1425,7 +1542,7 @@ def normalizar_campo(
             m = re.search(r"[\d][\d,]*(?:\.\d+)?", texto)
             if m:
                 valor = f"${float(m.group(0).replace(',', '')):,.2f}"
-                extra["monto_letras"] = numero_a_letras(valor)
+                extra["monto_letras" + sufijo] = numero_a_letras(valor)
         elif campo == "credito_a_salario" and re.fullmatch(r"[\d,\.\s]+", texto):
             valor = services.convertir_vsm_a_letras(texto.replace(",", "").strip())
         elif campo == "notario_origen_completo" and re.search(r"NOTI?AR", texto, re.I):
@@ -1439,7 +1556,7 @@ def normalizar_campo(
     except Exception as e:
         print(f"No se pudo normalizar {campo}: {e}")
         valor = texto
-    return {"campo": campo, "original": texto, "valor": valor, "extra": extra}
+    return {"campo": campo_pedido, "original": texto, "valor": valor, "extra": extra}
 
 @app.post("/api/expedientes/vista-previa")
 def vista_previa(

@@ -18,10 +18,10 @@ pwd_context = CryptContext(
 # Duración de la sesión (igual que la cookie: 24 horas)
 DURACION_SESION = timedelta(hours=24)
 
-# Inactividad: el navegador avisa y cierra la sesión al minuto sin actividad.
+# Inactividad: el navegador avisa 15 s antes y cierra la sesión a los 2 minutos sin actividad.
 # El servidor la invalida si pasan INACTIVIDAD + GRACIA segundos sin saber nada del navegador
 # (por ejemplo, si cerraron la pestaña o el celular se bloqueó).
-INACTIVIDAD_SEGUNDOS = int(os.getenv("INACTIVIDAD_SEGUNDOS", "60"))
+INACTIVIDAD_SEGUNDOS = int(os.getenv("INACTIVIDAD_SEGUNDOS", "120"))
 GRACIA_SEGUNDOS = int(os.getenv("GRACIA_SEGUNDOS", "45"))
 
 # Por qué se cerró una sesión (para avisarle al otro dispositivo). Se guarda en memoria unas horas.

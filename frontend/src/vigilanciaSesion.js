@@ -4,7 +4,7 @@ import { api, hayPeticionesEnCurso } from './api';
 // Vigila la sesión mientras la persona está dentro del sistema:
 //  - Cada 5 segundos le pregunta al servidor si la sesión sigue abierta. Si la cerraron desde otro
 //    dispositivo (o cambiaron la contraseña, o desactivaron al usuario) se sale de inmediato.
-//  - Si pasa el tiempo de inactividad (1 minuto) sin mover el mouse, tocar o escribir, la sesión se cierra.
+//  - Si pasa el tiempo de inactividad (2 minutos) sin mover el mouse, tocar o escribir, la sesión se cierra.
 //    Mientras se lee o se guarda algo (peticiones en curso) no cuenta como inactividad.
 //  - La actividad se comparte entre pestañas del mismo navegador.
 const CLAVE = 'ultima_actividad';
@@ -17,7 +17,7 @@ const guardar = (t) => { try { localStorage.setItem(CLAVE, String(t)); } catch {
 export default function useVigilanciaSesion({ activo, onExpirar, onAviso }) {
   const ultima = useRef(0);
   const desdePing = useRef(false);
-  const limite = useRef(60);
+  const limite = useRef(120);
   const callbacks = useRef({ onExpirar, onAviso });
   useEffect(() => { callbacks.current = { onExpirar, onAviso }; });
 
@@ -32,7 +32,7 @@ export default function useVigilanciaSesion({ activo, onExpirar, onAviso }) {
       if (terminado) return;
       terminado = true;
       callbacks.current.onAviso?.(null);
-      callbacks.current.onExpirar?.(motivo);
+      callbacks.current.onExpirar?.(motivo, limite.current);
     };
     const marcar = () => {
       const ahora = Date.now();

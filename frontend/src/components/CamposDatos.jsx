@@ -6,10 +6,10 @@ import { esDatoVacio } from '../datosFaltantes';
 
 // Lista de datos de un expediente, agrupada y editable.
 // prefijo: identifica los candados de este expediente (ej. 'single' o 'batch_3').
-export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, compacto = false }) {
+export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, compacto = false, coac = false }) {
   const { theme, isDarkMode, unlockedFields, setUnlockedFields, handleToggleUnlock } = useApp();
   const [abiertos, setAbiertos] = useState({});
-  const grupos = agruparDatos(datos);
+  const grupos = agruparDatos(datos, coac);
 
   const todasLasClaves = grupos.flatMap((g) => g.campos);
   const todoAbierto = todasLasClaves.length > 0 && todasLasClaves.every((k) => unlockedFields[`${prefijo}_${k}`]);

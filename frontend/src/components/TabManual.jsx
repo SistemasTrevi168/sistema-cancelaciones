@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import useCelular from '../usarCelular';
-import { BookOpen, CheckCircle, CreditCard, Eraser, Eye, House, Loader2, PenLine, User, X } from 'lucide-react';
+import { BookOpen, CheckCircle, CreditCard, Eraser, Eye, House, Loader2, PenLine, User, Users, X } from 'lucide-react';
 import { API_BASE, encabezadosSesion } from '../api';
 import { useApp } from '../AppContext';
 import { avisar, confirmar } from '../ui/notificaciones';
 import { CAMPOS_BASE, esDatoVacio } from '../datosFaltantes';
 import { nombrePlantilla } from '../plantillasCatalogo';
+import { esPlantillaCoac } from '../camposExpediente';
 import IconoArchivo from './IconoArchivo';
 import OpcionesPlantilla from './OpcionesPlantilla';
 import PanelVistaPrevia from './PanelVistaPrevia';
@@ -50,6 +51,21 @@ const SECCIONES = [
       { clave: 'numero_escritura', etiqueta: 'Número de escritura', ejemplo: '6411', ayuda: 'Con número; se escribe con letra.', normalizar: true },
       { clave: 'fecha_escritura', etiqueta: 'Fecha de escritura', ejemplo: '10/09/2018', normalizar: true },
       { clave: 'notario_origen_completo', etiqueta: 'Notario de origen', ejemplo: 'LIC. JORGE VALDES RAMIREZ, NOTARIO PÚBLICO NO. 24 DEL ESTADO DE MÉXICO', ayuda: 'Nombre, número y de dónde es; se le da el formato de la plantilla.', ancho: true, largo: true, normalizar: true },
+    ],
+  },
+  {
+    // Solo con plantillas de coacreditados
+    titulo: 'Trabajador dos (coacreditado)',
+    icono: Users,
+    soloCoac: true,
+    campos: [
+      { clave: 'nombre_acreditado_2', etiqueta: 'Nombre del trabajador dos', ejemplo: 'JESUS SAMUEL RUIZ GALICIA', ancho: true, mayusculas: true },
+      { clave: 'numero_credito_2', etiqueta: 'Número de crédito', ejemplo: '0900203137' },
+      { clave: 'numero_carta_2', etiqueta: 'Número de carta', ejemplo: '0524486193' },
+      { clave: 'monto_credito_2', etiqueta: 'Monto del crédito', ejemplo: '150000.00', ayuda: 'Con número; se da formato de pesos y se escribe con letra.', normalizar: true },
+      { clave: 'credito_a_salario_2', etiqueta: 'Crédito en VSM', ejemplo: '40.5', ayuda: 'Veces salario mínimo, con número.', normalizar: true },
+      { clave: 'fecha_expedicion_2', etiqueta: 'Fecha de expedición', ejemplo: '11/08/2026', normalizar: true },
+      { clave: 'fecha_liquidacion_2', etiqueta: 'Fecha de liquidación', ejemplo: '20/06/2024', normalizar: true },
     ],
   },
 ];
@@ -173,7 +189,7 @@ export default function TabManual() {
           </div>
         </div>
 
-        {SECCIONES.map((sec, n) => {
+        {SECCIONES.filter((sec) => !sec.soloCoac || esPlantillaCoac(plantilla)).map((sec, n) => {
           const Icono = sec.icono;
           return (
             <fieldset key={sec.titulo} className="manual-seccion" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>

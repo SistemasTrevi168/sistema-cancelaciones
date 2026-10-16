@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, CheckCircle, CreditCard, Eraser, House, Loader2, PenLine, User } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import useCelular from '../usarCelular';
+import { BookOpen, CheckCircle, CreditCard, Eraser, Eye, House, Loader2, PenLine, User, X } from 'lucide-react';
 import { API_BASE, encabezadosSesion } from '../api';
 import { useApp } from '../AppContext';
 import { avisar, confirmar } from '../ui/notificaciones';
@@ -54,6 +56,8 @@ const SECCIONES = [
 const TODAS = SECCIONES.flatMap((s) => s.campos.map((c) => c.clave));
 
 export default function TabManual() {
+  const [previaMovil, setPreviaMovil] = useState(false);
+  const esCelular = useCelular();
   const {
     abrirVistaPrevia,
     camposDePlantilla,
@@ -227,6 +231,10 @@ export default function TabManual() {
           <button type="button" onClick={limpiar} className="boton-barra" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
             <Eraser size={15} /> Limpiar
           </button>
+          {/* En celular la vista previa se abre en pantalla completa */}
+          <button type="button" onClick={() => setPreviaMovil(true)} className="boton-barra solo-celular" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+            <Eye size={15} color={theme.accent} /> Vista previa
+          </button>
           <button type="submit" disabled={cargando} className="boton-principal" style={{ backgroundColor: theme.accent, color: '#fff' }}>
             {cargando ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle size={16} />}
             {cargando ? 'Generando…' : 'Generar expediente'}
@@ -235,9 +243,20 @@ export default function TabManual() {
       </form>
 
       {/* ---- VISTA PREVIA EN VIVO ---- */}
-      <div className="manual-previa">
-        <PanelVistaPrevia embebido />
-      </div>
+      {!esCelular && (
+        <div className="manual-previa">
+          <PanelVistaPrevia embebido />
+        </div>
+      )}
+      {esCelular && previaMovil && createPortal(
+        <div className="manual-previa-movil" style={{ backgroundColor: theme.bg }}>
+          <button type="button" className="cerrar-previa-movil" onClick={() => setPreviaMovil(false)} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+            <X size={16} /> Cerrar vista previa
+          </button>
+          <PanelVistaPrevia embebido />
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

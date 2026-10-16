@@ -23,12 +23,24 @@ import TabMasivo from './components/TabMasivo';
 import TabUsuarios from './components/TabUsuarios';
 import TabKpis from './components/TabKpis';
 import TabPerfil from './components/TabPerfil';
+import Avatar from './components/Avatar';
 import { COLOR_ACENTO_DEFECTO, colorLegible } from './colores';
 import { renderAsync } from 'docx-preview';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Menu } from 'lucide-react';
 
 // Estado de los botones atrás/adelante del navegador (fuera de React: solo lo usan los eventos del navegador)
 const navegador = { guardia: false, auth: false, tab: 'single', alSalir: null, alVolverPestana: null, alRevisar: null };
+
+const TITULOS_PESTANA = {
+  single: 'Caso Individual',
+  batch: 'Carga Masiva',
+  manual: 'Captura Manual',
+  excel: 'Carga Excel / Lote',
+  history: 'Mi Historial',
+  kpis: 'Reportes por Persona',
+  users: 'Usuarios',
+  perfil: 'Mi perfil',
+};
 
 export default function App() {
   // --- TEMA (CLARO / OSCURO) ---
@@ -221,6 +233,14 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
 
   // --- 3. NAVEGACIÓN Y TABS ---
   const [activeTab, setActiveTab] = useState('single');
+  // Menú lateral en celular (se abre con el botón de la barra superior)
+  const [menuMovil, setMenuMovil] = useState(false);
+  useEffect(() => {
+    if (!menuMovil) return undefined;
+    const alTeclear = (e) => { if (e.key === 'Escape') setMenuMovil(false); };
+    window.addEventListener('keydown', alTeclear);
+    return () => window.removeEventListener('keydown', alTeclear);
+  }, [menuMovil]);
 
   // --- 4. VISTA PREVIA FLOTANTE (una sola para todo el sistema) ---
   // vistaPrevia: null o { origen: 'single' | 'batch' | 'manual' | 'historial', index?, datos?, plantilla?, titulo?, lado }
@@ -540,10 +560,12 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   };
   const toggleTheme = () => cambiarTema(isDarkMode ? 'claro' : 'oscuro');
   // Al entrar se aplican el color y el tema guardados en la cuenta
+  // Cada usuario tiene su propio color y tema: siempre se toman de SU cuenta
+  // (si no ha elegido, los de fábrica), aunque en este navegador haya entrado otra persona antes.
   const aplicarPreferenciasDe = (user) => {
     if (!user) return;
-    if (user.color_acento) setColorAcento(user.color_acento);
-    if (user.tema === 'claro' || user.tema === 'oscuro' || user.tema === 'sistema') setTemaPreferido(user.tema);
+    setColorAcento(user.color_acento || COLOR_ACENTO_DEFECTO);
+    setTemaPreferido(user.tema === 'claro' || user.tema === 'oscuro' || user.tema === 'sistema' ? user.tema : 'claro');
   };
 
   const verificarSesion = async () => {
@@ -620,6 +642,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       guardarToken(null);
       setIsAuthenticated(false);
       setCurrentUser(null);
+      setColorAcento(COLOR_ACENTO_DEFECTO);
       setShowLogoutModal(false);
       setError('');
       setLoginUser('');
@@ -1903,6 +1926,8 @@ const filteredHistorial = (historial || []).filter((item) => {
     theme,
     toggleAccordion,
     toggleTheme,
+    menuMovil,
+    setMenuMovil,
     temaPreferido,
     cambiarTema,
     colorAcento,
@@ -1947,7 +1972,22 @@ const filteredHistorial = (historial || []).filter((item) => {
           backgroundColor: theme.bg
         }}>
           
-          {/* BARRA LATERAL (SIDEBAR) - DISEÑO HÍBRIDO */}
+          {/* BARRA SUPERIOR (solo celular y tablet): menú, sección actual y perfil */}
+          <header className="barra-movil" style={{ backgroundColor: theme.cardBg, borderColor: theme.border, color: theme.textPrimary }}>
+            <button type="button" className="boton-menu-movil" onClick={() => setMenuMovil(true)} aria-label="Abrir menú" aria-expanded={menuMovil} style={{ color: theme.textPrimary, borderColor: theme.border, backgroundColor: theme.subtleBg }}>
+              <Menu size={20} />
+            </button>
+            <div className="barra-movil-titulo">
+              <strong>{TITULOS_PESTANA[activeTab] || 'Cancelación de Hipotecas'}</strong>
+              <small style={{ color: theme.textSecondary }}>Cancelación de Hipotecas</small>
+            </div>
+            <button type="button" className="barra-movil-perfil" onClick={() => setActiveTab('perfil')} aria-label="Mi perfil">
+              <Avatar usuario={currentUser} tam={34} color={theme.accent} />
+            </button>
+          </header>
+          {menuMovil && <div className="fondo-menu-movil" onClick={() => setMenuMovil(false)} aria-hidden="true" />}
+
+          {/* BARRA LATERAL (SIDEBAR) - en celular es un menú que se desliza */}
           <Sidebar />
 
           {/* CONTENIDO PRINCIPAL */}

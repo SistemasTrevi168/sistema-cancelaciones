@@ -176,7 +176,7 @@ export default function TabHistorial() {
                 </div>
               ) : (
                 <div id="tabla-historial-export" style={{ overflowX: 'auto', backgroundColor: theme.cardBg, padding: '8px', borderRadius: '8px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                  <table className="tabla-tarjetas" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textSecondary }}>
                         <th style={{ padding: '12px' }}>Acreditado</th>
@@ -200,12 +200,12 @@ export default function TabHistorial() {
 
                         return (
                           <tr key={idx} className="fila-historial" style={{ borderBottom: `1px solid ${theme.border}` }}>
-                            <td style={{ padding: '12px', fontWeight: '600', color: theme.textPrimary }}>{nombre}</td>
-                            <td style={{ padding: '12px', color: theme.textSecondary }}>{numCred}</td>
-                            <td style={{ padding: '12px', color: montoStr === '—' ? theme.textSecondary : (isDarkMode ? '#34d399' : '#059669'), fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{montoStr}</td>
-                            <td style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{fechaStr}</td>
-                            <td style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{horaStr}</td>
-                            <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <td className="celda-titulo" style={{ padding: '12px', fontWeight: '600', color: theme.textPrimary }}>{nombre}</td>
+                            <td data-etiqueta="Crédito" style={{ padding: '12px', color: theme.textSecondary }}>{numCred}</td>
+                            <td style={{ padding: '12px', color: montoStr === '—' ? theme.textSecondary : (isDarkMode ? '#34d399' : '#059669'), fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }} data-etiqueta="Monto">{montoStr}</td>
+                            <td data-etiqueta="Fecha" style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{fechaStr}</td>
+                            <td data-etiqueta="Hora" style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{horaStr}</td>
+                            <td className="celda-acciones" style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               <button
                                 onClick={() => abrirVistaPrevia({
                                   origen: 'historial',

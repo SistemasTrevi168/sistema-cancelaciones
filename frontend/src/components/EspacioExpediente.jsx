@@ -1,4 +1,7 @@
-import { AlertTriangle, CheckCircle, Eye, FileText, Hash, Loader2, PencilLine, Save } from 'lucide-react';
+import { useState } from 'react';
+import { createPortal } from 'react-dom';
+import useCelular from '../usarCelular';
+import { AlertTriangle, CheckCircle, Eye, FileText, Hash, ListChecks, Loader2, PencilLine, Save } from 'lucide-react';
 import { useApp } from '../AppContext';
 import CamposDatos from './CamposDatos';
 import IconoArchivo from './IconoArchivo';
@@ -20,27 +23,12 @@ export default function EspacioExpediente({
   const credito = datos?.numero_credito && datos.numero_credito !== 'NO_ENCONTRADO' ? datos.numero_credito : '';
   const descargando = descargandoId === expedienteId;
   const guardado = !!expedienteId;
+  // En celular se ve una cosa a la vez: los datos o el PDF
+  const [vistaMovil, setVistaMovil] = useState('datos');
+  const esCelular = useCelular();
 
-  return (
-    <section className="espacio-expediente" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
-      {/* BARRA SUPERIOR */}
-      <header className="espacio-barra" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg }}>
-        <div className="espacio-fila">
-          {navegacion}
-          <div className="espacio-titulo">
-            <h2 style={{ color: theme.textPrimary }}>{nombre}</h2>
-            <div className="espacio-chips">
-              {guardado
-                ? <span className="chip-dato chip-ok" title="Ya está en Mi Historial"><CheckCircle size={12} /> Guardado</span>
-                : <span className="chip-dato chip-borrador" title="Todavía no se guarda en la base: revisa y corrige, y después guárdalo"><PencilLine size={12} /> Borrador · sin guardar</span>}
-              {credito && <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><Hash size={12} /> Crédito {credito}</span>}
-              <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><FileText size={12} /> {archivos.length} PDF</span>
-              {faltan.length === 0
-                ? <span className="chip-dato chip-ok"><CheckCircle size={12} /> Datos completos</span>
-                : <span className="chip-dato chip-falta" title={`Faltan: ${faltan.map(etiquetaCampo).join(', ')}`}><AlertTriangle size={12} /> Faltan {faltan.length} dato(s)</span>}
-            </div>
-          </div>
-          <div className="espacio-acciones">
+  const botones = (
+    <>
             {accionesExtra}
             <button
               type="button"
@@ -70,7 +58,29 @@ export default function EspacioExpediente({
                 {guardandoAhora ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={15} />} Guardar y procesar
               </button>
             )}
+    </>
+  );
+
+  return (
+    <section className="espacio-expediente" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
+      {/* BARRA SUPERIOR */}
+      <header className="espacio-barra" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg }}>
+        <div className="espacio-fila">
+          {navegacion}
+          <div className="espacio-titulo">
+            <h2 style={{ color: theme.textPrimary }}>{nombre}</h2>
+            <div className="espacio-chips">
+              {guardado
+                ? <span className="chip-dato chip-ok" title="Ya está en Mi Historial"><CheckCircle size={12} /> Guardado</span>
+                : <span className="chip-dato chip-borrador" title="Todavía no se guarda en la base: revisa y corrige, y después guárdalo"><PencilLine size={12} /> Borrador · sin guardar</span>}
+              {credito && <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><Hash size={12} /> Crédito {credito}</span>}
+              <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><FileText size={12} /> {archivos.length} PDF</span>
+              {faltan.length === 0
+                ? <span className="chip-dato chip-ok"><CheckCircle size={12} /> Datos completos</span>
+                : <span className="chip-dato chip-falta" title={`Faltan: ${faltan.map(etiquetaCampo).join(', ')}`}><AlertTriangle size={12} /> Faltan {faltan.length} dato(s)</span>}
+            </div>
           </div>
+          {!esCelular && <div className="espacio-acciones">{botones}</div>}
         </div>
 
         <div className="espacio-fila espacio-plantilla">
@@ -89,8 +99,20 @@ export default function EspacioExpediente({
         </div>
       </header>
 
+      {/* En celular: pestañas para cambiar entre los datos y el PDF */}
+      <div className="espacio-pestanas" role="tablist" style={{ backgroundColor: theme.subtleBg, borderColor: theme.border }}>
+        <button type="button" role="tab" aria-selected={vistaMovil === 'datos'} className={vistaMovil === 'datos' ? 'activa' : ''} onClick={() => setVistaMovil('datos')}
+          style={vistaMovil === 'datos' ? { backgroundColor: theme.cardBg, color: theme.textPrimary } : { color: theme.textSecondary }}>
+          <ListChecks size={15} /> Datos {faltan.length > 0 && <span className="espacio-pestana-falta">{faltan.length}</span>}
+        </button>
+        <button type="button" role="tab" aria-selected={vistaMovil === 'docs'} className={vistaMovil === 'docs' ? 'activa' : ''} onClick={() => setVistaMovil('docs')}
+          style={vistaMovil === 'docs' ? { backgroundColor: theme.cardBg, color: theme.textPrimary } : { color: theme.textSecondary }}>
+          <FileText size={15} /> Documento{archivos.length > 1 ? 's' : ''} ({archivos.length})
+        </button>
+      </div>
+
       {/* CUERPO: PDF | DATOS */}
-      <div className="espacio-cuerpo">
+      <div className={`espacio-cuerpo ver-${vistaMovil}`}>
         <div className="espacio-columna espacio-docs">
           <VisorDocumentos key={`${prefijo}-${archivos.map((a) => a.name).join('|')}`} archivos={archivos} actos={actos} destino={destino} />
         </div>
@@ -118,6 +140,11 @@ export default function EspacioExpediente({
           <CamposDatos datos={datos} prefijo={prefijo} faltantes={faltan} onCambio={onCambio} />
         </div>
       </div>
+      {/* En celular los botones quedan fijos abajo de la pantalla */}
+      {esCelular && createPortal(
+        <div className="barra-acciones-movil" style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}>{botones}</div>,
+        document.body,
+      )}
     </section>
   );
 }

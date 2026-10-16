@@ -1104,39 +1104,44 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   }
 }
 
+/* Barra superior del celular (oculta en computadora) */
+.barra-movil, .cerrar-menu-movil, .fondo-menu-movil, .espacio-pestanas { display: none; }
+
 @media (max-width: 1024px) {
   .layout-app {
     flex-direction: column !important;
   }
+  .barra-movil {
+    display: flex; align-items: center; gap: 10px;
+    position: sticky; top: 0; z-index: 900;
+    padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top));
+    border-bottom: 1px solid;
+    box-shadow: 0 4px 14px -10px rgba(15, 23, 42, .35);
+  }
+  .boton-menu-movil { width: 40px; height: 40px; border-radius: 10px; border: 1px solid; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .barra-movil-titulo { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+  .barra-movil-titulo strong { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .barra-movil-titulo small { font-size: 11px; }
+  .barra-movil-perfil { background: none; border: none; padding: 0; cursor: pointer; border-radius: 50%; }
+  /* Menú lateral que se desliza desde la izquierda */
   .barra-lateral {
-    width: 100% !important;
-    height: auto !important;
-    position: static !important;
-    border-right: none !important;
-    padding: 16px !important;
-    gap: 12px;
+    position: fixed !important; top: 0; left: 0; bottom: 0; z-index: 1001;
+    width: min(300px, 86vw) !important; height: 100dvh !important;
+    transform: translateX(-105%); transition: transform .28s cubic-bezier(.4, 0, .2, 1), visibility .28s;
+    visibility: hidden; box-shadow: 12px 0 32px -12px rgba(15, 23, 42, .45);
+    padding: 18px 14px !important; padding-bottom: max(18px, env(safe-area-inset-bottom)) !important;
   }
-  .barra-lateral-nav {
-    flex-direction: row !important;
-    flex-wrap: wrap;
-  }
-  .barra-lateral-nav button {
-    width: auto !important;
-  }
-  /* En pantalla chica se ocultan el separador y el título "Administración" */
-  .barra-lateral-nav > div,
-  .barra-lateral-nav > span {
-    display: none;
-  }
-  .contenido-principal,
-  .tarjeta-principal {
-    padding: 16px !important;
-  }
+  .barra-lateral.abierta { transform: translateX(0); visibility: visible; }
+  .fondo-menu-movil { display: block; position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, .5); backdrop-filter: blur(2px); animation: aparecerFondo .2s ease-out both; }
+  .cerrar-menu-movil { display: flex; margin-left: auto; background: none; border: none; cursor: pointer; padding: 6px; border-radius: 8px; }
+  .contenido-principal { padding: 12px !important; }
+  .tarjeta-principal { padding: 14px !important; border-radius: 14px !important; }
   .grid-individual,
   .grid-usuarios,
   .grid-masivo {
     grid-template-columns: 1fr !important;
   }
+  .grid-usuarios > *, .grid-masivo > *, .grid-individual > * { min-width: 0; }
 }
 
 @media (max-width: 640px) {
@@ -2341,4 +2346,120 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   .perfil-cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .perfil-temas { grid-template-columns: 1fr; }
   .perfil-columnas { grid-template-columns: 1fr; }
+}
+
+/* Avisos flotantes: se desvanecen solos a los 3 segundos */
+.aviso-entrada { overflow: hidden; max-height: 240px; transform-origin: bottom right; }
+.aviso-saliendo { animation: avisoSalida .45s cubic-bezier(.4, 0, .2, 1) forwards; pointer-events: none; }
+@keyframes avisoSalida {
+  0% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); max-height: 240px; }
+  60% { opacity: 0; transform: translateY(6px) scale(.98); filter: blur(2px); max-height: 240px; }
+  100% { opacity: 0; transform: translateY(6px) scale(.98); filter: blur(2px); max-height: 0; padding-top: 0; padding-bottom: 0; margin-top: -10px; border-width: 0; }
+}
+
+/* =====================================================================
+   CELULAR (pantallas de hasta 768 px)
+   ===================================================================== */
+.tema-claro { --fondo-tarjeta: #ffffff; --borde-ui: #e2e8f0; --texto-ui: #0f172a; }
+.tema-oscuro { --fondo-tarjeta: #121a2b; --borde-ui: #2a3650; --texto-ui: #f1f5f9; }
+.solo-celular { display: none !important; }
+
+@media (max-width: 768px) {
+  .solo-celular { display: inline-flex !important; }
+  /* Evita que el iPhone haga zoom al escribir */
+  input, select, textarea { font-size: 16px !important; }
+  .carga-encabezado h2 { font-size: 19px !important; }
+  .carga-encabezado p { font-size: 13px !important; }
+  .boton-barra, .boton-principal { min-height: 40px; }
+
+  /* Espacio de trabajo: una cosa a la vez (Datos | Documento) y botones abajo */
+  .espacio-expediente { border-radius: 12px; margin-bottom: 76px; }
+  .espacio-barra { padding: 12px; }
+  .espacio-titulo { min-width: 0; flex-basis: 100%; }
+  .espacio-titulo h2 { font-size: 16px; }
+  .espacio-pestanas {
+    display: flex; gap: 4px; padding: 4px; margin: 10px 12px 0; border: 1px solid; border-radius: 12px;
+    position: sticky; top: 64px; z-index: 50;
+  }
+  .espacio-pestanas button {
+    flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: none; background: none; border-radius: 9px; padding: 9px 8px; font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  .espacio-pestanas button.activa { box-shadow: 0 1px 4px rgba(15, 23, 42, .15); }
+  .espacio-pestana-falta { background: #f59e0b; color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; }
+  .espacio-cuerpo { grid-template-columns: 1fr !important; height: auto !important; min-height: 0 !important; }
+  .espacio-cuerpo.ver-datos .espacio-docs { display: none; }
+  .espacio-cuerpo.ver-docs .espacio-datos { display: none; }
+  .espacio-docs { height: calc(100dvh - 210px) !important; min-height: 420px; padding: 8px !important; }
+  .espacio-datos { border: none !important; padding: 12px !important; }
+  .barra-acciones-movil {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 800;
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px;
+    padding: 10px 10px max(10px, env(safe-area-inset-bottom));
+    border-top: 1px solid; font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    box-shadow: 0 -8px 20px -12px rgba(15, 23, 42, .35);
+    animation: subirBarra .25s ease-out both;
+  }
+  .barra-acciones-movil .boton-barra { justify-content: center; padding: 6px; font-size: 12.5px; line-height: 1.15; white-space: normal; text-align: center; min-height: 44px; }
+  .espacio-plantilla { gap: 6px; }
+  .espacio-plantilla .selector-plantilla { min-width: 0 !important; width: 100%; }
+  .nav-lote { border-right: none !important; width: 100%; padding-right: 0 !important; justify-content: space-between; }
+
+  /* Visor de PDF */
+  .visor-pantalla-completa { inset: 0 !important; border-radius: 0 !important; }
+  .visor-pantalla-completa .panel-docs-cuerpo { flex-direction: column !important; }
+  .visor-pantalla-completa .panel-docs-actos { width: 100% !important; max-height: 35% !important; border-right: none !important; }
+
+  /* Menú "Usar como…" al seleccionar texto: hoja desde abajo */
+  .menu-campo {
+    left: 8px !important; right: 8px !important; top: auto !important; bottom: max(8px, env(safe-area-inset-bottom)) !important;
+    width: auto !important; max-height: 60vh; overflow-y: auto; border-radius: 16px !important;
+    box-shadow: 0 -12px 32px -10px rgba(15, 23, 42, .45) !important; z-index: 1700 !important;
+  }
+
+  /* Vista previa del Word: pantalla completa */
+  .panel-previa { left: 0 !important; right: 0 !important; top: 0 !important; bottom: 0 !important; width: 100% !important; height: 100dvh !important; border-radius: 0 !important; }
+  .manual-previa-movil { position: fixed; inset: 0; z-index: 1500; display: flex; flex-direction: column; gap: 8px; padding: 10px; padding-top: max(10px, env(safe-area-inset-top)); font-family: 'Inter', system-ui, -apple-system, sans-serif; animation: aparecerFondo .2s ease-out both; }
+  .manual-previa-movil .previa-embebida { flex: 1; min-height: 0; }
+  .zona-tipo { min-height: 0 !important; }
+  .cerrar-previa-movil { display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid; border-radius: 10px; padding: 10px; font-weight: 700; font-size: 14px; cursor: pointer; font-family: inherit; }
+  .manual-botones { position: sticky; bottom: 0; z-index: 40; flex-wrap: wrap; }
+  .manual-botones .boton-principal { flex-basis: 100%; }
+
+  /* Tablas que se vuelven tarjetas (historial, usuarios) */
+  .tabla-tarjetas thead { display: none; }
+  .tabla-tarjetas, .tabla-tarjetas tbody { display: block; width: 100%; }
+  .tabla-tarjetas tr {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px;
+    padding: 12px 4px !important; border-bottom: 1px solid var(--borde-ui) !important;
+  }
+  .tabla-tarjetas td { display: flex; flex-direction: column; padding: 0 !important; text-align: left !important; white-space: normal !important; min-width: 0; }
+  .tabla-tarjetas td[data-etiqueta]::before { content: attr(data-etiqueta); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; opacity: .65; margin-bottom: 1px; }
+  .tabla-tarjetas .celda-titulo { grid-column: 1 / -1; font-size: 14.5px; margin-bottom: 4px; }
+  .tabla-tarjetas td > * { align-self: flex-start; }
+  select { max-width: 100%; }
+  .lote-resumen, .lote-resultados { min-width: 0; }
+  .tabla-tarjetas .celda-acciones { grid-column: 1 / -1; flex-direction: row !important; flex-wrap: wrap; gap: 8px; justify-content: flex-start !important; margin-top: 6px; }
+
+  /* Ventanas y menús */
+  .fondo-modal { padding: 12px !important; align-items: flex-end !important; }
+  .fondo-modal > div { max-height: calc(100dvh - 24px); overflow-y: auto; }
+  .menu-exportar { left: 0 !important; right: auto !important; }
+  .avisos-flotantes { left: 12px; right: 12px !important; bottom: max(12px, env(safe-area-inset-bottom)) !important; width: auto !important; }
+  body:has(.barra-acciones-movil) .avisos-flotantes { bottom: 84px !important; }
+
+  /* Reportes por persona */
+  .kpi-filtros { padding: 10px; }
+  .kpi-filtros select { width: 100% !important; }
+  .kpi-filtros-acciones { width: 100%; }
+  .kpi-filtros-acciones .boton-barra:last-child { flex: 1; justify-content: center; }
+  .kpi-leyenda { justify-content: flex-start; }
+  .kpi-tarjeta { padding: 12px; }
+  .kpi-tabla-contenedor { margin: 0 -12px; padding: 0 12px; }
+}
+
+@keyframes subirBarra { from { transform: translateY(100%); } to { transform: none; } }
+@media (max-width: 768px) {
+  .resultados-acciones { width: 100%; }
+  .resultados-acciones .selector-plantilla { width: 100% !important; min-width: 0 !important; }
 }

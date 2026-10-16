@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
 import { useApp } from '../AppContext';
-import { quitarAviso, suscribir } from '../ui/notificaciones';
+import { pausarAviso, quitarAviso, reanudarAviso, suscribir } from '../ui/notificaciones';
 
 const ESTILOS = {
   exito: { fondo: '#ecfdf5', borde: '#6ee7b7', texto: '#065f46', icono: CheckCircle, color: '#10b981' },
@@ -40,7 +40,9 @@ export default function Notificaciones() {
             <div
               key={a.id}
               role={a.tipo === 'error' ? 'alert' : 'status'}
-              className="aviso-entrada"
+              className={`aviso-entrada ${a.saliendo ? 'aviso-saliendo' : ''}`}
+              onMouseEnter={() => pausarAviso(a.id)}
+              onMouseLeave={() => reanudarAviso(a.id)}
               style={{
                 backgroundColor: isDarkMode ? theme.cardBg : e.fondo,
                 border: `1px solid ${isDarkMode ? e.color : e.borde}`,

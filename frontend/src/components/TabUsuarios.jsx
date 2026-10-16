@@ -77,7 +77,7 @@ export default function TabUsuarios() {
                   <div style={{ textAlign: 'center', padding: '20px' }}><Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} /></div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                  <table className="tabla-tarjetas" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textSecondary }}>
                         <th style={{ padding: '10px' }}>Usuario</th>
@@ -94,7 +94,7 @@ export default function TabUsuarios() {
                         const btnIcono = { backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '6px' };
                         return (
                           <tr key={u.id} style={{ borderBottom: `1px solid ${theme.border}`, opacity: activo ? 1 : 0.6 }}>
-                            <td style={{ padding: '10px', fontWeight: '600', color: theme.textPrimary }}>
+                            <td className="celda-titulo" style={{ padding: '10px', fontWeight: '600', color: theme.textPrimary }}>
                               <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <Avatar usuario={esYo ? { ...u, foto: currentUser?.foto ?? u.foto, nombre_mostrar: currentUser?.nombre_mostrar ?? u.nombre_mostrar } : u} tam={30} color={theme.accent} />
                                 <span>
@@ -103,13 +103,13 @@ export default function TabUsuarios() {
                                 </span>
                               </span>
                             </td>
-                            <td style={{ padding: '10px', color: theme.textSecondary }}>{esUsuarioAdmin ? 'Administrador' : 'Operador'}</td>
-                            <td style={{ padding: '10px' }}>
+                            <td data-etiqueta="Rol" style={{ padding: '10px', color: theme.textSecondary }}>{esUsuarioAdmin ? 'Administrador' : 'Operador'}</td>
+                            <td data-etiqueta="Estado" style={{ padding: '10px' }}>
                               <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '999px', backgroundColor: activo ? '#dcfce7' : '#f1f5f9', color: activo ? '#166534' : '#475569' }}>
                                 {activo ? 'Activo' : 'Inactivo'}
                               </span>
                             </td>
-                            <td style={{ padding: '10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <td className="celda-acciones" style={{ padding: '10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               {!esYo && (
                                 <button type="button" onClick={() => setModalPassword({ modo: 'reset', usuario: u })} style={{ ...btnIcono, color: theme.accent }} title="Asignar nueva contraseña">
                                   <KeyRound size={16} />

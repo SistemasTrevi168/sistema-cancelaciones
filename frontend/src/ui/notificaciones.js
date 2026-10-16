@@ -20,25 +20,57 @@ export function suscribir(fn) {
   return () => oyentes.delete(fn);
 }
 
-export function quitarAviso(id) {
+// Cuánto se ve cada aviso y cuánto dura el desvanecido
+const DURACION_AVISO = 3000;
+const DURACION_SALIDA = 450;
+const temporizadores = new Map();
+
+function quitarDeLista(id) {
+  temporizadores.delete(id);
   estado = { ...estado, avisos: estado.avisos.filter((a) => a.id !== id) };
   emitir();
 }
 
-function agregarAviso(tipo, mensaje, duracion) {
-  const id = ++siguienteId;
-  // Máximo 4 avisos a la vez: se quitan los más viejos
-  const avisos = [...estado.avisos, { id, tipo, mensaje: String(mensaje ?? '') }].slice(-4);
-  estado = { ...estado, avisos };
+// Se desvanece suavemente y después se quita
+export function quitarAviso(id) {
+  const aviso = estado.avisos.find((a) => a.id === id);
+  if (!aviso || aviso.saliendo) return;
+  clearTimeout(temporizadores.get(id));
+  estado = { ...estado, avisos: estado.avisos.map((a) => (a.id === id ? { ...a, saliendo: true } : a)) };
   emitir();
-  setTimeout(() => quitarAviso(id), duracion);
+  temporizadores.set(id, setTimeout(() => quitarDeLista(id), DURACION_SALIDA));
+}
+
+function programarSalida(id, ms) {
+  clearTimeout(temporizadores.get(id));
+  temporizadores.set(id, setTimeout(() => quitarAviso(id), ms));
+}
+
+// Mientras el mouse está encima, el aviso no se va (para poder leerlo)
+export function pausarAviso(id) {
+  const aviso = estado.avisos.find((a) => a.id === id);
+  if (aviso && !aviso.saliendo) clearTimeout(temporizadores.get(id));
+}
+export function reanudarAviso(id) {
+  const aviso = estado.avisos.find((a) => a.id === id);
+  if (aviso && !aviso.saliendo) programarSalida(id, 1500);
+}
+
+function agregarAviso(tipo, mensaje) {
+  const id = ++siguienteId;
+  // Máximo 4 avisos a la vez: los más viejos se desvanecen
+  const visibles = estado.avisos.filter((a) => !a.saliendo);
+  estado = { ...estado, avisos: [...estado.avisos, { id, tipo, mensaje: String(mensaje ?? '') }] };
+  emitir();
+  visibles.slice(0, Math.max(0, visibles.length - 3)).forEach((a) => quitarAviso(a.id));
+  programarSalida(id, DURACION_AVISO);
 }
 
 export const avisar = {
-  exito: (mensaje) => agregarAviso('exito', mensaje, 3500),
-  info: (mensaje) => agregarAviso('info', mensaje, 4000),
-  aviso: (mensaje) => agregarAviso('aviso', mensaje, 5000),
-  error: (mensaje) => agregarAviso('error', mensaje, 7000),
+  exito: (mensaje) => agregarAviso('exito', mensaje),
+  info: (mensaje) => agregarAviso('info', mensaje),
+  aviso: (mensaje) => agregarAviso('aviso', mensaje),
+  error: (mensaje) => agregarAviso('error', mensaje),
 };
 
 export function confirmar(mensaje, opciones = {}) {

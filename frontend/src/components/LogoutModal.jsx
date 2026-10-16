@@ -10,7 +10,7 @@ export default function LogoutModal() {
   } = useApp();
 
   return (
-<div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+<div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2100, padding: '16px' }}>
           <div className="slide-up" style={{ backgroundColor: theme.cardBg, padding: '32px', borderRadius: '16px', maxWidth: '400px', width: '100%', border: `1px solid ${theme.border}`, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)', textAlign: 'center' }}>
             <div style={{ backgroundColor: isDarkMode ? '#450a0a' : '#fff1f2', width: '56px', height: '56px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
               <LogOut color="#dc2626" size={28} />

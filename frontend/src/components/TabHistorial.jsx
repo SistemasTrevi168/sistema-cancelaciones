@@ -42,9 +42,9 @@ export default function TabHistorial() {
                   <History size={20} color={theme.accent} /> Historial de Expedientes
                 </h2>
                 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <div className="historial-filtros" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                   {/* Búsqueda por texto */}
-                  <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '0 10px', backgroundColor: theme.inputBg }}>
+                  <div className="historial-buscar" style={{ display: 'flex', alignItems: 'center', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '0 10px', backgroundColor: theme.inputBg }}>
                     <Search size={16} color={theme.textSecondary} />
                     <input
                       type="text"

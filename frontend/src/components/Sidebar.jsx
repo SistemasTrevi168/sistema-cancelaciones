@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
-  BarChart3, Edit3, FileSpreadsheet, UserCog, FileText, FolderPlus, History, LogOut, Moon, Sun, Users, X,
+  BarChart3, Edit3, FileSpreadsheet, UserCog, FileText, FolderPlus, History, LogOut, Moon, Sun, Users,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
@@ -13,16 +13,11 @@ export default function Sidebar() {
     currentUser,
     esAdmin,
     isDarkMode,
-    setActiveTab: cambiarPestana,
+    setActiveTab,
     setShowLogoutModal,
-    menuMovil,
-    setMenuMovil,
     theme,
     toggleTheme
   } = useApp();
-
-  // En celular, al elegir una sección se cierra el menú
-  const setActiveTab = (tab) => { cambiarPestana(tab); setMenuMovil(false); };
 
   // Mide la pestaña activa para mover el indicador
   useLayoutEffect(() => {
@@ -40,7 +35,7 @@ export default function Sidebar() {
   }, [activeTab]);
 
   return (
-<aside className={`barra-lateral ${menuMovil ? 'abierta' : ''}`} aria-label="Menú principal" style={{
+<aside className="barra-lateral" aria-label="Menú principal" style={{
             width: '280px',
             backgroundColor: theme.cardBg,
             borderRight: `1px solid ${theme.border}`,
@@ -68,9 +63,6 @@ export default function Sidebar() {
                     Gestión Notarial
                   </p>
                 </div>
-                <button type="button" className="cerrar-menu-movil" onClick={() => setMenuMovil(false)} aria-label="Cerrar menú" style={{ color: theme.textSecondary }}>
-                  <X size={20} />
-                </button>
               </div>
 
               {/* NAVEGACIÓN VERTICAL (TABS) */}

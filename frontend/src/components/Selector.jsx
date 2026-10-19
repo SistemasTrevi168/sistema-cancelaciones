@@ -42,6 +42,9 @@ export default function Selector({
   const [abierto, setAbierto] = useState(false);
   const [saliendo, setSaliendo] = useState(false);
   const [activo, setActivo] = useState(-1);
+  // Solo se desplaza la lista para mostrar la opción activa cuando se usa el teclado (o al abrir),
+  // no cuando se pasa el mouse: si no, la lista se mueve sola debajo del cursor y el clic cae en otra opción.
+  const porTeclado = useRef(true);
   const [posicion, setPosicion] = useState(null);
   const raiz = useRef(null);
   const boton = useRef(null);
@@ -63,6 +66,7 @@ export default function Selector({
   const abrir = () => {
     if (disabled || tactil) return;
     const i = opciones.findIndex((o) => !o.encabezado && o.valor === String(value ?? ''));
+    porTeclado.current = true;
     setActivo(i >= 0 && !opciones[i].deshabilitada ? i : (elegibles[0] ?? -1));
     setSaliendo(false);
     setAbierto(true);
@@ -94,9 +98,11 @@ export default function Selector({
       });
     };
     calcular();
+    // Al desplazar la página se recoloca; al desplazar la propia lista, no (si no, regresaba sola a la opción elegida)
+    const alDesplazar = (e) => { if (!lista.current || !lista.current.contains(e.target)) calcular(); };
     window.addEventListener('resize', calcular);
-    window.addEventListener('scroll', calcular, true);
-    return () => { window.removeEventListener('resize', calcular); window.removeEventListener('scroll', calcular, true); };
+    window.addEventListener('scroll', alDesplazar, true);
+    return () => { window.removeEventListener('resize', calcular); window.removeEventListener('scroll', alDesplazar, true); };
   }, [abierto]);
 
   // Cerrar al hacer clic fuera
@@ -110,11 +116,12 @@ export default function Selector({
     return () => document.removeEventListener('pointerdown', fuera, true);
   });
 
+  const colocada = !!posicion;
   // La opción activa siempre a la vista
   useEffect(() => {
-    if (!abierto || activo < 0) return;
+    if (!abierto || activo < 0 || !porTeclado.current) return;
     lista.current?.querySelector(`[data-indice="${activo}"]`)?.scrollIntoView({ block: 'nearest' });
-  }, [abierto, activo, posicion]);
+  }, [abierto, activo, colocada]);
 
   const mover = (paso) => {
     if (!elegibles.length) return;
@@ -124,6 +131,7 @@ export default function Selector({
   };
   const alTeclear = (e) => {
     if (disabled) return;
+    porTeclado.current = true;
     if (!abierto) {
       if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) { e.preventDefault(); abrir(); }
       return;
@@ -215,7 +223,7 @@ export default function Selector({
                 backgroundColor: i === activo ? fondoActivo : undefined,
                 color: elegida === o ? theme.accent : undefined,
               }}
-              onPointerMove={() => !o.deshabilitada && activo !== i && setActivo(i)}
+              onPointerMove={() => { if (!o.deshabilitada && activo !== i) { porTeclado.current = false; setActivo(i); } }}
               onClick={(e) => { e.stopPropagation(); elegir(i); }}
             >
               <span>{o.etiqueta}</span>

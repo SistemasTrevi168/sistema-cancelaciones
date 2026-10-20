@@ -306,8 +306,8 @@ export default function TabMasivo() {
 
                   {/* Archivos del expediente: se pueden mover a otro o quitar mientras sea borrador */}
                   <div className="fila-archivos">
-                    {(res.archivos || []).map((n) => (
-                      <span key={n} className="chip-archivo" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg, color: theme.textPrimary }} title={n}>
+                    {(res.archivos || []).map((n, i) => (
+                      <span key={`${n}-${i}`} className="chip-archivo" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg, color: theme.textPrimary }} title={n}>
                         <IconoArchivo tipo="pdf" size={14} />
                         {res.tipos?.[n] && <span className={`marca-tipo ${res.tipos[n]}`}>{res.tipos[n] === 'carta' ? 'Carta' : 'Constancia'}</span>}
                         <span className="chip-archivo-nombre">{n}</span>

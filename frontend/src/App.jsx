@@ -944,9 +944,26 @@ const handlePreviewExcel = async (file) => {
   };
 
   // ---- Caso individual ----
+  // Archivo con un nombre que ya está en uso: se le agrega su tipo, p. ej. "1599012345 (constancia).pdf".
+  // El número de crédito del nombre se conserva, así se sigue agrupando con su carta.
+  const nombreSinRepetir = (f, tipo, usados) => {
+    if (!usados.has(f.name)) { usados.add(f.name); return f; }
+    const base = f.name.replace(/\.pdf$/i, '');
+    let nombre = `${base} (${tipo}).pdf`;
+    for (let i = 2; usados.has(nombre); i += 1) nombre = `${base} (${tipo} ${i}).pdf`;
+    usados.add(nombre);
+    const copia = new File([f], nombre, { type: f.type || 'application/pdf', lastModified: f.lastModified });
+    Object.defineProperty(copia, 'nombreOriginal', { value: f.nombreOriginal || f.name });
+    return copia;
+  };
   const elegirArchivoSingle = (tipo, archivos) => {
-    const pdf = Array.from(archivos || []).find((f) => f.name.toLowerCase().endsWith('.pdf'));
+    let pdf = Array.from(archivos || []).find((f) => f.name.toLowerCase().endsWith('.pdf'));
     if (!pdf) { avisar.aviso('Elige un archivo PDF.'); return; }
+    // Si otro recuadro ya tiene un archivo con el mismo nombre (y no es el mismo archivo), se distingue por su tipo
+    const otros = { carta: cartaSingle, carta2: carta2Single, constancia: constanciaSingle };
+    delete otros[tipo];
+    const usados = new Set(Object.values(otros).filter(Boolean).map((f) => f.name));
+    if (!Object.values(otros).some((f) => f && f.name === pdf.name && f.size === pdf.size)) pdf = nombreSinRepetir(pdf, tipo === 'carta2' ? 'carta 2' : tipo, usados);
     if (tipo === 'carta') setCartaSingle(pdf); else if (tipo === 'carta2') setCarta2Single(pdf); else setConstanciaSingle(pdf);
     setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]); setError('');
   };
@@ -973,10 +990,19 @@ const handlePreviewExcel = async (file) => {
     }
     // Se agregan a los que ya estaban (sin repetir el mismo archivo)
     const fijar = tipo === 'carta' ? setCartasLote : setConstanciasLote;
-    fijar((prev) => {
-      const ya = new Set(prev.map((f) => `${f.name}|${f.size}`));
-      return [...prev, ...pdfs.filter((f) => !ya.has(`${f.name}|${f.size}`))];
+    const actuales = tipo === 'carta' ? cartasLote : constanciasLote;
+    const clave = (f) => `${f.nombreOriginal || f.name}|${f.size}`;
+    const ya = new Set(actuales.map(clave));
+    // Nombres ya usados en las dos zonas: dos archivos distintos nunca quedan con el mismo nombre
+    // (antes, una carta y una constancia llamadas igual se confundían en la tabla)
+    const usados = new Set([...cartasLote, ...constanciasLote].map((f) => f.name));
+    const nuevos = [];
+    pdfs.forEach((f) => {
+      if (ya.has(clave(f))) return;
+      ya.add(clave(f));
+      nuevos.push(nombreSinRepetir(f, tipo, usados));
     });
+    fijar((prev) => [...prev, ...nuevos]);
     setError('');
   };
   const quitarArchivoDeLote = (tipo, archivo) => {
@@ -2181,4 +2207,4 @@ const cambiarEstado = async (ids, estado) => {
     </div>
     </AppContext.Provider>
   );
-}
+}

@@ -303,7 +303,7 @@ export default function TabMasivo() {
                       <strong style={{ color: theme.textPrimary }}>{d.nombre_acreditado && d.nombre_acreditado !== 'NO_ENCONTRADO' ? d.nombre_acreditado : 'Acreditado no identificado'}</strong>
                       <small style={{ color: theme.textSecondary }}>
                         {guardado
-                          ? <span className="estado-fila estado-guardado"><CheckCircle size={11} /> Guardado y procesado</span>
+                          ? <span className="estado-fila estado-guardado"><CheckCircle size={11} /> {res.actualizado ? 'Actualizado (ya existía)' : 'Guardado y procesado'}</span>
                           : <span className="estado-fila estado-borrador"><PencilLine size={11} /> Borrador</span>}
                         {' · '}{d.numero_credito ? `Crédito ${d.numero_credito}` : 'Sin número de crédito'}
                         {res.actos?.length > 1 ? ` · ${res.actos.length} actos` : ''}

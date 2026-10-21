@@ -82,6 +82,8 @@ export function confirmar(mensaje, opciones = {}) {
       titulo: opciones.titulo || '¿Deseas continuar?',
       textoConfirmar: opciones.textoConfirmar || 'Sí, continuar',
       textoCancelar: opciones.textoCancelar || 'Cancelar',
+      // Tercera opción (opcional): responde 'alterno'
+      textoAlterno: opciones.textoAlterno || '',
       peligro: !!opciones.peligro,
       responder: (valor) => {
         if (estado.confirmacion === confirmacion) {

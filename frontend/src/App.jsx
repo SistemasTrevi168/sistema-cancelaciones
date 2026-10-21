@@ -1158,17 +1158,66 @@ const handlePreviewExcel = async (file) => {
     );
   };
 
+  // Al guardar: si el crédito ya existe, se puede ACTUALIZAR el expediente que ya estaba (en lugar de crear otro).
+  // Regresa null (cancelar), {} (guardar como nuevo) o { credito: expediente_id } (actualizar esos).
+  const decidirRepetidos = async (creditos) => {
+    const nums = [...new Set((creditos || []).map((c) => String(c || '').replace(/\D/g, '')).filter((c) => c.length >= 6))];
+    if (nums.length === 0) return {};
+    let repetidos = {};
+    try {
+      repetidos = (await api.get('/expedientes/repetidos', { params: { creditos: nums.join(',') } })).data?.repetidos || {};
+    } catch {
+      return {}; // si no se puede revisar, no se detiene el trabajo
+    }
+    const claves = Object.keys(repetidos);
+    if (claves.length === 0) return {};
+    const yo = currentUser?.username;
+    const admin = currentUser?.es_admin || currentUser?.role === 'admin';
+    // El que se actualiza: el más reciente que esta persona puede editar (los suyos; el admin, cualquiera)
+    const editable = Object.fromEntries(claves.map((c) => [c, (repetidos[c] || []).find((r) => admin || r.usuario === yo)]).filter(([, r]) => r));
+    const ESTADO_TXT = { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' };
+    const fechaTxt = (iso) => {
+      const d = iso ? new Date(iso) : null;
+      return d && !Number.isNaN(d.getTime()) ? d.toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'antes';
+    };
+    const lineas = claves.slice(0, 8).map((c) => {
+      const r = repetidos[c][0];
+      const veces = repetidos[c].length > 1 ? ` (${repetidos[c].length} veces)` : '';
+      const ajeno = editable[c] ? '' : ' · de otro usuario';
+      return `• ${c}${r.acreditado ? ` · ${r.acreditado}` : ''}\n   ${fechaTxt(r.fecha)} por ${r.nombre_usuario}${veces} — ${ESTADO_TXT[r.estado] || r.estado}${ajeno}`;
+    });
+    const nEditables = Object.keys(editable).length;
+    const uno = claves.length === 1;
+    const encabezado = uno ? 'Este crédito ya se procesó antes' : `${claves.length} créditos ya se procesaron antes`;
+    if (nEditables === 0) {
+      const ok = await confirmar(`${encabezado}:\n\n${lineas.join('\n')}${claves.length > 8 ? '\n…' : ''}\n\nNo lo puedes actualizar porque es de otro usuario. ¿Quieres guardarlo como uno nuevo?`,
+        { titulo: 'Crédito repetido', textoConfirmar: 'Guardar como nuevo' });
+      return ok ? {} : null;
+    }
+    const respuesta = await confirmar(
+      `${encabezado}:\n\n${lineas.join('\n')}${claves.length > 8 ? '\n…' : ''}\n\n`
+      + `«Actualizar» reemplaza los datos del que ya estaba (queda en su historial de cambios y su Word se vuelve a generar). `
+      + `«Guardar como nuevo» crea otro expediente.`,
+      { titulo: 'Crédito repetido', textoConfirmar: uno || nEditables === 1 ? 'Actualizar el existente' : `Actualizar los existentes (${nEditables})`, textoAlterno: 'Guardar como nuevo' },
+    );
+    if (respuesta === 'alterno') return {};
+    if (!respuesta) return null;
+    return Object.fromEntries(Object.entries(editable).map(([c, r]) => [c, r.expediente_id]));
+  };
+  const soloDigitos = (c) => String(c || '').replace(/\D/g, '');
+
   const guardarSingle = async () => {
     if (!datos) return;
     const faltan = faltantesPara(datos, selectedPlantilla);
     if (faltan.length > 0 && !(await confirmar(mensajeFaltantes(faltan, 'guardar el expediente'), { titulo: 'Faltan datos', textoConfirmar: 'Guardar de todas formas' }))) return;
-    if (!(await confirmarRepetidos([datos.numero_credito]))) return;
+    const actualizar = await decidirRepetidos([datos.numero_credito]);
+    if (!actualizar) return;
     setGuardando((g) => ({ ...g, single: true }));
     try {
-      const [r] = await guardarEnBase([{ ref: 'single', datos, plantilla: selectedPlantilla, archivos: singleFiles.map((f) => f.name), metricas: metricasDe('individual', lecturaSingle, datos, avisosSingle) }]);
+      const [r] = await guardarEnBase([{ ref: 'single', datos, plantilla: selectedPlantilla, archivos: singleFiles.map((f) => f.name), metricas: metricasDe('individual', lecturaSingle, datos, avisosSingle), actualizar: actualizar[soloDigitos(datos.numero_credito)] || undefined }]);
       if (!r || r.error) throw new Error(r?.error || 'No se pudo guardar');
       setExpedienteId(r.expediente_id);
-      avisar.exito('Expediente guardado y procesado. Ya está en Mi Historial.');
+      avisar.exito(r.actualizado ? 'Se actualizó el expediente que ya existía (su Word se volvió a generar).' : 'Expediente guardado y procesado. Ya está en Mi Historial.');
     } catch (err) {
       avisar.error(`No se pudo guardar: ${err.response?.data?.detail || err.message}`);
     } finally {
@@ -1378,7 +1427,8 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
       `${conFaltantes.length} de ${items.length} expediente(s) tienen datos faltantes (marcados con ⚠).\n\n¿Quieres guardarlos de todas formas?`,
       { titulo: 'Expedientes incompletos', textoConfirmar: 'Guardar de todas formas' }
     ))) return {};
-    if (!(await confirmarRepetidos(items.map(({ r }) => r.datos_extraidos?.numero_credito)))) return {};
+    const actualizar = await decidirRepetidos(items.map(({ r }) => r.datos_extraidos?.numero_credito));
+    if (!actualizar) return {};
     const refs = Object.fromEntries(items.map(({ r }) => [r.ref, true]));
     setGuardando((g) => ({ ...g, ...refs }));
     const nuevosIds = {};
@@ -1386,17 +1436,20 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
       const resultados = await guardarEnBase(items.map(({ r }) => ({
         ref: r.ref, datos: r.datos_extraidos, plantilla: r.plantilla_seleccionada || selectedPlantilla, archivos: r.archivos,
         metricas: metricasDe('masivo', r.lectura, r.datos_extraidos, r.avisos),
+        actualizar: actualizar[soloDigitos(r.datos_extraidos?.numero_credito)] || undefined,
       })));
       const porRef = Object.fromEntries(resultados.map((x) => [x.ref, x]));
-      const guardados = resultados.filter((x) => !x.error).length;
+      const guardados = resultados.filter((x) => !x.error && !x.actualizado).length;
+      const actualizados = resultados.filter((x) => !x.error && x.actualizado).length;
       resultados.forEach((x) => { if (!x.error) nuevosIds[x.ref] = x.expediente_id; });
       setBatchResults((prev) => prev.map((r) => {
         const x = porRef[r.ref];
-        return x && !x.error ? { ...r, expediente_id: x.expediente_id } : r;
+        return x && !x.error ? { ...r, expediente_id: x.expediente_id, actualizado: !!x.actualizado } : r;
       }));
       const errores = resultados.filter((x) => x.error);
       if (errores.length) avisar.error(`${errores.length} expediente(s) no se pudieron guardar: ${errores[0].error}`);
       if (guardados) avisar.exito(`${guardados} expediente(s) guardados y procesados. Ya están en Mi Historial.`);
+      if (actualizados) avisar.exito(`${actualizados} expediente(s) que ya existían se actualizaron.`);
     } catch (err) {
       avisar.error(`No se pudo guardar: ${err.response?.data?.detail || err.message}`);
     } finally {
@@ -1779,6 +1832,23 @@ const conteoEstados = historialSinEstado.reduce((acc, item) => {
   return acc;
 }, {});
 
+// Edita un expediente ya guardado (desde Mi Historial). Regresa true si se guardó.
+const editarExpediente = async (id, datosNuevos, plantillaNueva) => {
+  try {
+    const res = await api.put(`/expedientes/${id}/editar`, { datos: datosNuevos, plantilla: plantillaNueva });
+    const actualizado = res.data?.expediente;
+    if (actualizado) {
+      setHistorial((prev) => prev.map((h) => (String(h.id || h.expediente_id) === String(id) ? { ...h, ...actualizado } : h)));
+    }
+    const n = Object.keys(res.data?.cambios || {}).length;
+    avisar.exito(n ? `Se guardaron ${n} cambio(s) y el Word se volvió a generar.` : 'No había cambios; el Word se volvió a generar.');
+    return true;
+  } catch (err) {
+    avisar.error(`No se pudo guardar: ${err.response?.data?.detail || err.message}`);
+    return false;
+  }
+};
+
 // Cambia el estado de uno o varios expedientes (Generado -> Revisado -> Entregado)
 const cambiarEstado = async (ids, estado) => {
   const lista = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
@@ -1972,6 +2042,7 @@ const cambiarEstado = async (ids, estado) => {
     setFiltroEstado,
     conteoEstados,
     cambiarEstado,
+    editarExpediente,
     confirmarRepetidos,
     setHistorial,
     carta2Single,

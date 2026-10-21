@@ -45,6 +45,20 @@ function describir(e) {
       cambios: d.cambios, tituloCambios: 'Datos que cambió',
       color: '#0e7490',
     };
+    case 'editar': return {
+      icono: PenLine,
+      titulo: 'Editó el expediente',
+      sub: d.plantilla ? nombrePlantilla(d.plantilla) : '',
+      cambios: d.cambios, tituloCambios: 'Datos que cambió',
+      color: '#7c3aed',
+    };
+    case 'actualizar': return {
+      icono: Save,
+      titulo: 'Volvió a subir los documentos y actualizó el expediente',
+      sub: [ORIGEN[d.origen] || '', d.plantilla ? nombrePlantilla(d.plantilla) : ''].filter(Boolean).join(' · '),
+      cambios: d.cambios, tituloCambios: 'Datos que cambiaron',
+      color: '#2563eb',
+    };
     case 'estado': return { icono: Shuffle, titulo: 'Cambió el estado', estado: [d.de, d.a], color: '#b45309' };
     default: return { icono: Clock, titulo: e.tipo, color: '#64748b' };
   }

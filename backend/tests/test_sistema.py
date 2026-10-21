@@ -236,6 +236,35 @@ doc_c.add_paragraph("“EL ACREDITADO”, con el consentimiento de su cónyuge, 
 services.completar_conyuge_en_documento(doc_c, "ANA RUIZ SOTO")
 chk("cónyuge: se agrega 'la señora' con su nombre", "cónyuge, la señora ANA RUIZ SOTO, sobre" in doc_c.paragraphs[0].text, doc_c.paragraphs[0].text)
 
+# ---- Editar un expediente guardado y actualizarlo al volver a subirlo
+with cliente() as c_ed:
+    tok_ed = c_ed.post("/api/auth/login", json={"username": f"ana_{SUF}", "password": "Prueba2026!"}).json().get("token")
+    h_ed = {"Authorization": f"Bearer {tok_ed}"}
+    cred_ed = "15" + str(uuid.uuid4().int)[:8]
+    base_ed = {**DATOS, "numero_credito": cred_ed, "nombre_acreditado": "LUIS PRUEBA EDITAR"}
+    r = c_ed.post("/api/expedientes/guardar", json={"expedientes": [{"ref": "e", "datos": base_ed, "plantilla": PLANTILLA}]}, headers=h_ed)
+    id_ed = r.json()["resultados"][0]["expediente_id"]
+    c_ed.put(f"/api/expedientes/{id_ed}/estado", json={"estado": "ENTREGADO"}, headers=h_ed)
+    r = c_ed.put(f"/api/expedientes/{id_ed}/editar", json={"datos": {**base_ed, "nombre_acreditado": "LUIS PRUEBA EDITADO"}, "plantilla": PLANTILLA}, headers=h_ed)
+    chk("editar: guarda el cambio", r.status_code == 200 and r.json()["expediente"]["acreditado"] == "LUIS PRUEBA EDITADO", r.text[:300])
+    chk("editar: registra qué cambió", "nombre_acreditado" in (r.json().get("cambios") or {}), r.text[:300])
+    chk("editar: si estaba Entregado regresa a Generado", r.json()["expediente"]["estado"] == "GENERADO", r.text[:300])
+    ev = c_ed.get(f"/api/expedientes/{id_ed}/bitacora", headers=h_ed).json()["eventos"]
+    chk("editar: queda en el historial de cambios", any(e["tipo"] == "editar" for e in ev), ev)
+    antes = len(c_ed.get("/api/expedientes", headers=h_ed).json())
+    r = c_ed.post("/api/expedientes/guardar", json={"expedientes": [{"ref": "u", "actualizar": id_ed, "plantilla": PLANTILLA,
+                                                                       "datos": {**base_ed, "nombre_acreditado": "LUIS PRUEBA ACTUALIZADO"}}]}, headers=h_ed)
+    res_u = r.json()["resultados"][0]
+    chk("volver a subir: actualiza el existente", res_u.get("actualizado") and res_u.get("expediente_id") == id_ed, r.text[:300])
+    chk("volver a subir: no crea otro expediente", len(c_ed.get("/api/expedientes", headers=h_ed).json()) == antes)
+    ev = c_ed.get(f"/api/expedientes/{id_ed}/bitacora", headers=h_ed).json()["eventos"]
+    chk("volver a subir: queda en el historial de cambios", any(e["tipo"] == "actualizar" for e in ev), ev)
+    fila = next(h for h in c_ed.get("/api/expedientes", headers=h_ed).json() if h["id"] == id_ed)
+    chk("historial: trae la plantilla con la que se guardó", fila["datos_extraidos"].get("plantilla_seleccionada") == PLANTILLA, fila["datos_extraidos"].get("plantilla_seleccionada"))
+    tok_b = c_ed.post("/api/auth/login", json={"username": f"beto_{SUF}", "password": "Prueba2026!"}).json().get("token")
+    r = c_ed.put(f"/api/expedientes/{id_ed}/editar", json={"datos": base_ed}, headers={"Authorization": f"Bearer {tok_b}"})
+    chk("editar: otro operador no puede editarlo", r.status_code == 404, r.status_code)
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

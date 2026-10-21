@@ -72,10 +72,15 @@ export default function Notificaciones() {
             </div>
             <h3 style={{ margin: '0 0 8px 0', color: theme.textPrimary, fontSize: '19px', fontWeight: '700' }}>{confirmacion.titulo}</h3>
             <p style={{ color: theme.textSecondary, fontSize: '14px', margin: '0 0 22px 0', whiteSpace: 'pre-line', lineHeight: 1.5 }}>{confirmacion.mensaje}</p>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button type="button" onClick={() => confirmacion.responder(false)} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: `1px solid ${theme.border}`, backgroundColor: theme.subtleBg, color: theme.textPrimary, fontWeight: '600', cursor: 'pointer' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: confirmacion.textoAlterno ? 'wrap' : 'nowrap' }}>
+              <button type="button" onClick={() => confirmacion.responder(false)} style={{ flex: confirmacion.textoAlterno ? '1 1 100%' : 1, order: confirmacion.textoAlterno ? 3 : 0, padding: '12px', borderRadius: '10px', border: `1px solid ${theme.border}`, backgroundColor: theme.subtleBg, color: theme.textPrimary, fontWeight: '600', cursor: 'pointer' }}>
                 {confirmacion.textoCancelar}
               </button>
+              {confirmacion.textoAlterno && (
+                <button type="button" onClick={() => confirmacion.responder('alterno')} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: `1px solid ${theme.accent}`, backgroundColor: theme.cardBg, color: theme.accent, fontWeight: '600', cursor: 'pointer' }}>
+                  {confirmacion.textoAlterno}
+                </button>
+              )}
               <button ref={botonConfirmarRef} type="button" onClick={() => confirmacion.responder(true)} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', backgroundColor: confirmacion.peligro ? '#dc2626' : theme.accent, color: '#fff', fontWeight: '600', cursor: 'pointer' }}>
                 {confirmacion.textoConfirmar}
               </button>

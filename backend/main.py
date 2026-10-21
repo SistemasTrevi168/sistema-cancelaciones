@@ -909,6 +909,46 @@ def obtener_campos_plantillas(usuario: dict = Depends(require_user)):
     return {"campos": resultado}
 
 
+def renglon_historial(exp) -> Dict[str, Any]:
+    """Un expediente como lo muestra Mi Historial."""
+    datos_raw = exp.datos_extraidos or {}
+    datos = limpiar_datos_para_plantilla(datos_raw, exp.numero_credito)
+    # La plantilla con la que se guardó (para descargar, editar y la vista previa con la misma)
+    plantilla_guardada = datos_raw.get("plantilla_seleccionada") or datos_raw.get("plantilla")
+    if plantilla_guardada:
+        datos["plantilla_seleccionada"] = plantilla_guardada
+    if datos_raw.get("_coacreditados"):
+        datos["_coacreditados"] = True
+    
+    fecha_solo = exp.fecha_creacion.strftime("%d-%m-%Y") if exp.fecha_creacion else "N/A"
+    hora_sola = exp.fecha_creacion.strftime("%H:%M") if exp.fecha_creacion else "N/A"
+    
+    acreditado = datos.get("nombre_acreditado") or "N/A"
+    monto = datos.get("monto_credito") or ""
+
+    return {
+        "id": str(exp.id),
+        "expediente_id": str(exp.id),
+        "_id": str(exp.id),
+        "usuario_propietario": exp.usuario_propietario,
+        "numero_credito": exp.numero_credito,
+        "acreditado": acreditado,
+        "monto": monto,
+        "hora": hora_sola,
+        "manera": exp.manera,
+        "estado": estado_de(exp),
+        # Versión de plantilla con la que se generó, y si la plantilla cambió desde entonces
+        "plantilla_version": datos_raw.get("_plantilla_version"),
+        "plantilla_cambio": plantilla_cambio(datos_raw),
+        "datos_extraidos": datos,
+        "ruta_pdf_constancia": exp.ruta_pdf_constancia,
+        "ruta_pdf_carta": exp.ruta_pdf_carta,
+        "ruta_word_generado": exp.ruta_word_generado,
+        "fecha": fecha_solo,
+        "fecha_creacion": exp.fecha_creacion.isoformat() if exp.fecha_creacion else None
+    }
+
+
 @app.get("/api/expedientes")
 def obtener_historial(
     usuario: Optional[str] = Query(None),
@@ -928,38 +968,7 @@ def obtener_historial(
 
     expedientes = query.order_by(models.Expediente.fecha_creacion.desc()).all()
         
-    resultado = []
-    for exp in expedientes:
-        datos_raw = exp.datos_extraidos or {}
-        datos = limpiar_datos_para_plantilla(datos_raw, exp.numero_credito)
-        
-        fecha_solo = exp.fecha_creacion.strftime("%d-%m-%Y") if exp.fecha_creacion else "N/A"
-        hora_sola = exp.fecha_creacion.strftime("%H:%M") if exp.fecha_creacion else "N/A"
-        
-        acreditado = datos.get("nombre_acreditado") or "N/A"
-        monto = datos.get("monto_credito") or ""
-
-        resultado.append({
-            "id": str(exp.id),
-            "expediente_id": str(exp.id),
-            "_id": str(exp.id),
-            "usuario_propietario": exp.usuario_propietario,
-            "numero_credito": exp.numero_credito,
-            "acreditado": acreditado,
-            "monto": monto,
-            "hora": hora_sola,
-            "manera": exp.manera,
-            "estado": estado_de(exp),
-            # Versión de plantilla con la que se generó, y si la plantilla cambió desde entonces
-            "plantilla_version": datos_raw.get("_plantilla_version"),
-            "plantilla_cambio": plantilla_cambio(datos_raw),
-            "datos_extraidos": datos,
-            "ruta_pdf_constancia": exp.ruta_pdf_constancia,
-            "ruta_pdf_carta": exp.ruta_pdf_carta,
-            "ruta_word_generado": exp.ruta_word_generado,
-            "fecha": fecha_solo,
-            "fecha_creacion": exp.fecha_creacion.isoformat() if exp.fecha_creacion else None
-        })
+    resultado = [renglon_historial(exp) for exp in expedientes]
     return resultado
 
 
@@ -1487,6 +1496,26 @@ def guardar_expedientes(
     for item in payload.get("expedientes") or []:
         ref = item.get("ref")
         try:
+            if item.get("actualizar"):
+                # Se volvió a subir un expediente que ya existía: se actualiza en lugar de crear otro
+                existente = obtener_expediente_autorizado(db, item["actualizar"], sesion)
+                plantilla = item.get("plantilla") or (item.get("datos") or {}).get("plantilla_seleccionada")
+                archivos = ";".join(item.get("archivos") or [])
+                if archivos:
+                    existente.ruta_pdf_constancia = archivos
+                metricas = kpis.metricas_de_guardado(item.get("metricas"))
+                metricas.pop("cambios", None)
+                aplicar_edicion(existente, dict(item.get("datos") or {}), plantilla, sesion["username"], db, tipo="actualizar",
+                                detalle_extra={k: v for k, v in metricas.items() if k in ("origen", "leido_en", "segundos_revision", "avisos")})
+                db.refresh(existente)
+                resultados.append({
+                    "ref": ref,
+                    "expediente_id": str(existente.id),
+                    "datos_extraidos": existente.datos_extraidos,
+                    "plantilla_seleccionada": existente.datos_extraidos.get("plantilla_seleccionada"),
+                    "actualizado": True,
+                })
+                continue
             datos = dict(item.get("datos") or {})
             plantilla = item.get("plantilla") or datos.get("plantilla_seleccionada") or "plantilla_manera2.docx"
             num_credito = str(datos.get("numero_credito") or "").strip()
@@ -1514,7 +1543,8 @@ def guardar_expedientes(
             db.rollback()
             print(f"ERROR AL GUARDAR {ref}: {e}")
             resultados.append({"ref": ref, "error": getattr(e, "detail", None) or str(e)})
-    return {"status": "exito", "guardados": len([r for r in resultados if "error" not in r]), "resultados": resultados}
+    return {"status": "exito", "guardados": len([r for r in resultados if "error" not in r and not r.get("actualizado")]),
+            "actualizados": len([r for r in resultados if r.get("actualizado")]), "resultados": resultados}
 
 
 @app.put("/api/expedientes/{expediente_id}/actualizar")
@@ -1596,6 +1626,52 @@ def regenerar_word_expediente(expediente, datos_payload: Optional[Dict[str, Any]
     db.refresh(expediente)
     return ruta_salida, num_credito
 
+
+
+def aplicar_edicion(expediente, datos: Dict[str, Any], plantilla: Optional[str], usuario: str, db: Session,
+                    tipo: str = "editar", detalle_extra: Optional[Dict[str, Any]] = None) -> Dict[str, List[str]]:
+    """
+    Cambia los datos (y la plantilla) de un expediente ya guardado y vuelve a generar su Word con la plantilla actual.
+    Queda en el historial de cambios lo que cambió. Si ya estaba Revisado o Entregado y algo cambió, regresa a Generado.
+    Regresa los cambios {campo: [antes, después]}.
+    """
+    anteriores = dict(expediente.datos_extraidos or {})
+    estado_antes = estado_de(expediente)
+    plantilla = plantilla or anteriores.get("plantilla_seleccionada") or anteriores.get("plantilla") or "plantilla_manera2.docx"
+    regenerar_word_expediente(expediente, {"datos": dict(datos or {}), "plantilla": plantilla, "plantilla_actual": True}, db)
+    cambios = diferencias(anteriores, expediente.datos_extraidos or {})
+    detalle = {"plantilla": plantilla, "version": (expediente.datos_extraidos or {}).get("_plantilla_version"), "cambios": cambios}
+    detalle.update(detalle_extra or {})
+    kpis.registrar(usuario, tipo, expediente.id, expediente.numero_credito, **detalle)
+    if cambios and estado_antes != "GENERADO":
+        expediente.estado = "GENERADO"
+        kpis.registrar(usuario, "estado", expediente.id, expediente.numero_credito, de=estado_antes, a="GENERADO", motivo="Se editó el expediente")
+        db.commit()
+    return cambios
+
+
+@app.put("/api/expedientes/{expediente_id}/editar")
+def editar_expediente(
+    expediente_id: str,
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user),
+):
+    """Edita un expediente ya guardado (desde Mi Historial). Solo su dueño o el administrador."""
+    expediente = obtener_expediente_autorizado(db, expediente_id, sesion)
+    datos = payload.get("datos")
+    if not isinstance(datos, dict):
+        raise HTTPException(status_code=400, detail="Faltan los datos del expediente.")
+    try:
+        cambios = aplicar_edicion(expediente, datos, payload.get("plantilla"), sesion["username"], db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"ERROR AL EDITAR {expediente_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"No se pudo editar el expediente: {e}")
+    db.refresh(expediente)
+    return {"status": "exito", "cambios": cambios, "expediente": renglon_historial(expediente)}
 
 
 @app.post("/api/expedientes/normalizar-campo")

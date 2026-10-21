@@ -220,6 +220,13 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // Sesión cerrada sola (inactividad u otro dispositivo) y aviso de los últimos segundos
   const [avisoSesion, setAvisoSesion] = useState(null);
   const [avisoInactividad, setAvisoInactividad] = useState(null);
+  // Funciones que ya tiene el servidor (si la pantalla se publica antes que el servidor, se ocultan las nuevas)
+  const [funcionesServidor, setFuncionesServidor] = useState([]);
+  const actualizarFunciones = (lista) => {
+    const nuevas = Array.isArray(lista) ? lista : [];
+    setFuncionesServidor((prev) => (prev.join('|') === nuevas.join('|') ? prev : nuevas));
+  };
+  const puedeServidor = (funcion) => funcionesServidor.includes(funcion);
   // Ventana de contraseña: null, { modo: 'propio' } o { modo: 'reset', usuario }
   const [modalPassword, setModalPassword] = useState(null);
   // Evitan doble clic mientras se descarga o guarda algo
@@ -565,6 +572,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       // /auth/sesion responde 200 aunque no haya sesión, así la consola no muestra errores
       const res = await api.get('/auth/sesion');
       if (res.data?.autenticado && res.data?.user) {
+        actualizarFunciones(res.data.funciones);
         setCurrentUser(res.data.user);
         aplicarPreferenciasDe(res.data.user);
         setIsAuthenticated(true);
@@ -595,6 +603,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
 
       if (res.data?.status === 'ok') {
         guardarToken(res.data.token);
+        actualizarFunciones(res.data.funciones);
         setCurrentUser(res.data.user);
         aplicarPreferenciasDe(res.data.user);
         setIsAuthenticated(true);
@@ -634,6 +643,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     activo: isAuthenticated,
     onExpirar: (motivo, segundos) => navegador.alExpirar?.(motivo, segundos),
     onAviso: setAvisoInactividad,
+    onFunciones: actualizarFunciones,
   });
 
   const handleConfirmLogout = async () => {
@@ -1173,6 +1183,10 @@ const handlePreviewExcel = async (file) => {
     }
     const claves = Object.keys(repetidos);
     if (claves.length === 0) return {};
+    if (!puedeServidor('actualizar_existente')) {
+      // El servidor todavía no sabe actualizar: solo se ofrece guardar como antes
+      return (await confirmarRepetidos(creditos)) ? {} : null;
+    }
     const yo = currentUser?.username;
     const admin = currentUser?.es_admin || currentUser?.role === 'admin';
     // El que se actualiza: el más reciente que esta persona puede editar (los suyos; el admin, cualquiera)
@@ -2045,6 +2059,7 @@ const cambiarEstado = async (ids, estado) => {
     conteoEstados,
     cambiarEstado,
     editarExpediente,
+    puedeServidor,
     confirmarRepetidos,
     setHistorial,
     carta2Single,

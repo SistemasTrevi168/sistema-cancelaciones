@@ -44,6 +44,7 @@ export default function TabHistorial() {
     conteoEstados,
     cambiarEstado,
     setUnlockedFields,
+    puedeServidor,
     theme
   } = useApp();
   const exportar = usePresencia(showExportMenu, 150);
@@ -330,7 +331,7 @@ export default function TabHistorial() {
                               >
                                 <Eye size={15} />
                               </button>
-                              <button
+                              {puedeServidor('editar_expediente') && <button
                                 type="button"
                                 onClick={() => abrirEdicion(item)}
                                 title="Editar expediente"
@@ -338,7 +339,7 @@ export default function TabHistorial() {
                                 className="accion-icono" style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, borderColor: theme.border }}
                               >
                                 <Pencil size={15} />
-                              </button>
+                              </button>}
                               <button
                                 type="button"
                                 onClick={() => setBitacora({ id: idDe(item), titulo: nombre, datos: dExtra })}

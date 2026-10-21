@@ -23,6 +23,9 @@ DURACION_SESION = timedelta(hours=24)
 # El servidor la invalida si pasan INACTIVIDAD + GRACIA segundos sin saber nada del navegador
 # (por ejemplo, si cerraron la pestaña o el celular se bloqueó).
 INACTIVIDAD_SEGUNDOS = int(os.getenv("INACTIVIDAD_SEGUNDOS", "900"))  # 15 minutos
+# Funciones que tiene esta versión del servidor: la pantalla solo muestra las que el servidor ya sabe hacer
+# (así, si la pantalla se publica antes que el servidor, no aparecen botones que todavía no funcionarían)
+FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario"]
 GRACIA_SEGUNDOS = int(os.getenv("GRACIA_SEGUNDOS", "45"))
 
 # Por qué se cerró una sesión (para avisarle al otro dispositivo). Se guarda en memoria unas horas.
@@ -298,6 +301,7 @@ def login(data: LoginRequest, response: Response, request: Request, db: Session 
 
     return {
         "status": "ok",
+        "funciones": FUNCIONES,
         # El frontend lo guarda y lo manda en "Authorization" (para iPhone/Safari)
         "token": session_id,
         "user": {
@@ -326,7 +330,7 @@ def estado_sesion(request: Request, db: Session = Depends(get_db)):
     Lo usa el frontend al abrir la página para no llenar la consola de errores 401.
     """
     try:
-        return {"autenticado": True, "user": con_foto(obtener_sesion(request, db), db)}
+        return {"autenticado": True, "user": con_foto(obtener_sesion(request, db), db), "funciones": FUNCIONES}
     except HTTPException:
         return {"autenticado": False, "user": None}
 
@@ -359,7 +363,7 @@ def ping(request: Request, activo: int = 0, db: Session = Depends(get_db)):
         return {"activa": False, "motivo": motivo}
     if activo:
         _marcar_uso(sesion, db)
-    return {"activa": True, "inactividad_segundos": INACTIVIDAD_SEGUNDOS}
+    return {"activa": True, "inactividad_segundos": INACTIVIDAD_SEGUNDOS, "funciones": FUNCIONES}
 
 
 @router.post("/logout")

@@ -14,12 +14,12 @@ const AVISAR_ANTES = 60; // segundos antes de cerrar se muestra el aviso
 const leer = () => { try { return Number(localStorage.getItem(CLAVE)) || 0; } catch { return 0; } };
 const guardar = (t) => { try { localStorage.setItem(CLAVE, String(t)); } catch { /* sin almacenamiento */ } };
 
-export default function useVigilanciaSesion({ activo, onExpirar, onAviso }) {
+export default function useVigilanciaSesion({ activo, onExpirar, onAviso, onFunciones }) {
   const ultima = useRef(0);
   const desdePing = useRef(false);
   const limite = useRef(900);
   const callbacks = useRef({ onExpirar, onAviso });
-  useEffect(() => { callbacks.current = { onExpirar, onAviso }; });
+  useEffect(() => { callbacks.current = { onExpirar, onAviso, onFunciones }; });
 
   useEffect(() => {
     if (!activo) return undefined;
@@ -58,6 +58,7 @@ export default function useVigilanciaSesion({ activo, onExpirar, onAviso }) {
       try {
         const res = await api.get('/auth/ping', { params: { activo: activoAhora ? 1 : 0 }, sinActividad: true });
         if (res.data?.inactividad_segundos) limite.current = res.data.inactividad_segundos;
+        if (res.data?.activa) callbacks.current.onFunciones?.(res.data.funciones || []);
         if (res.data && res.data.activa === false) expirar(res.data.motivo || 'cerrada');
       } catch {
         // sin conexión: se vuelve a intentar en el siguiente ciclo

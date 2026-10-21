@@ -12,6 +12,7 @@ import { avisar, confirmar } from './ui/notificaciones';
 import { instalarEfectoOnda } from './ui/efectoOnda';
 import { CAMPOS_DEL_ACTO, esPlantillaCoac, etiquetaDe } from './camposExpediente';
 import { sugerenciaActual } from './sugerenciaPlantilla';
+import { generoDeNombre } from './ui/generoNombre';
 import { nombrePlantilla } from './plantillasCatalogo';
 import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla } from './datosFaltantes';
 import Sidebar from './components/Sidebar';
@@ -600,7 +601,8 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         navegador.auth = true;
         crearGuardiaHistorial();
         // Presentación de bienvenida (se va sola)
-        setBienvenida({ nombre: (res.data.user?.nombre_mostrar || res.data.user?.username || '').trim(), genero: res.data.user?.genero || '', saliendo: false });
+        const nombreSaludo = (res.data.user?.nombre_mostrar || res.data.user?.username || '').trim();
+        setBienvenida({ nombre: nombreSaludo, genero: res.data.user?.genero || generoDeNombre(nombreSaludo), saliendo: false });
         setTimeout(() => {
           setBienvenida((b) => (b ? { ...b, saliendo: true } : b));
           setAnimarEntrada(true); // el sistema entra mientras se desvanece la bienvenida

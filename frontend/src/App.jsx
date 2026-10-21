@@ -2280,9 +2280,9 @@ const cambiarEstado = async (ids, estado) => {
         <ModalPassword
           titulo={modalPassword.modo === 'reset' ? `Nueva contraseña para ${modalPassword.usuario.username}` : 'Cambiar mi contraseña'}
           descripcion={modalPassword.modo === 'reset'
-            ? 'Para confirmar, escribe tu contraseña de administrador. El usuario deberá entrar con la nueva contraseña y sus sesiones abiertas se cerrarán.'
+            ? 'Escribe la contraseña actual de este usuario y la nueva. Deberá entrar con la nueva contraseña y sus sesiones abiertas se cerrarán.'
             : 'Por seguridad, se cerrará tu sesión en otras computadoras.'}
-          etiquetaActual={modalPassword.modo === 'reset' ? 'Tu contraseña actual (de administrador)' : 'Contraseña actual'}
+          etiquetaActual={modalPassword.modo === 'reset' ? `Contraseña actual de ${modalPassword.usuario.username}` : 'Contraseña actual'}
           onCancelar={() => setModalPassword(null)}
           onGuardar={handleGuardarPassword}
         />

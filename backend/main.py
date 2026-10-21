@@ -1993,7 +1993,7 @@ def eliminar_usuario(
 
 class ResetPasswordRequest(BaseModel):
     password_nueva: str
-    password_actual: Optional[str] = None  # la contraseña del administrador que hace el cambio
+    password_actual: Optional[str] = None  # la contraseña actual del usuario al que se le cambia
 
 
 class CambiarActivoRequest(BaseModel):
@@ -2019,11 +2019,12 @@ def restablecer_password(
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin)
 ):
-    """El admin asigna una contraseña nueva a cualquier usuario (confirmando con su propia contraseña)."""
-    admin_db = db.query(models.Usuario).filter(models.Usuario.username == admin["username"]).first()
-    if not data.password_actual or not admin_db or not auth.comprobar_password(admin_db, data.password_actual, db):
-        raise HTTPException(status_code=400, detail="Tu contraseña actual (de administrador) no es correcta.")
+    """El admin cambia la contraseña de un usuario (debe escribir la contraseña actual de ese usuario)."""
     usuario = _buscar_usuario(db, usuario_id)
+    if not data.password_actual or not auth.comprobar_password(usuario, data.password_actual, db):
+        raise HTTPException(status_code=400, detail=f"La contraseña actual de {usuario.username} no es correcta.")
+    if data.password_nueva == data.password_actual:
+        raise HTTPException(status_code=400, detail="La contraseña nueva debe ser diferente a la actual.")
     auth.validar_password_nueva(data.password_nueva)
     usuario.password_hash = auth.hash_password(data.password_nueva)
     # Se cierran las sesiones abiertas de ese usuario (menos la del admin que hace el cambio)

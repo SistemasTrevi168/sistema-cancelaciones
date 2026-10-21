@@ -265,16 +265,16 @@ with cliente() as c_ed:
     r = c_ed.put(f"/api/expedientes/{id_ed}/editar", json={"datos": base_ed}, headers={"Authorization": f"Bearer {tok_b}"})
     chk("editar: otro operador no puede editarlo", r.status_code == 404, r.status_code)
 
-# ---- Contraseñas: el admin confirma con su propia contraseña al asignar una nueva
+# ---- Contraseñas: el admin cambia la de un usuario escribiendo la contraseña actual de ese usuario
 with cliente() as c_pw:
     h_adm = {"Authorization": "Bearer " + c_pw.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
     beto_id = next(u["id"] for u in c_pw.get("/api/admin/usuarios", headers=h_adm).json() if u["username"] == f"beto_{SUF}")
     r = c_pw.post(f"/api/admin/usuarios/{beto_id}/password", json={"password_nueva": "Nueva2026!"}, headers=h_adm)
-    chk("admin: sin su contraseña no puede cambiar la de otro", r.status_code == 400, r.status_code)
-    r = c_pw.post(f"/api/admin/usuarios/{beto_id}/password", json={"password_actual": "incorrecta", "password_nueva": "Nueva2026!"}, headers=h_adm)
-    chk("admin: con contraseña equivocada no puede", r.status_code == 400, r.status_code)
+    chk("admin: sin la contraseña actual del usuario no la cambia", r.status_code == 400, r.status_code)
     r = c_pw.post(f"/api/admin/usuarios/{beto_id}/password", json={"password_actual": os.getenv("ADMIN_PASSWORD", "admin123"), "password_nueva": "Nueva2026!"}, headers=h_adm)
-    chk("admin: con su contraseña sí la cambia", r.status_code == 200, r.text[:200])
+    chk("admin: con su propia contraseña (no la del usuario) no la cambia", r.status_code == 400, r.status_code)
+    r = c_pw.post(f"/api/admin/usuarios/{beto_id}/password", json={"password_actual": "Prueba2026!", "password_nueva": "Nueva2026!"}, headers=h_adm)
+    chk("admin: con la contraseña actual del usuario sí la cambia", r.status_code == 200, r.text[:200])
     chk("el usuario entra con la nueva", c_pw.post("/api/auth/login", json={"username": f"beto_{SUF}", "password": "Nueva2026!"}).status_code == 200)
     import auth as _auth  # noqa: E402
 

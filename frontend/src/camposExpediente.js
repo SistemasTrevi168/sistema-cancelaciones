@@ -95,4 +95,4 @@ export function agruparDatos(datos, coac = false) {
 }
 
 // Datos que se toman del acto (hipoteca) elegido en la constancia del IFREM
-export const CAMPOS_DEL_ACTO = ['nombre_acreditado', 'nombre_conyuge', 'numero_escritura', 'fecha_escritura', 'notario_origen_completo', 'monto_credito'];
+export const CAMPOS_DEL_ACTO = ['nombre_acreditado', 'nombre_conyuge', 'numero_escritura', 'fecha_escritura', 'notario_origen_completo', 'monto_credito', 'credito_a_salario'];

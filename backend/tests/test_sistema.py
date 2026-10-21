@@ -169,6 +169,73 @@ with cliente() as admin, cliente() as ana, cliente() as beto:
     r = ana.get("/api/auth/ping", params={"activo": 1}).json()
     chk("ping de sesión", r.get("activa") is True)
 
+# ---- Nombres: orden (nombre primero) y género por el nombre de pila, no por el apellido
+import nombres  # noqa: E402
+for crudo, carta, esperado, genero in [
+    ("PADILLA GUTIERREZ FERNANDO", "", "FERNANDO PADILLA GUTIERREZ", "MASCULINO"),
+    ("PADILLA GUTIERREZ FERNANDO", "Fernando Padilla Gutiérrez", "FERNANDO PADILLA GUTIERREZ", "MASCULINO"),
+    ("MORALES RUIZ ANDREA", "", "ANDREA MORALES RUIZ", "FEMENINO"),
+    ("HERNANDEZ LOPEZ JOSE GUADALUPE", "", "JOSE GUADALUPE HERNANDEZ LOPEZ", "MASCULINO"),
+    ("GARCIA CRUZ MARIA DE LOS ANGELES", "", "MARIA DE LOS ANGELES GARCIA CRUZ", "FEMENINO"),
+    ("CARLOS ALBERTO SOTO VEGA", "", "CARLOS ALBERTO SOTO VEGA", "MASCULINO"),
+    ("MENDOZA PEREZ XOCHITL", "", "XOCHITL MENDOZA PEREZ", "FEMENINO"),
+    ("BAUTISTA LUNA ELISA", "", "ELISA BAUTISTA LUNA", "FEMENINO"),
+]:
+    chk(f"nombre en orden: {crudo}", nombres.ordenar_nombre(crudo, carta) == esperado, nombres.ordenar_nombre(crudo, carta))
+    chk(f"género de {crudo}", nombres.genero(crudo) == genero, nombres.genero(crudo))
+d = {"nombre_acreditado": "PADILLA GUTIERREZ FERNANDO", "_nombre_carta": "", "_propietarios": [], "datos_inmueble": "ESTADO DE MÉXICO"}
+main.aplicar_acto_elegido(d, [])
+sug = main.plantilla_sugerida.sugerir_plantilla(d, [], [])
+chk("acreditado de la constancia queda con el nombre primero", d["nombre_acreditado"] == "FERNANDO PADILLA GUTIERREZ", d["nombre_acreditado"])
+chk("plantilla sugerida de hombre", sug["genero"] == "MASCULINO" and "_H_" in sug["plantilla"], sug["plantilla"])
+
+# ---- Actos de la constancia: escritura "INSTRUMENTO NUMERO", notario con el nombre antes del número, monto en VSMM
+import actos_ifrem  # noqa: E402
+import services  # noqa: E402
+ACTO = ("INSTRUMENTO NUMERO 3404, DE FECHA 31 DE JULIO DE 2001. PASADA ANTE LA FE DEL NOTARIO PUBLICO LIC. VICTOR A VARELA PEREZ "
+        "NUMERO 20, DEL DISTRITO DE TOLUCA. EN LA QUE CONSTA EL OTORGAMIENTO DE CREDITO CON CONSTITUCION DE GARANTIA HIPOTECA. "
+        "ACREEDOR: INFONAVIT, DEUDOR: NELLY JIMENEZ MARTINEZ. IMPORTE DE LA OBLIGACION GARANTIZADA: 162.9260 VSMM. GARANTIA: INMUEBLE")
+da = actos_ifrem.datos_de_acto({"texto": ACTO, "clave": "A.C.S."}, services)
+chk("acto: número de escritura (INSTRUMENTO NUMERO)", da.get("numero_escritura_digitos") == "3404", da)
+chk("acto: fecha de escritura", da.get("fecha_escritura") == "treinta y uno de julio de dos mil uno", da)
+chk("acto: notario con el nombre antes del número", "Victor A. Varela Perez" in str(da.get("notario_origen_completo")) and "veinte" in str(da.get("notario_origen_completo")), da)
+chk("acto: monto en veces salario", da.get("credito_a_salario_digitos") == "162.9260", da)
+chk("acto: tipo de crédito por la clave A.C.S.", da.get("tipo_credito") == "AP", da)
+db = actos_ifrem.datos_de_acto({"texto": "ESCRITURA NUMERO 12,345 DE FECHA 5 DE MARZO DE 2010 OTORGADA ANTE EL NOTARIO PUBLICO NUMERO 96 DEL ESTADO DE MEXICO, LIC. ANA LUISA MARTINEZ SOTO, EN LA QUE CONSTA EL CONTRATO DE MUTUO POR LA CANTIDAD DE $350,000.00"}, services)
+chk("acto: notario después del número", "Ana Luisa Martinez Soto" in str(db.get("notario_origen_completo")), db)
+chk("acto: monto 'por la cantidad de'", db.get("monto_credito") == "$350,000.00", db)
+
+# ---- Actos: renglón pegado, actos sin volante y plan B por el cierre "VOLANTE ... ANALISTA:"
+PEGADO = ["GRAVAMENES, HIPOTECAS, DERECHOS\nREALES Y LIMITACIONES DE DOMINIO\n--- 1000000002505 --- 13/12/2001 A.C.S. INSTRUMENTO NUMERO 3404, "
+          "DE FECHA 31 DE JULIO DE 2001. PASADA ANTE LA FE DEL NOTARIO PUBLICO\nLIC. VICTOR A VARELA PEREZ NUMERO 20. VOLANTE: 1000000002505 "
+          "CALIFICADOR: ORLANDO BENITEZ RUIZ - ANALISTA:NINGUNO\nVIGENTE"]
+ap = actos_ifrem.dividir_actos(PEGADO)
+chk("actos: renglón pegado", len(ap) == 1 and ap[0]["volante"] == "1000000002505" and ap[0]["clave"] == "A.C.S.", ap)
+SIN_VOLANTE = ["INSCRIPCIONES DE PROPIEDAD\n---\n---\n05/03/1999\nC.V.\nCOMPRAVENTA QUE OTORGA JUAN PEREZ A FAVOR DE NELLY JIMENEZ. "
+               "VOLANTE: 1000000001111 CALIFICADOR: X Y - ANALISTA:NINGUNO\n---\n---\n13/12/2001\nA.C.S.\nINSTRUMENTO NUMERO 3404 OTORGAMIENTO "
+               "DE CREDITO CON GARANTIA HIPOTECA. VOLANTE: 1000000002505 CALIFICADOR: Z W - ANALISTA:NINGUNO"]
+chk("actos: sin volante en la tabla", len(actos_ifrem.dividir_actos(SIN_VOLANTE)) == 2, actos_ifrem.dividir_actos(SIN_VOLANTE))
+DESORDEN = ["GRAVAMENES, HIPOTECAS, DERECHOS REALES Y LIMITACIONES DE DOMINIO INSTRUMENTO NUMERO 3404 OTORGAMIENTO DE CREDITO CON GARANTIA "
+            "HIPOTECA. VOLANTE: 1000000002505 CALIFICADOR: ORLANDO - ANALISTA:NINGUNO CANCELACION DE HIPOTECA ESCRITURA 5555. VOLANTE: "
+            "1000000009999 CALIFICADOR: ANA - ANALISTA:INSCRIPCIONES"]
+chk("actos: texto en otro orden (plan B)", len(actos_ifrem.dividir_actos(DESORDEN)) == 2, actos_ifrem.dividir_actos(DESORDEN))
+chk("sesión: 15 minutos de inactividad por defecto", main.auth.INACTIVIDAD_SEGUNDOS == int(os.getenv("INACTIVIDAD_SEGUNDOS", "900")))
+
+# ---- Cónyuge: también donde la plantilla dice "con el consentimiento de su cónyuge" sin el nombre
+d_cony = main.limpiar_datos_para_plantilla({"nombre_acreditado": "FABIOLA ZETA HERNANDEZ", "numero_credito": CREDITO, "tiene_conyuge": "Sí",
+                                            "nombre_conyuge": "ARTURO ESCALONA MACEDO"}, CREDITO)
+ruta_cony = os.path.join(main.GENERADOS_DIR, f"prueba_conyuge_{SUF}.docx")
+if os.path.exists(main.resolver_ruta_plantilla("EDOMEX_AP_M_CASADA")) and "CASADA" in main.resolver_ruta_plantilla("EDOMEX_AP_M_CASADA"):
+    services.generar_word_cancelacion(main.resolver_ruta_plantilla("EDOMEX_AP_M_CASADA"), d_cony, ruta_cony)
+    t_cony = texto_word(open(ruta_cony, "rb").read())
+    chk("cónyuge en todas las menciones", t_cony.count("ARTURO ESCALONA MACEDO") >= 2 and "cónyuge sobre" not in t_cony, t_cony[:200])
+    os.remove(ruta_cony)
+import docx as _docx  # noqa: E402
+doc_c = _docx.Document()
+doc_c.add_paragraph("“EL ACREDITADO”, con el consentimiento de su cónyuge, sobre el inmueble relacionado.")
+services.completar_conyuge_en_documento(doc_c, "ANA RUIZ SOTO")
+chk("cónyuge: se agrega 'la señora' con su nombre", "cónyuge, la señora ANA RUIZ SOTO, sobre" in doc_c.paragraphs[0].text, doc_c.paragraphs[0].text)
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

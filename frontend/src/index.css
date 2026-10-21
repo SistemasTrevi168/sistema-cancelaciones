@@ -2821,3 +2821,72 @@ input, textarea { caret-color: var(--acento, #2563eb); }
 .hoja-mas .hoja-mas-opcion:nth-of-type(2) { animation-delay: 40ms; }
 .hoja-mas .hoja-mas-opcion:nth-of-type(3) { animation-delay: 80ms; }
 .menu-campo { animation: desplegarLista .18s cubic-bezier(.2, .9, .3, 1.05) both; transform-origin: top center; }
+
+/* ---- Carga masiva: expediente guardado y paginación ---- */
+.estado-fila {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 99px;
+  font-size: 11px;
+  vertical-align: 1px;
+}
+.estado-guardado { background: #dcfce7; color: #15803d; }
+.estado-borrador { background: #f1f5f9; color: #64748b; }
+.tema-oscuro .estado-guardado { background: #14532d; color: #86efac; }
+.tema-oscuro .estado-borrador { background: #1e293b; color: #94a3b8; }
+.fila-lote.fila-guardada { box-shadow: inset 4px 0 0 #10b981; }
+.fila-lote.fila-guardada.marcada { box-shadow: inset 4px 0 0 #10b981; }
+.paginacion-lote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 4px 2px;
+  margin-top: 8px;
+  border-top: 1px solid;
+  font-size: 13px;
+}
+.paginacion-botones { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.paginacion-botones button {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+.paginacion-botones button:disabled { opacity: 0.4; cursor: not-allowed; }
+.paginacion-puntos { padding: 0 2px; }
+.paginacion-tamano { display: inline-flex; align-items: center; gap: 6px; }
+.paginacion-tamano select { border: 1px solid; border-radius: 8px; padding: 4px 6px; font: inherit; }
+
+/* ---- Historial: botones de cada expediente alineados ---- */
+.acciones-historial { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; vertical-align: middle; }
+.acciones-historial .accion-icono,
+.acciones-historial .accion-descargar {
+  height: 34px;
+  border: 1px solid;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.acciones-historial .accion-icono { width: 34px; padding: 0; }
+.acciones-historial .accion-descargar { padding: 0 12px; gap: 6px; font-weight: 600; font-size: 12px; }
+.acciones-historial button:hover:not(:disabled) { border-color: var(--acento, #2563eb) !important; }
+.acciones-historial button:disabled { opacity: .6; cursor: wait; }
+@media (max-width: 760px) {
+  .tabla-tarjetas .celda-acciones .acciones-historial { justify-content: flex-start; flex-wrap: wrap; }
+}

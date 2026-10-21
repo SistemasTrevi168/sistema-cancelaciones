@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   AlertTriangle, ArrowLeft, CheckCircle, ChevronLeft, ChevronRight, Eye, FolderPlus, Layers, ListChecks, Loader2, PencilLine, Save, Sparkles, Trash2, Upload, X,
 } from 'lucide-react';
@@ -65,6 +65,19 @@ export default function TabMasivo() {
 
   const [abierto, setAbierto] = useState(null); // expediente en revisión (índice)
   const [cargaAbierta, setCargaAbierta] = useState(false);
+  // Paginación de los resultados (10 o 15 expedientes por página)
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
+  const inicioResultados = useRef(null);
+  const totalPaginas = Math.max(1, Math.ceil(batchResults.length / porPagina));
+  const paginaVista = Math.min(pagina, totalPaginas);
+  const irAPagina = (n) => {
+    setPagina(Math.min(Math.max(1, n), totalPaginas));
+    inicioResultados.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  // Al volver de revisar un expediente, la tabla queda en la página donde está ese expediente
+  const volverALista = () => { if (abierto !== null) setPagina(Math.floor(abierto / porPagina) + 1); setAbierto(null); };
+  const filasPagina = batchResults.map((res, idx) => ({ res, idx })).slice((paginaVista - 1) * porPagina, paginaVista * porPagina);
 
   const validos = batchResults.map((r, i) => (r.error ? null : i)).filter((i) => i !== null);
   const enRevision = abierto !== null && batchResults[abierto] && !batchResults[abierto].error ? abierto : null;
@@ -87,7 +100,7 @@ export default function TabMasivo() {
     const ir = (p) => setAbierto(validos[p]);
     const navegacion = (
       <div className="nav-lote" style={{ borderColor: theme.border }}>
-        <button type="button" className="boton-barra" onClick={() => setAbierto(null)} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }} title="Volver a la lista del lote">
+        <button type="button" className="boton-barra" onClick={volverALista} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }} title="Volver a la lista del lote">
           <ArrowLeft size={15} /> Lista
         </button>
         <button type="button" className="boton-icono" disabled={pos <= 0} onClick={() => ir(pos - 1)} title="Anterior" style={{ borderColor: theme.border, color: theme.textPrimary, backgroundColor: theme.cardBg }}><ChevronLeft size={16} /></button>
@@ -213,7 +226,7 @@ export default function TabMasivo() {
 
       {/* ---- RESULTADOS ---- */}
       {batchResults.length > 0 && (
-        <section className="resultados-lote" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
+        <section ref={inicioResultados} className="resultados-lote" style={{ borderColor: theme.border, backgroundColor: theme.cardBg, scrollMarginTop: '12px' }}>
           <header className="resultados-encabezado" style={{ borderColor: theme.border }}>
             <div className="resultados-titulo">
               <input
@@ -259,7 +272,7 @@ export default function TabMasivo() {
           </header>
 
           <div className="filas-lote">
-            {batchResults.map((res, idx) => {
+            {filasPagina.map(({ res, idx }) => {
               if (res.error) {
                 return (
                   <div key={res.ref || idx} className="fila-lote fila-error" style={{ borderColor: '#fecaca', backgroundColor: isDarkMode ? '#450a0a' : '#fef2f2', color: isDarkMode ? '#fca5a5' : '#991b1b' }}>
@@ -279,8 +292,8 @@ export default function TabMasivo() {
               return (
                 <div
                   key={res.ref || idx}
-                  className={`fila-lote entrada-escalonada ${marcado ? 'marcada' : ''}`}
-                  style={{ animationDelay: `${Math.min(idx, 12) * 30}ms`, borderColor: batchPreviewIndex === idx ? theme.accent : theme.border, backgroundColor: theme.cardBg }}
+                  className={`fila-lote entrada-escalonada ${marcado ? 'marcada' : ''} ${guardado ? 'fila-guardada' : ''}`}
+                  style={{ animationDelay: `${Math.min(idx % porPagina, 12) * 30}ms`, borderColor: batchPreviewIndex === idx ? theme.accent : (guardado ? '#10b981' : theme.border), backgroundColor: guardado ? (isDarkMode ? '#052e16' : '#f0fdf4') : theme.cardBg }}
                 >
                   <input type="checkbox" checked={marcado} onChange={() => handleToggleSelectBatch(idx)} style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: theme.accent }} aria-label="Marcar expediente" />
 
@@ -289,7 +302,9 @@ export default function TabMasivo() {
                     <span>
                       <strong style={{ color: theme.textPrimary }}>{d.nombre_acreditado && d.nombre_acreditado !== 'NO_ENCONTRADO' ? d.nombre_acreditado : 'Acreditado no identificado'}</strong>
                       <small style={{ color: theme.textSecondary }}>
-                        {guardado ? '✓ Guardado' : 'Borrador'}
+                        {guardado
+                          ? <span className="estado-fila estado-guardado"><CheckCircle size={11} /> Guardado y procesado</span>
+                          : <span className="estado-fila estado-borrador"><PencilLine size={11} /> Borrador</span>}
                         {' · '}{d.numero_credito ? `Crédito ${d.numero_credito}` : 'Sin número de crédito'}
                         {res.actos?.length > 1 ? ` · ${res.actos.length} actos` : ''}
                         {faltan.length > 0 ? ` · faltan: ${faltan.map(etiquetaCampo).join(', ')}` : ''}
@@ -376,6 +391,36 @@ export default function TabMasivo() {
               );
             })}
           </div>
+
+          {batchResults.length > 10 && (
+            <nav className="paginacion-lote" aria-label="Páginas de resultados" style={{ borderColor: theme.border, color: theme.textSecondary }}>
+              <span>
+                {(paginaVista - 1) * porPagina + 1}–{Math.min(paginaVista * porPagina, batchResults.length)} de {batchResults.length} expedientes
+              </span>
+              <div className="paginacion-botones">
+                <button type="button" onClick={() => irAPagina(paginaVista - 1)} disabled={paginaVista === 1} aria-label="Página anterior" style={{ borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.textPrimary }}><ChevronLeft size={15} /></button>
+                {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+                  .filter((n) => n === 1 || n === totalPaginas || Math.abs(n - paginaVista) <= 1)
+                  .map((n, i, lista) => (
+                    <span key={n} style={{ display: 'contents' }}>
+                      {i > 0 && n - lista[i - 1] > 1 && <span className="paginacion-puntos">…</span>}
+                      <button type="button" onClick={() => irAPagina(n)} aria-current={n === paginaVista ? 'page' : undefined}
+                        style={{ borderColor: n === paginaVista ? theme.accent : theme.border, backgroundColor: n === paginaVista ? theme.accent : theme.cardBg, color: n === paginaVista ? '#fff' : theme.textPrimary }}>
+                        {n}
+                      </button>
+                    </span>
+                  ))}
+                <button type="button" onClick={() => irAPagina(paginaVista + 1)} disabled={paginaVista === totalPaginas} aria-label="Página siguiente" style={{ borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.textPrimary }}><ChevronRight size={15} /></button>
+              </div>
+              <label className="paginacion-tamano">
+                Por página
+                <select value={porPagina} onChange={(e) => { setPorPagina(Number(e.target.value)); setPagina(1); }} style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}>
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                </select>
+              </label>
+            </nav>
+          )}
         </section>
       )}
     </div>

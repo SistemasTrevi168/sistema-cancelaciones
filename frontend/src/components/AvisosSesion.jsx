@@ -4,7 +4,7 @@ const MENSAJES = {
   inactividad: {
     icono: Clock,
     titulo: 'Tu sesión expiró',
-    texto: (t) => `Pasaron ${t} sin actividad en el sistema y la sesión se cerró para proteger la información. Vuelve a iniciar sesión para continuar.`,
+    texto: (t) => `Pasaron ${t} sin actividad en el sistema y la sesión se cerró para proteger la información. Por seguridad se quitaron los archivos que tenías cargados y lo que no estaba guardado. Vuelve a iniciar sesión para continuar.`,
   },
   otro_dispositivo: {
     icono: MonitorSmartphone,
@@ -24,7 +24,7 @@ const MENSAJES = {
 };
 
 // Ventana que aparece sobre el login cuando la sesión se cerró sola
-export function AvisoSesionCerrada({ motivo, segundos = 120, onAceptar, theme, isDarkMode }) {
+export function AvisoSesionCerrada({ motivo, segundos = 900, onAceptar, theme, isDarkMode }) {
   const m = MENSAJES[motivo] || MENSAJES.cerrada;
   const minutos = Math.round(segundos / 60);
   const tiempo = segundos < 60 ? `${segundos} segundos` : `${minutos} minuto${minutos === 1 ? '' : 's'}`;
@@ -62,10 +62,10 @@ export function AvisoVersionNueva({ onActualizar, onDespues, theme }) {
 export function AvisoInactividad({ segundos, onSeguir, theme }) {
   return (
     <div className="aviso-inactividad" role="alert" style={{ backgroundColor: theme.cardBg, borderColor: '#f59e0b', color: theme.textPrimary }}>
-      <span className="aviso-inactividad-contador" style={{ '--avance': `${(segundos / 15) * 100}%` }}>{segundos}</span>
+      <span className="aviso-inactividad-contador" style={{ '--avance': `${Math.min(100, (segundos / 60) * 100)}%` }}>{segundos}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <strong>¿Sigues ahí?</strong>
-        <small style={{ color: theme.textSecondary }}>Por inactividad, tu sesión se cerrará en {segundos} s.</small>
+        <small style={{ color: theme.textSecondary }}>Por inactividad, tu sesión se cerrará en {segundos} s. Se perderán los archivos cargados y lo que no hayas guardado.</small>
       </div>
       <button type="button" onClick={onSeguir} style={{ backgroundColor: theme.accent }}>Seguir trabajando</button>
     </div>

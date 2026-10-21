@@ -1,6 +1,7 @@
 import os
 import fitz  # PyMuPDF
 import re
+import nombres
 from docxtpl import DocxTemplate
 
 # Constante para calcular Veces Salario Mínimo Mensual en DF/CDMX
@@ -571,17 +572,9 @@ NOMBRES_MASCULINOS = {"BAUTISTA", "LUCA", "JOSHUA", "ELISEA", "JOSE", "JUAN", "J
 
 
 def genero_por_nombre(nombre):
-    """FEMENINO / MASCULINO según el primer nombre del acreditado ('' si no hay nombre)."""
-    limpio = str(nombre or "").upper().translate(str.maketrans("ÁÉÍÓÚÜ", "AEIOUU"))
-    partes = [p for p in re.split(r"\s+", limpio) if p and p not in ("NO_ENCONTRADO", "C.", "LA", "EL", "SR.", "SRA.")]
-    if not partes:
-        return ""
-    primero = partes[0]
-    if primero in NOMBRES_MASCULINOS:
-        return "MASCULINO"
-    if primero in NOMBRES_FEMENINOS or primero.endswith("A"):
-        return "FEMENINO"
-    return "MASCULINO"
+    """FEMENINO / MASCULINO según el nombre de pila del acreditado ('' si no hay nombre).
+    El nombre puede venir con los apellidos primero (constancia): se decide por el nombre de pila, no por el apellido."""
+    return nombres.genero(nombre)
 
 
 def determinar_genero_y_estado_civil(texto_completo, nombre_acreditado=""):
@@ -619,7 +612,7 @@ def extraer_notario_robusto(texto_limpio, texto_completo=""):
     }
 
     patrones = [
-        r'NOTI?AR[IÍ][OA]\s+P[UÚ]BLIC[OA]\s+(?:LICENCIAD[OA]|LIC\.?\s+)?([A-ZÁÉÍÓÚÑ\s]{4,45}?)\s*,?\s+(?:N[UÚ]M[EÉ]RO|NO\.?)\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\s+QUE|\.|$)',
+        r'NOTI?AR[IÍ][OA]\s+P[UÚ]BLIC[OA]\s+(?:LICENCIAD[OA]|LIC\.?\s+)?([A-ZÁÉÍÓÚÑ\s]{4,45}?)\s*,?\s+(?:N[UÚ]M[EÉ]RO|NO\.?)\s*([0-9]+)\s*,?\s*DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\s+QUE|\.|$)',
         r'(?:ANTE\s+LA\s+FE\s+(?:DEL?\s+|DE\s+LA\s+)?)(?:LICENCIAD[OA]|LIC\.?\s+)?([A-ZÁÉÍÓÚÑ\s]{4,45}?)\s*,?\s*NOTI?AR[IÍ][OA]\s+P[UÚ]BLIC[OA]\s+(?:NO\.?|N[UÚ]M[EÉ]RO)?\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\.|$)',
         r'NOTI?AR[IÍ][OA]\s+(?:P[UÚ]BLIC[OA]\s+)?(?:NO\.?|N[UÚ]M[EÉ]RO)?\s*([0-9]+)\s+DEL?\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*,|\s+CON\s+RES|\s+EN\s+LA|\s+EN\s+QUE|\.|$)'
     ]
@@ -1161,6 +1154,62 @@ def combinar_datos_pareja(datos_lista):
 
     return datos_finales
 
+_CONSENTIMIENTO = re.compile(r"consentimiento\s+de\s+su\s+c[óo]nyuge", re.I)
+
+
+def _parrafos(documento):
+    for p in documento.paragraphs:
+        yield p
+    for tabla in documento.tables:
+        for fila in tabla.rows:
+            for celda in fila.cells:
+                yield from celda.paragraphs
+
+
+def completar_conyuge_en_documento(documento, conyuge):
+    """
+    Donde la plantilla dice "con el consentimiento de su cónyuge" sin el nombre, se agrega:
+      "... de su cónyuge sobre el inmueble"   -> "... de su cónyuge el señor ARTURO ESCALONA MACEDO, sobre el inmueble"
+      "... de su cónyuge, sobre el inmueble"  -> "... de su cónyuge, la señora ANA LOPEZ RUIZ, sobre el inmueble"
+    Si ya trae el nombre (o "el señor/la señora ..."), no se toca. Regresa cuántas veces se agregó.
+    """
+    conyuge = " ".join(str(conyuge or "").split())
+    if not conyuge or conyuge.upper() == "NO_ENCONTRADO":
+        return 0
+    tratamiento = "la señora" if nombres.genero(conyuge) == "FEMENINO" else "el señor"
+    apellido = nombres._clave(conyuge.split()[-1])
+    agregados = 0
+    for p in _parrafos(documento):
+        runs = p.runs
+        texto = "".join(r.text for r in runs)
+        if not _CONSENTIMIENTO.search(texto):
+            continue
+        for m in reversed(list(_CONSENTIMIENTO.finditer(texto))):
+            despues = texto[m.end():m.end() + 140]
+            if apellido and apellido in nombres._clave(despues):
+                continue  # ya trae el nombre
+            if re.match(r"\s*,?\s*(?:el|la)\s+(?:se[ñn]or(?:a)?|C\.|ciudadan[oa])\b", despues, re.I):
+                continue
+            pos = m.end()
+            if despues.startswith(","):
+                pos += 1
+            resto = texto[pos:].lstrip()
+            final = "" if (not resto or resto[0] in ".;:,") else ","
+            insercion = f" {tratamiento} {conyuge}{final}"
+            # se mete en el renglón (run) donde termina la palabra "cónyuge" (o la coma)
+            inicio = 0
+            for r in runs:
+                fin = inicio + len(r.text)
+                if inicio <= pos <= fin and (pos < fin or r is runs[-1] or fin > inicio):
+                    corte = pos - inicio
+                    r.text = r.text[:corte] + insercion + r.text[corte:]
+                    agregados += 1
+                    break
+                inicio = fin
+            texto = "".join(r.text for r in runs)
+    return agregados
+
+
 def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
     if not os.path.exists(ruta_plantilla):
         ruta_plantilla_alt = os.path.join("templates", "plantilla_manera2.docx")
@@ -1239,10 +1288,14 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
     })
 
     doc.render(context)
+    try:
+        completar_conyuge_en_documento(doc.docx, context.get("nombre_conyuge"))
+    except Exception as e:
+        print(f"No se pudo completar el nombre del cónyuge: {e}")
 
     directorio_salida = os.path.dirname(ruta_salida)
     if directorio_salida:
         os.makedirs(directorio_salida, exist_ok=True)
         
     doc.save(ruta_salida)
-    return True
+    return True

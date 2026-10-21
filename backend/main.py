@@ -20,6 +20,7 @@ import models, services
 from database import get_db, SessionLocal, engine
 import auth
 import actos_ifrem
+import nombres
 import plantilla_sugerida
 import kpis
 import perfil
@@ -225,6 +226,10 @@ def aplicar_acto_elegido(datos: Dict[str, Any], actos: List[Dict[str, Any]]) -> 
     for acto in actos:
         acto["elegido"] = bool(elegido and acto["id"] == elegido["id"])
     if elegido:
+        # Veces salario: solo si los documentos no lo trajeron (la carta es la fuente principal)
+        vsm = elegido["datos"].get("credito_a_salario")
+        if vsm and str(datos.get("credito_a_salario") or "").strip() in ("", "NO_ENCONTRADO"):
+            datos["credito_a_salario"] = vsm
         for campo in CAMPOS_DE_ACTO:
             valor = elegido["datos"].get(campo)
             if valor:
@@ -247,12 +252,18 @@ def aplicar_acto_elegido(datos: Dict[str, Any], actos: List[Dict[str, Any]]) -> 
         acreditado, conyuge = actos_ifrem.acreditado_y_conyuge(propietarios, referencia)
     if acreditado:
         datos["nombre_acreditado"] = acreditado
-        genero = services.genero_por_nombre(acreditado)
-        if genero:
-            datos["genero"] = genero
     if conyuge:
         datos["nombre_conyuge"] = conyuge
         datos["tiene_conyuge"] = "Sí"
+    # La constancia escribe a las personas con los apellidos primero: se dejan con el nombre primero
+    # (con el orden de la carta cuando es la misma persona) y el género sale del nombre de pila
+    if datos.get("nombre_acreditado") and datos["nombre_acreditado"] != "NO_ENCONTRADO":
+        datos["nombre_acreditado"] = nombres.ordenar_nombre(datos["nombre_acreditado"], nombre_carta)
+        genero = services.genero_por_nombre(datos["nombre_acreditado"])
+        if genero:
+            datos["genero"] = genero
+    if datos.get("nombre_conyuge") and datos["nombre_conyuge"] != "NO_ENCONTRADO":
+        datos["nombre_conyuge"] = nombres.ordenar_nombre(datos["nombre_conyuge"])
     return elegido["id"] if elegido else None
 
 
@@ -953,7 +964,7 @@ def obtener_historial(
 
 
 @app.post("/api/expedientes/procesar")
-async def procesar_documento(
+def procesar_documento(
     files: List[UploadFile] = File(...),
     usuario_propietario: Optional[str] = Form(None),
     plantilla: Optional[str] = Form(None),
@@ -1017,7 +1028,7 @@ async def procesar_documento(
 
 
 @app.post("/api/expedientes/procesar-masivo")
-async def procesar_masivo(
+def procesar_masivo(
     files: List[UploadFile] = File(...),
     usuario_propietario: Optional[str] = Form(None),
     plantilla: Optional[str] = Form("plantilla_manera2.docx"),
@@ -1226,7 +1237,7 @@ def datos_de_trabajador_dos(carta: Dict[str, Any], datos: Dict[str, Any]) -> Dic
         otro = str(datos.get("nombre_conyuge") or "")
         nombre = "" if otro.upper() == "NO_ENCONTRADO" else otro
     resultado = {
-        "nombre_acreditado_2": nombre,
+        "nombre_acreditado_2": nombres.ordenar_nombre(nombre) if nombre else nombre,
         "numero_credito_2": v("numero_credito"),
         "numero_carta_2": v("numero_carta"),
         "fecha_expedicion_2": v("fecha_expedicion"),
@@ -1281,6 +1292,19 @@ def aplicar_tipo_indicado(datos: Dict[str, Any], tipo: str, nombre: str) -> str:
     if tipo == "carta":
         datos.pop("_actos", None)
         datos.pop("_propietarios", None)
+    return ""
+
+
+def aviso_de_constancia(datos: Dict[str, Any], nombre: str) -> str:
+    """Avisa cuando de una constancia no se pudieron sacar los actos (para que se revise a mano)."""
+    if datos.get("_tipo_documento") != "constancia" or datos.get("_actos"):
+        return ""
+    texto = str(datos.get("texto_raw") or "")
+    if len(texto.strip()) < 300:
+        return (f"\"{nombre}\" parece escaneada (es una imagen): no se pudieron leer sus actos. "
+                "Puedes seleccionar el texto con «Leer área (OCR)» y usarlo en cada dato.")
+    if actos_ifrem.parece_constancia_ifrem(texto):
+        return f"No se encontraron actos en \"{nombre}\". Revisa el PDF: puedes seleccionar el texto y usarlo en cada dato."
     return ""
 
 
@@ -1373,7 +1397,7 @@ def verificar_mismo_credito_por_contenido(archivos: List[Dict[str, Any]]):
 
 
 @app.post("/api/expedientes/leer")
-async def leer_documentos(
+def leer_documentos(
     files: List[UploadFile] = File(...),
     agrupar: bool = Form(True),
     tipos: Optional[List[str]] = Form(None),
@@ -1402,6 +1426,8 @@ async def leer_documentos(
                 if not datos or (datos.get("numero_credito") == "NO_ENCONTRADO" and not datos.get("texto_raw")):
                     raise ValueError("El archivo PDF está vacío, corrupto o no contiene datos legibles.")
                 aviso = aplicar_tipo_indicado(datos, tipos[n] if n < len(tipos) else "", nombre)
+                if not aviso:
+                    aviso = aviso_de_constancia(datos, nombre)
             except Exception as e_file:
                 datos = {"error_extraccion": str(e_file), "numero_credito": "NO_ENCONTRADO"}
             archivos.append({"ruta": ruta, "nombre": nombre, "datos": datos, "aviso": aviso})
@@ -2043,7 +2069,7 @@ def generar_expediente_manual(
 
 
 @app.post("/api/expedientes/procesar-excel")
-async def procesar_excel(
+def procesar_excel(
     file: UploadFile = File(...),
     usuario_propietario: Optional[str] = Form("admin"),
     plantilla: Optional[str] = Form("plantilla_manera2.docx"),
@@ -2174,7 +2200,7 @@ async def procesar_excel(
 
 
 @app.post("/api/expedientes/previsualizar-excel")
-async def previsualizar_excel(file: UploadFile = File(...), sesion: dict = Depends(require_user)):
+def previsualizar_excel(file: UploadFile = File(...), sesion: dict = Depends(require_user)):
     try:
         if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
             raise HTTPException(status_code=400, detail="El archivo debe ser un Excel o CSV válido.")

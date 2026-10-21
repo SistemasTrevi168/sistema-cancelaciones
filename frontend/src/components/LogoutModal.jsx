@@ -16,7 +16,7 @@ export default function LogoutModal() {
               <LogOut color="#dc2626" size={28} />
             </div>
             <h3 style={{ margin: '0 0 8px 0', color: theme.textPrimary, fontSize: '20px', fontWeight: '700' }}>¿Cerrar sesión?</h3>
-            <p style={{ color: theme.textSecondary, fontSize: '14px', margin: '0 0 24px 0' }}>¿Está seguro que desea salir del sistema de cancelación de hipotecas?</p>
+            <p style={{ color: theme.textSecondary, fontSize: '14px', margin: '0 0 24px 0' }}>¿Está seguro que desea salir del sistema de cancelación de hipotecas? Se quitarán los archivos cargados y los expedientes que no hayas guardado.</p>
             <div style={{ display: 'flex', gap: '12px' }}>
               <button
                 onClick={() => setShowLogoutModal(false)}

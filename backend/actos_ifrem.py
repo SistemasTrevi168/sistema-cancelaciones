@@ -68,6 +68,105 @@ def _seccion_de(linea):
     return None
 
 
+_PEGADO = re.compile(r"^(?:-{1,3}\s+)?(\d{10,14})((?:\s+(?:-{1,3}|\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2}))+)\s*(.*)$")
+
+
+def _separar_renglones_pegados(lineas):
+    """Algunos PDF traen el renglón de la tabla en una sola línea: "1000000002505 --- 13/12/2001 A.C.S. INSTRUMENTO ...".
+    Se separa en volante, fechas, clave y texto, como lo trae la mayoría."""
+    salida = []
+    for linea in lineas:
+        m = _PEGADO.match(linea)
+        if not m:
+            salida.append(linea)
+            continue
+        salida.append(m.group(1))
+        salida.extend(f for f in m.group(2).split() if not f.startswith("-"))
+        resto = m.group(3).strip()
+        mc = re.match(r"^([A-ZÁÉÍÓÚÑ](?:[A-ZÁÉÍÓÚÑ]{0,6}\.){1,8})\s+(.*)$", resto)
+        if mc:
+            salida.extend([mc.group(1), mc.group(2)])
+        elif resto:
+            salida.append(resto)
+    return salida
+
+
+_CIERRE = re.compile(r"VOLANTE\s*:?\s*(\d{10,14})\s+CALIFICADOR\s*:.*?ANALISTA\s*:\s*[A-ZÁÉÍÓÚÑ]*", re.I | re.S)
+
+
+def _actos_por_cierre(paginas_texto):
+    """Plan B: cada acto del folio electrónico termina con "VOLANTE: <número> CALIFICADOR: ... ANALISTA: ...".
+    Se toma el texto entre un cierre y el siguiente, sin los encabezados de la tabla."""
+    actos = []
+    partes = []
+    for num, texto in enumerate(paginas_texto, start=1):
+        for l in _separar_renglones_pegados([x.strip() for x in texto.splitlines()]):
+            if l and not any(p.search(l) for p in _PIE):
+                partes.append((num, l))
+    texto = " ".join(l for _, l in partes)
+    # página de cada posición del texto
+    marcas, pos = [], 0
+    for num, l in partes:
+        marcas.append((pos, num))
+        pos += len(l) + 1
+
+    def pagina_de(i):
+        num = 1
+        for p, n in marcas:
+            if p > i:
+                break
+            num = n
+        return num
+
+    def seccion_en(i):
+        sec, mejor = "otros", -1
+        for clave, patron in SECCIONES:
+            for m in patron.finditer(texto, 0, i):
+                if m.start() > mejor:
+                    sec, mejor = clave, m.start()
+        return sec
+
+    inicio = 0
+    encab = re.compile(r"\b(?:TR[AÁ]MITE|VOLANTE|ENTRADA|FECHA\s+DE|INGRESO|DD/MM/AAAA|INSCRIPCI[OÓ]N|CLAVE|ACTO|ESTADO\s+DEL\s+ACTO|"
+                       r"GRAV[AÁ]MENES,?\s+HIPOTECAS,?\s+DERECHOS|REALES\s+Y\s+LIMITACIONES\s+DE\s+DOMINIO|INSCRIPCIONES\s+DE\s+PROPIEDAD|"
+                       r"ANOTACIONES\s+PREVENTIVAS|ESTADO|DEL)\b", re.I)
+    for m in _CIERRE.finditer(texto):
+        trozo = texto[inicio:m.end()]
+        inicio = m.end()
+        # Lo que va antes del texto del acto: encabezados, ---, volante, fechas y clave
+        mt = re.search(r"(?:^|\s)(?:(\d{10,14})\s+)?(?:-{1,3}\s+)?(\d{1,2}/\d{1,2}/\d{4})?\s*(?:-{1,3}\s+)?(\d{1,2}/\d{1,2}/\d{4})?\s*"
+                       r"([A-ZÁÉÍÓÚÑ](?:[A-ZÁÉÍÓÚÑ]{0,6}\.){1,8})\s+(?=[A-ZÁÉÍÓÚÑ0-9])", trozo)
+        if mt and mt.start() < len(trozo) * 0.6:
+            volante = mt.group(1) or m.group(1)
+            fecha = mt.group(2) or mt.group(3) or ""
+            clave = mt.group(4)
+            cuerpo = trozo[mt.end():]
+        else:
+            volante, fecha, clave = m.group(1), "", ""
+            cuerpo = trozo
+            # quita encabezados al inicio
+            while True:
+                c2 = re.sub(r"^\s*(?:-{1,3}|\d{10,14}|\d{1,2}/\d{1,2}/\d{4})\s+", "", cuerpo)
+                c2 = re.sub(r"^\s*" + encab.pattern, "", c2, flags=re.I) if encab.match(c2.strip()) else c2
+                if c2 == cuerpo:
+                    break
+                cuerpo = c2
+        cuerpo = " ".join(cuerpo.split())
+        if len(cuerpo) < 25:
+            continue
+        actos.append({"seccion": seccion_en(m.start()), "pagina": pagina_de(m.start()), "volante": volante,
+                      "fecha": fecha, "clave": clave, "texto": cuerpo})
+    for n, acto in enumerate(actos, start=1):
+        acto["id"] = n
+        acto["seccion_nombre"] = NOMBRE_SECCION.get(acto["seccion"], "Otros")
+        texto_up = acto["texto"].upper()
+        acto["es_hipoteca"] = bool(PALABRAS_HIPOTECA.search(texto_up) or PALABRAS_HIPOTECA.search(acto["clave"] or ""))
+        acto["es_cancelacion"] = bool(PALABRAS_CANCELACION.search(texto_up))
+        acto["resumen"] = acto["texto"][:220] + ("…" if len(acto["texto"]) > 220 else "")
+        acto["cancelada"] = False
+    return actos
+
+
 def dividir_actos(paginas_texto):
     """
     paginas_texto: lista con el texto de cada página.
@@ -83,12 +182,18 @@ def dividir_actos(paginas_texto):
             texto = " ".join(" ".join(actual["lineas"]).split())
             if len(texto) >= 25:  # descarta renglones sueltos sin contenido
                 actual["texto"] = texto
+                if not actual.get("volante"):
+                    mv = re.search(r"VOLANTE\s*:\s*(\d{10,14})", texto, re.I)
+                    if mv:
+                        actual["volante"] = mv.group(1)
                 del actual["lineas"]
                 actos.append(actual)
         actual = None
 
+    fin_acto = False  # el acto actual ya terminó (llegó "ANALISTA: ..."): una fecha suelta empieza otro
+
     for num_pagina, texto_pagina in enumerate(paginas_texto, start=1):
-        lineas = [l.strip() for l in texto_pagina.splitlines()]
+        lineas = _separar_renglones_pegados([l.strip() for l in texto_pagina.splitlines()])
         # Palabras de encabezado ("DEL", "ACTO"...) que pueden ser parte del texto de un acto:
         # se guardan aparte y solo se agregan si el texto del acto continúa después.
         pendientes = []
@@ -115,7 +220,15 @@ def dividir_actos(paginas_texto):
             if _VOLANTE.match(linea):
                 pendientes = []
                 cerrar()
+                fin_acto = False
                 actual = {"seccion": seccion, "pagina": num_pagina, "volante": linea, "fecha": "", "clave": "", "lineas": []}
+                continue
+            # Acto sin volante ("---"): empieza con su fecha, después de que terminó el anterior (o al inicio de la sección)
+            if seccion != "otros" and _FECHA.match(linea) and (actual is None or fin_acto):
+                pendientes = []
+                cerrar()
+                fin_acto = False
+                actual = {"seccion": seccion, "pagina": num_pagina, "volante": "", "fecha": linea, "clave": "", "lineas": []}
                 continue
             # Renglón de libros: nombre del acto y luego su fecha (ej. COMPRAVENTA / 2006-11-08)
             if seccion != "otros" and _NOMBRE_ACTO.match(linea) and _FECHA.match(siguiente or "") and ":" not in linea:
@@ -147,7 +260,14 @@ def dividir_actos(paginas_texto):
                 actual["clave"] = linea.strip()
                 continue
             actual["lineas"].append(linea)
+            if re.search(r"ANALISTA\s*:", linea, re.I):
+                fin_acto = True
     cerrar()
+
+    # Si el texto vino en otro orden y no se encontraron (o faltan) actos, se separan por su cierre "VOLANTE ... ANALISTA:"
+    otros = _actos_por_cierre(paginas_texto)
+    if len(otros) > len(actos):
+        actos = otros
 
     for n, acto in enumerate(actos, start=1):
         acto["id"] = n
@@ -233,12 +353,85 @@ def _fecha_con_letra(texto, services):
     return fecha if fecha and fecha != "NO_ENCONTRADO" else None
 
 
+_PALABRA_NOMBRE = r"[A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ\.]*"
+_NUM_NOTARIA = r"(?:N[UÚ]M(?:ERO|\.)?|NO\.?|N[º°]\.?)\s*([0-9]{1,4})"
+_LIC = r"(?:LIC(?:ENCIAD[OA])?\.?\s+|LICDA?\.?\s+)"
+_NOTARIO = r"NOT(?:I)?AR[IÍ][OA](?:\s+P[UÚ]BLIC[OA])?"
+_JURISDICCION = r"((?:DEL?|DE\s+LA)\s+[A-ZÁÉÍÓÚÑ\s]{3,60}?)(?=\s*[,\.;]|\s+CON\s+RES|\s+EN\s+(?:LA|EL|QUE)|\s+LIC|\s+QUE|\s*$)"
+
+
+def _jurisdiccion_notaria(jur):
+    j = _sin_acentos(" ".join(str(jur or "").split()))
+    if not j:
+        return "del Estado de México"
+    if "DISTRITO FEDERAL" in j or "CIUDAD DE MEXICO" in j:
+        return "de la Ciudad de México"
+    if "ESTADO DE MEXICO" in j:
+        return "del Estado de México"
+    m = re.search(r"DISTRITO\s+(?:JUDICIAL\s+)?DE\s+([A-Z\s]+)", j)
+    if m:  # las constancias son del IFREM: notarías del Estado de México
+        lugar = " ".join(p.capitalize() if p not in ("DE", "DEL", "LA", "LOS", "LAS") else p.lower() for p in m.group(1).split())
+        return f"del Distrito de {lugar}, Estado de México"
+    return "del Estado de México"
+
+
+def _limpiar_nombre_notario(nombre):
+    palabras = [p.strip(",") for p in str(nombre or "").split()]
+    quitar = {"EL", "LA", "LIC", "LIC.", "LICENCIADO", "LICENCIADA", "LICDA", "LICDA.", "NOTARIO", "NOTARIA", "PUBLICO", "PÚBLICO",
+              "PUBLICA", "PÚBLICA", "DEL", "DE"}
+    while palabras and palabras[0].upper() in quitar:
+        palabras.pop(0)
+    while palabras and palabras[-1].upper() in {"DE", "DEL", "LA", "Y", "EL"}:
+        palabras.pop()
+    # Iniciales sueltas ("VICTOR A VARELA PEREZ") se dejan con punto
+    palabras = [p + "." if len(p) == 1 and p.isalpha() and 0 < i < len(palabras) - 1 else p for i, p in enumerate(palabras)]
+    return " ".join(palabras)
+
+
+def notario_de_acto(texto, services):
+    """
+    Notario de un acto de la constancia, en sus formas más comunes:
+      ... ANTE LA FE DEL NOTARIO PUBLICO LIC. VICTOR A VARELA PEREZ NUMERO 20, DEL DISTRITO DE TOLUCA ...
+      ... ANTE LA FE DEL LIC. ROBERTO DIAZ MENDOZA, NOTARIO PÚBLICO NO. 24 DEL ESTADO DE MÉXICO ...
+      ... NOTARIO PUBLICO NUMERO 5 DEL ESTADO DE MEXICO, LIC. ANA LUISA SOTO ...
+    Regresa el texto listo para la plantilla, o None si no lo encuentra.
+    """
+    t = numeros_texto(texto)
+    nombre_re = rf"({_PALABRA_NOMBRE}(?:\s+{_PALABRA_NOMBRE}){{1,7}}?)"
+    patrones = [
+        # NOTARIO PUBLICO LIC. NOMBRE NUMERO 20, DEL DISTRITO DE X
+        rf"{_NOTARIO}\s*,?\s*{_LIC}?{nombre_re}\s*,?\s*{_NUM_NOTARIA}\s*,?\s*(?:{_JURISDICCION})?",
+        # LIC. NOMBRE, NOTARIO PUBLICO NUMERO 24 DEL ESTADO DE MEXICO
+        rf"{_LIC}{nombre_re}\s*,?\s*(?:TITULAR\s+DE\s+LA\s+)?{_NOTARIO}\s*{_NUM_NOTARIA}\s*,?\s*(?:{_JURISDICCION})?",
+        # NOTARIO PUBLICO NUMERO 5 DEL ESTADO DE MEXICO, LIC. NOMBRE
+        rf"{_NOTARIO}\s*{_NUM_NOTARIA}\s*,?\s*(?:{_JURISDICCION})?\s*,?\s*{_LIC}{nombre_re}(?=\s*[,\.;]|\s+(?:EN|CON|QUE|Y)\b|\s*$)",
+    ]
+    for i, pat in enumerate(patrones):
+        m = re.search(pat, t, re.I)
+        if not m:
+            continue
+        if i == 2:
+            numero, jur, nombre = m.group(1), m.group(2), m.group(3)
+        else:
+            nombre, numero, jur = m.group(1), m.group(2), m.group(3)
+        nombre = _limpiar_nombre_notario(nombre)
+        if len(nombre.split()) < 2 or re.search(r"\b(?:NOTARI|ESCRITURA|INSTRUMENTO|FECHA|NUMERO|CONSTA)", nombre, re.I):
+            continue
+        texto_notario = f"{nombre} Notario Público número {services.numero_a_palabras_generico(numero).lower()} {_jurisdiccion_notaria(jur)}"
+        return services.formatear_notario(texto_notario)
+    return None
+
+
+def numeros_texto(texto):
+    return " ".join(str(texto or "").split())
+
+
 def datos_de_acto(acto, services):
     """Datos que se pueden tomar de un acto, ya con el formato que usa el Word."""
     texto = acto.get("texto", "")
     datos = {}
 
-    m = re.search(r"(?:ESCRITURA|INSTRUMENTO)\s+(?:P[UÚ]BLICA\s+)?(?:N[OÚ]M(?:ERO)?\.?|NO\.?|N[º°]\.?)?\s*([0-9][0-9,\.]*)", texto, re.I)
+    m = re.search(r"(?:ESCRITURA|INSTRUMENTO|ESC\.)\s*(?:P[UÚ]BLICA\s+)?(?:N[UÚO]M(?:ERO|\.)?|NO\.?|N[º°]\.?)?\s*([0-9][0-9,\.]*)", texto, re.I)
     if m:
         numero = m.group(1).rstrip(",.").replace(",", "")
         if numero.isdigit():
@@ -261,19 +454,30 @@ def datos_de_acto(acto, services):
         if fecha:
             datos["fecha_escritura"] = fecha
 
-    notario = services.extraer_notario_robusto(texto, texto)
+    notario = notario_de_acto(texto, services) or services.extraer_notario_robusto(texto, texto)
     if notario and notario != "NO_ENCONTRADO":
         datos["notario_origen_completo"] = notario
 
-    mm = re.search(r"(?:MONTO\s+DEL\s+CR[EÉ]DITO|IMPORTE(?:\s+DEL\s+CR[EÉ]DITO)?|CANTIDAD\s+DE)\s*:?\s*\$\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?)", texto, re.I)
+    # Monto: en pesos ("MONTO DEL CREDITO: $198,640.00") o en veces el salario mínimo ("IMPORTE ...: 162.9260 VSMM")
+    etiqueta_monto = (r"(?:MONTO(?:\s+DEL\s+CR[EÉ]DITO)?|IMPORTE(?:\s+DE\s+LA\s+OBLIGACI[OÓ]N(?:\s+GARANTIZADA)?|\s+DEL\s+CR[EÉ]DITO|\s+GARANTIZADO)?|"
+                      r"OBLIGACI[OÓ]N\s+GARANTIZADA|(?:POR\s+)?LA\s+CANTIDAD\s+DE|CANTIDAD\s+DE|CR[EÉ]DITO\s+POR)\s*:?\s*")
+    mm = re.search(etiqueta_monto + r"\$\s*([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)", texto, re.I)
     if mm:
         try:
             datos["monto_credito"] = f"${float(mm.group(1).replace(',', '')):,.2f}"
         except ValueError:
             pass
+    mv = re.search(etiqueta_monto + r"([0-9]+(?:[\.,][0-9]+)?)\s*(?:V\.?\s?S\.?\s?M\.?\s?M\.?|V\.?\s?S\.?\s?M\.?|VECES\s+(?:EL\s+)?(?:SALARIO|S\.\s?M))", texto, re.I)
+    if mv:
+        vsm = mv.group(1).replace(",", ".")
+        try:
+            datos["credito_a_salario"] = services.convertir_vsm_a_letras(vsm)
+            datos["credito_a_salario_digitos"] = vsm
+        except Exception:
+            pass
 
     acreedor = re.search(r"ACREEDOR\s*:\s*([A-ZÁÉÍÓÚÑ\.\s]{3,60}?)(?:,|\s+DEUDOR)", texto, re.I)
-    deudor = re.search(r"DEUDOR(?:ES)?\s*:\s*([A-ZÁÉÍÓÚÑ\.\s]{3,80}?)(?:,|\s+MONTO|\s+PLAZO)", texto, re.I)
+    deudor = re.search(r"DEUDOR(?:ES)?\s*:\s*([A-ZÁÉÍÓÚÑ\.\s]{3,80}?)(?:,|\.\s|\s+MONTO|\s+PLAZO|\s+IMPORTE)", texto, re.I)
     if acreedor:
         datos["acreedor"] = " ".join(acreedor.group(1).split())
     if deudor:
@@ -283,7 +487,8 @@ def datos_de_acto(acto, services):
         datos["personas"] = personas
     if re.search(r"\bMUTUO\b", texto, re.I):
         datos["tipo_credito"] = "MUTUO"
-    elif re.search(r"APERTURA\s+DE\s+CR[EÉ]DITO", texto, re.I):
+    elif re.search(r"APERTURA\s+DE\s+CR[EÉ]DITO|OTORGAMIENTO\s+DE(?:L)?\s+CR[EÉ]DITO", texto, re.I) \
+            or re.fullmatch(r"A\.?\s?C\.?\s?S\.?", str(acto.get("clave") or "").strip(), re.I):
         datos["tipo_credito"] = "AP"
     return datos
 

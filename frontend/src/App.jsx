@@ -624,7 +624,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     if (!navegador.auth) return;
     navegador.auth = false;
     setAvisoInactividad(null);
-    setAvisoSesion({ motivo, segundos: segundos || 120 });
+    setAvisoSesion({ motivo, segundos: segundos || 900 });
     handleConfirmLogout();
   };
   useEffect(() => { navegador.alExpirar = expirarSesion; });
@@ -656,6 +656,16 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]);
       setBatchResults([]);
       setHistorial([]);
+
+      // Al cerrar la sesión (a mano o por inactividad) se quita todo lo cargado: nada queda para el siguiente que entre
+      setCartaSingle(null); setConstanciaSingle(null); setCarta2Single(null); setCoacManual(false);
+      setCartasLote([]); setConstanciasLote([]); setSelectedBatchIndices([]); setOpenAccordion({});
+      setExpedienteId(''); setLecturaSingle(null); setUnlockedFields({});
+      setProgressSingle(0); setProgressBatch(0); setLoading(false); setBatchLoading(false);
+      setSelectedPlantilla('CDMX_AP_H_SOLTERO');
+      setFormData((f) => Object.fromEntries(Object.keys(f).map((k) => [k, ''])));
+      setExpedientes([]); setPlantillasFilas({}); setPaginaActual(1);
+      setSearchQuery(''); setFiltroEstado('todos');
 
       // Limpieza de Excel
       setArchivoExcel(null);

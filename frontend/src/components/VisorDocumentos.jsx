@@ -29,7 +29,11 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
   const [amplio, setAmplio] = useState(false);
   const [modoOcr, setModoOcr] = useState(false);
   const [ocr, setOcr] = useState(null); // { estado, progreso, texto, x, y }
-  const [menu, setMenu] = useState(null); // { texto, x, y }
+  const [menu, setMenu] = useState(null); // { texto, x, y, arriba }
+  // El menú "Usar como" se mide al aparecer para que nunca quede cortado abajo de la pantalla
+  const colocarMenu = useCallback((el) => {
+    if (el && menu) el.style.top = `${posicionMenu(menu, el.offsetHeight)}px`;
+  }, [menu]);
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState([]);
   const [verActos, setVerActos] = useState(false);
@@ -130,7 +134,7 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
     const texto = sel?.toString().replace(/\s+/g, ' ').trim();
     if (!texto || !zonaRef.current?.contains(sel.anchorNode)) return;
     const r = sel.getRangeAt(0).getBoundingClientRect();
-    setMenu({ texto, x: r.left + r.width / 2, y: r.bottom });
+    setMenu({ texto, x: r.left + r.width / 2, y: r.bottom, arriba: r.top });
   }, [modoOcr]);
 
   useEffect(() => {
@@ -142,7 +146,9 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
   }, [revisarSeleccion]);
 
   // ---- OCR de un área ----
-  const alAreaOcr = async (imagen, pos) => {
+  const alAreaOcr = async (imagen, pos, textoDelPdf) => {
+    // El PDF ya traía texto en esa área: se usa directo (exacto)
+    if (textoDelPdf) { setMenu({ texto: textoDelPdf, x: pos.x, y: pos.y, arriba: pos.arriba, deArea: true }); return; }
     setOcr({ estado: 'leyendo', progreso: 0, x: pos.x, y: pos.y });
     try {
       const texto = await leerTextoDeImagen(imagen, (m) => {
@@ -151,7 +157,7 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
       });
       setOcr(null);
       if (!texto) { setError('No se encontró texto en esa área.'); return; }
-      setMenu({ texto: texto.replace(/\s+/g, ' ').trim(), x: pos.x, y: pos.y, deOcr: true });
+      setMenu({ texto: limpiarOcr(texto), x: pos.x, y: pos.y, arriba: pos.arriba, deOcr: true });
     } catch {
       setOcr(null);
       setError('No se pudo leer el texto (OCR). Revisa tu conexión a internet e inténtalo de nuevo.');
@@ -282,8 +288,8 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
                     <div key={c}>
                       <dt style={{ color: theme.textSecondary }}>{etiquetaDe(c)}</dt>
                       <dd style={{ color: acto.datos?.[c] ? theme.textPrimary : theme.textSecondary, fontStyle: acto.datos?.[c] ? 'normal' : 'italic' }}>
-                        {c === 'numero_escritura' && acto.datos?.numero_escritura_digitos
-                          ? `${acto.datos.numero_escritura_digitos} (${acto.datos[c]})`
+                        {acto.datos?.[`${c}_digitos`] && acto.datos?.[c]
+                          ? `${acto.datos[`${c}_digitos`]} (${acto.datos[c]})`
                           : (acto.datos?.[c] || 'No viene en este acto')}
                       </dd>
                     </div>
@@ -347,16 +353,16 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
 
       {/* MENÚ "USAR COMO…" */}
       {menu && (
-        <div className="menu-campo" role="menu" style={{ left: Math.max(8, Math.min(menu.x - 140, window.innerWidth - 300)), top: Math.min(menu.y + 8, window.innerHeight - 380), backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.textPrimary }}>
+        <div ref={colocarMenu} className="menu-campo" role="menu" style={{ left: Math.max(8, Math.min(menu.x - 140, window.innerWidth - 300)), top: posicionMenu(menu, 0), backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.textPrimary }}>
           <div style={{ padding: '10px 12px', borderBottom: `1px solid ${theme.border}` }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: theme.textSecondary, marginBottom: '4px' }}>{menu.deOcr ? 'TEXTO LEÍDO (OCR) — puedes corregirlo' : 'TEXTO SELECCIONADO'}</div>
-            {menu.deOcr ? (
+            <div style={{ fontSize: '11px', fontWeight: 700, color: theme.textSecondary, marginBottom: '4px' }}>{menu.deOcr ? 'TEXTO LEÍDO (OCR) — puedes corregirlo' : menu.deArea ? 'TEXTO DEL ÁREA — puedes corregirlo' : 'TEXTO SELECCIONADO'}</div>
+            {menu.deOcr || menu.deArea ? (
               <textarea value={menu.texto} onChange={(e) => setMenu({ ...menu, texto: e.target.value })} rows={3} style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', fontFamily: 'inherit', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, padding: '6px' }} />
             ) : (
               <div style={{ fontSize: '12px', maxHeight: '60px', overflow: 'auto' }}>“{menu.texto}”</div>
             )}
           </div>
-          <div style={{ maxHeight: '240px', overflowY: 'auto', padding: '4px' }}>
+          <div style={{ maxHeight: 'min(240px, calc(100vh - 230px))', overflowY: 'auto', padding: '4px' }}>
             {camposMenu.map((g) => (
               <div key={g.titulo}>
                 <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px', color: theme.textSecondary, padding: '6px 8px 2px', textTransform: 'uppercase' }}>{g.titulo}</div>
@@ -373,5 +379,28 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
       )}
     </section>
   );
+}
+
+// Debajo de lo seleccionado si cabe; si no, arriba; y siempre dentro de la pantalla
+function posicionMenu(menu, alto) {
+  const h = alto || 420;
+  const margen = 12;
+  const abajo = menu.y + 8;
+  if (abajo + h <= window.innerHeight - margen) return abajo;
+  const arriba = (menu.arriba ?? menu.y) - h - 8;
+  if (arriba >= margen) return arriba;
+  return Math.max(margen, window.innerHeight - h - margen);
+}
+
+// Limpieza del texto del OCR: saltos de línea, guiones de corte de renglón y caracteres sueltos que confunde
+function limpiarOcr(texto) {
+  return String(texto || '')
+    .replace(/-\n\s*/g, '')
+    .replace(/[|¦_~`]+/g, ' ')
+    .replace(/[“”«»]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:])/g, '$1')
+    .trim();
 }
 

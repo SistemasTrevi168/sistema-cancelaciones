@@ -15,6 +15,11 @@ export async function leerTextoDeImagen(imagen, alProgreso) {
     });
   }
   const w = await trabajador;
+  if (!w.__ajustado) {
+    // Un bloque de texto, respetando los espacios entre palabras (mejor para renglones de documentos)
+    try { await w.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1', user_defined_dpi: '300' }); } catch { /* versión sin parámetros */ }
+    w.__ajustado = true;
+  }
   const { data } = await w.recognize(imagen);
   return (data?.text || '').trim();
 }

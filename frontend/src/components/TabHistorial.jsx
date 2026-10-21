@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
-  ArrowUpDown, Download, Eye, Filter, History, ListChecks, Loader2, RefreshCw, Search, X,
+  ArrowUpDown, ChevronLeft, ChevronRight, Download, Eye, Filter, History, ListChecks, Loader2, RefreshCw, Search, X,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
@@ -53,6 +53,20 @@ export default function TabHistorial() {
   const todosMarcados = visiblesIds.length > 0 && marcadosIds.length === visiblesIds.length;
   const totalEstados = Object.values(conteoEstados || {}).reduce((a, b) => a + b, 0);
   const cerrarBitacora = useCallback(() => setBitacora(null), []);
+
+  // Paginación: 15 expedientes por página; al cambiar la búsqueda o los filtros se regresa a la primera
+  const POR_PAGINA = 15;
+  const [pagina, setPagina] = useState(1);
+  const claveFiltros = JSON.stringify([searchQuery, filterPeriod, selectedYear, selectedMonth, selectedDay, filtroEstado, sortAscending]);
+  const [filtrosAnteriores, setFiltrosAnteriores] = useState(claveFiltros);
+  if (claveFiltros !== filtrosAnteriores) { setFiltrosAnteriores(claveFiltros); setPagina(1); }
+  const totalPaginas = Math.max(1, Math.ceil(filteredHistorial.length / POR_PAGINA));
+  const paginaVista = Math.min(pagina, totalPaginas);
+  const filasPagina = filteredHistorial.slice((paginaVista - 1) * POR_PAGINA, paginaVista * POR_PAGINA);
+  const irAPagina = (n) => {
+    setPagina(Math.min(Math.max(1, n), totalPaginas));
+    document.getElementById('tabla-historial-export')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const marcarVarios = async (estado) => {
     if (await cambiarEstado(marcadosIds, estado)) setMarcados({});
   };
@@ -255,7 +269,7 @@ export default function TabHistorial() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredHistorial.map((item, idx) => {
+                      {filasPagina.map((item, idx) => {
                         const dExtra = item.datos_extraidos || {};
                         const nombre = dExtra.acreditado || dExtra.nombre_acreditado || item.nombre_acreditado || 'N/A';
                         const numCred = dExtra.numero_credito || item.numero_credito || 'N/A';
@@ -287,6 +301,7 @@ export default function TabHistorial() {
                               <EstadoExpediente id={idDe(item)} estado={item.estado || 'GENERADO'} />
                             </td>
                             <td className="celda-acciones" style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <div className="acciones-historial">
                               <button
                                 onClick={() => abrirVistaPrevia({
                                   origen: 'historial',
@@ -297,32 +312,54 @@ export default function TabHistorial() {
                                 })}
                                 title="Vista previa"
                                 aria-label={`Vista previa de ${nombre}`}
-                                style={{ backgroundColor: vistaPrevia?.id === (item.id || item.expediente_id) ? theme.accent : theme.subtleBg, color: vistaPrevia?.id === (item.id || item.expediente_id) ? '#fff' : theme.textPrimary, border: `1px solid ${theme.border}`, padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', marginRight: '6px', verticalAlign: 'middle' }}
+                                className="accion-icono" style={{ backgroundColor: vistaPrevia?.id === (item.id || item.expediente_id) ? theme.accent : theme.subtleBg, color: vistaPrevia?.id === (item.id || item.expediente_id) ? '#fff' : theme.textPrimary, borderColor: theme.border }}
                               >
-                                <Eye size={13} />
+                                <Eye size={15} />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setBitacora({ id: idDe(item), titulo: nombre, datos: dExtra })}
                                 title="Historial de cambios"
                                 aria-label={`Historial de cambios de ${nombre}`}
-                                style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, border: `1px solid ${theme.border}`, padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', marginRight: '6px', verticalAlign: 'middle' }}
+                                className="accion-icono" style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, borderColor: theme.border }}
                               >
-                                <History size={13} />
+                                <History size={15} />
                               </button>
                               <button
                                 onClick={() => handleDownloadWord(item.id || item.expediente_id, dExtra, dExtra.plantilla_seleccionada || dExtra.plantilla)}
                                 disabled={descargandoId === (item.id || item.expediente_id)}
-                                style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, border: `1px solid ${theme.border}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                                className="accion-descargar" style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, borderColor: theme.border }}
                               >
-                                {descargandoId === (item.id || item.expediente_id) ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={18} />} Descargar
+                                {descargandoId === (item.id || item.expediente_id) ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={17} />} Descargar
                               </button>
+                              </div>
                             </td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
+                  {filteredHistorial.length > POR_PAGINA && (
+                    <nav className="paginacion-lote" aria-label="Páginas del historial" style={{ borderColor: theme.border, color: theme.textSecondary }}>
+                      <span>{(paginaVista - 1) * POR_PAGINA + 1}–{Math.min(paginaVista * POR_PAGINA, filteredHistorial.length)} de {filteredHistorial.length} expedientes</span>
+                      <div className="paginacion-botones">
+                        <button type="button" onClick={() => irAPagina(paginaVista - 1)} disabled={paginaVista === 1} aria-label="Página anterior" style={{ borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.textPrimary }}><ChevronLeft size={15} /></button>
+                        {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+                          .filter((n) => n === 1 || n === totalPaginas || Math.abs(n - paginaVista) <= 1)
+                          .map((n, i, lista) => (
+                            <span key={n} style={{ display: 'contents' }}>
+                              {i > 0 && n - lista[i - 1] > 1 && <span className="paginacion-puntos">…</span>}
+                              <button type="button" onClick={() => irAPagina(n)} aria-current={n === paginaVista ? 'page' : undefined}
+                                style={{ borderColor: n === paginaVista ? theme.accent : theme.border, backgroundColor: n === paginaVista ? theme.accent : theme.cardBg, color: n === paginaVista ? '#fff' : theme.textPrimary }}>
+                                {n}
+                              </button>
+                            </span>
+                          ))}
+                        <button type="button" onClick={() => irAPagina(paginaVista + 1)} disabled={paginaVista === totalPaginas} aria-label="Página siguiente" style={{ borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.textPrimary }}><ChevronRight size={15} /></button>
+                      </div>
+                      <span />
+                    </nav>
+                  )}
                 </div>
               )}
               {bitacora && (

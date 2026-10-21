@@ -2,8 +2,9 @@ import { FileText } from 'lucide-react';
 
 // Pantalla de presentación: se muestra al verificar la sesión y justo después de iniciar sesión.
 // Usa el color que eligió el usuario que entra (variable --acento).
-export default function PantallaCarga({ nombre, isDarkMode, saliendo = false }) {
-  const saludo = nombre ? `Bienvenido, ${nombre}` : 'Verificando sesión…';
+export default function PantallaCarga({ nombre, genero = '', isDarkMode, saliendo = false }) {
+  // "Bienvenida" o "Bienvenido" según el nombre de la persona, con su nombre completo
+  const saludo = nombre ? `${genero === 'FEMENINO' ? 'Bienvenida' : 'Bienvenido'} ${nombre}` : 'Verificando sesión…';
   return (
     <div
       className={`pantalla-carga ${saliendo ? 'pantalla-carga-salida' : ''}`}

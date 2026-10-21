@@ -9,6 +9,7 @@ import uuid
 
 from database import get_db
 from models import Usuario, Sesion
+import nombres
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
@@ -211,7 +212,19 @@ def con_foto(usuario: dict, db: Session) -> dict:
     user = db.query(Usuario).filter(Usuario.username == usuario.get("username")).first()
     datos = {k: v for k, v in usuario.items() if k != "sesion_id"}
     datos["foto"] = getattr(user, "foto", None) or ""
+    datos["genero"] = genero_de_usuario(user)
     return datos
+
+
+def genero_de_usuario(user) -> str:
+    """FEMENINO / MASCULINO por el nombre que se muestra (o el usuario); '' si no se sabe. Para el saludo de bienvenida."""
+    if not user:
+        return ""
+    nombre = (getattr(user, "nombre_mostrar", None) or "").strip() or str(getattr(user, "username", "") or "").replace(".", " ").replace("_", " ")
+    try:
+        return nombres.genero(nombre) if nombre else ""
+    except Exception:
+        return ""
 
 
 def datos_del_dispositivo(request: Request) -> dict:
@@ -296,6 +309,7 @@ def login(data: LoginRequest, response: Response, request: Request, db: Session 
             "color_acento": getattr(user, "color_acento", None) or "",
             "tema": getattr(user, "tema", None) or "",
             "foto": getattr(user, "foto", None) or "",
+            "genero": genero_de_usuario(user),
         }
     }
 

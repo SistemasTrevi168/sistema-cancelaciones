@@ -3,7 +3,7 @@ import { Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react';
 import { useApp } from '../AppContext';
 
 // Ventana para cambiar la contraseña propia o (admin) asignar una nueva a otro usuario
-export default function ModalPassword({ titulo, descripcion, pedirActual, onCancelar, onGuardar }) {
+export default function ModalPassword({ titulo, descripcion, etiquetaActual = 'Contraseña actual', onCancelar, onGuardar }) {
   const { theme, isDarkMode } = useApp();
   const [actual, setActual] = useState('');
   const [nueva, setNueva] = useState('');
@@ -15,6 +15,7 @@ export default function ModalPassword({ titulo, descripcion, pedirActual, onCanc
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (!actual) return setError('Escribe tu contraseña actual.');
     if (nueva.length < 6) return setError('La contraseña nueva debe tener al menos 6 caracteres.');
     if (nueva !== confirmar) return setError('Las contraseñas nuevas no coinciden.');
     setGuardando(true);
@@ -53,8 +54,8 @@ export default function ModalPassword({ titulo, descripcion, pedirActual, onCanc
         <h3 style={{ margin: '0 0 6px 0', color: theme.textPrimary, fontSize: '19px', fontWeight: '700' }}>{titulo}</h3>
         {descripcion && <p style={{ color: theme.textSecondary, fontSize: '13px', margin: '0 0 18px 0' }}>{descripcion}</p>}
 
-        {pedirActual && campo('Contraseña actual', actual, setActual, true)}
-        {campo('Contraseña nueva (mínimo 6 caracteres)', nueva, setNueva, !pedirActual)}
+        {campo(etiquetaActual, actual, setActual, true)}
+        {campo('Contraseña nueva (mínimo 6 caracteres)', nueva, setNueva, false)}
         {campo('Confirmar contraseña nueva', confirmar, setConfirmar, false)}
 
         <button type="button" onClick={() => setMostrar(!mostrar)} style={{ background: 'transparent', border: 'none', color: theme.textSecondary, fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: 0, marginBottom: '14px' }}>

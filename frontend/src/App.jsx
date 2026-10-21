@@ -600,7 +600,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
         navegador.auth = true;
         crearGuardiaHistorial();
         // Presentación de bienvenida (se va sola)
-        setBienvenida({ nombre: (res.data.user?.nombre_mostrar || res.data.user?.username || '').split(' ')[0], saliendo: false });
+        setBienvenida({ nombre: (res.data.user?.nombre_mostrar || res.data.user?.username || '').trim(), genero: res.data.user?.genero || '', saliendo: false });
         setTimeout(() => {
           setBienvenida((b) => (b ? { ...b, saliendo: true } : b));
           setAnimarEntrada(true); // el sistema entra mientras se desvanece la bienvenida
@@ -855,7 +855,7 @@ const handlePreviewExcel = async (file) => {
   // --- Contraseñas y estado de usuarios ---
   const handleGuardarPassword = async (actual, nueva) => {
     if (modalPassword?.modo === 'reset') {
-      await api.post(`/admin/usuarios/${modalPassword.usuario.id}/password`, { password_nueva: nueva });
+      await api.post(`/admin/usuarios/${modalPassword.usuario.id}/password`, { password_actual: actual, password_nueva: nueva });
       avisar.exito(`Contraseña de ${modalPassword.usuario.username} actualizada. Sus sesiones abiertas se cerraron.`);
     } else {
       await api.post('/auth/cambiar-password', { password_actual: actual, password_nueva: nueva });
@@ -2255,7 +2255,7 @@ const cambiarEstado = async (ids, estado) => {
 
       {/* PRESENTACIÓN DESPUÉS DE INICIAR SESIÓN */}
       {isAuthenticated && bienvenida && (
-        <PantallaCarga isDarkMode={isDarkMode} nombre={bienvenida.nombre} saliendo={bienvenida.saliendo} />
+        <PantallaCarga isDarkMode={isDarkMode} nombre={bienvenida.nombre} genero={bienvenida.genero} saliendo={bienvenida.saliendo} />
       )}
 
       {/* VISTA PREVIA FLOTANTE */}
@@ -2278,9 +2278,9 @@ const cambiarEstado = async (ids, estado) => {
         <ModalPassword
           titulo={modalPassword.modo === 'reset' ? `Nueva contraseña para ${modalPassword.usuario.username}` : 'Cambiar mi contraseña'}
           descripcion={modalPassword.modo === 'reset'
-            ? 'El usuario deberá entrar con esta contraseña. Sus sesiones abiertas se cerrarán.'
+            ? 'Para confirmar, escribe tu contraseña de administrador. El usuario deberá entrar con la nueva contraseña y sus sesiones abiertas se cerrarán.'
             : 'Por seguridad, se cerrará tu sesión en otras computadoras.'}
-          pedirActual={modalPassword.modo !== 'reset'}
+          etiquetaActual={modalPassword.modo === 'reset' ? 'Tu contraseña actual (de administrador)' : 'Contraseña actual'}
           onCancelar={() => setModalPassword(null)}
           onGuardar={handleGuardarPassword}
         />

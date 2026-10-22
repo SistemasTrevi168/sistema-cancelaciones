@@ -25,7 +25,7 @@ DURACION_SESION = timedelta(hours=24)
 INACTIVIDAD_SEGUNDOS = int(os.getenv("INACTIVIDAD_SEGUNDOS", "900"))  # 15 minutos
 # Funciones que tiene esta versión del servidor: la pantalla solo muestra las que el servidor ya sabe hacer
 # (así, si la pantalla se publica antes que el servidor, no aparecen botones que todavía no funcionarían)
-FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario"]
+FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir"]
 GRACIA_SEGUNDOS = int(os.getenv("GRACIA_SEGUNDOS", "45"))
 
 # Por qué se cerró una sesión (para avisarle al otro dispositivo). Se guarda en memoria unas horas.
@@ -268,7 +268,8 @@ def login(data: LoginRequest, response: Response, request: Request, db: Session 
         raise HTTPException(status_code=403, detail="Tu usuario está desactivado. Contacta al administrador.")
 
     es_administrador = bool(getattr(user, "es_admin", False)) or getattr(user, "role", "") == "admin"
-    rol_nombre = "admin" if es_administrador else getattr(user, "role", "operador")
+    rol_usuario = (getattr(user, "rol", None) or "").strip().lower()
+    rol_nombre = "admin" if es_administrador else (rol_usuario if rol_usuario in ("operador", "revisor") else "operador")
 
     # Limpieza de sesiones vencidas
     db.query(Sesion).filter(Sesion.expira_en < _ahora()).delete(synchronize_session=False)

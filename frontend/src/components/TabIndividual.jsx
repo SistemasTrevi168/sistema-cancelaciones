@@ -92,8 +92,8 @@ export default function TabIndividual() {
         edicion={edicionSingle}
         onSubirDocumentos={edicionSingle ? volverADocumentos : null}
         accionesExtra={edicionSingle ? (
-          <button type="button" onClick={salirEdicionSingle} className="boton-barra" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }} title="Regresar a Mi Historial">
-            <ArrowLeft size={15} color={theme.accent} /> Mi Historial
+          <button type="button" onClick={salirEdicionSingle} className="boton-barra" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }} title={edicionSingle.origen === 'compartidos' ? 'Regresar a Compartidos conmigo' : 'Regresar a Mi Historial'}>
+            <ArrowLeft size={15} color={theme.accent} /> {edicionSingle.origen === 'compartidos' ? 'Compartidos' : 'Mi Historial'}
           </button>
         ) : (
           <button type="button" onClick={nuevoExpedienteSingle} className="boton-barra" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }} title="Subir los documentos de otro expediente">

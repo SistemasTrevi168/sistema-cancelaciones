@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  BarChart3, ChevronRight, Edit3, FileSpreadsheet, FileText, FolderPlus, History, LayoutGrid, LogOut, Moon, Sun, UserCog, Users, X,
+  BarChart3, ChevronRight, Edit3, FileSpreadsheet, FileText, FolderPlus, History, Inbox, LayoutGrid, LogOut, Moon, Sun, UserCog, Users, X,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
@@ -16,7 +16,12 @@ const PRINCIPALES = [
   { id: 'manual', nombre: 'Manual', icono: Edit3 },
   { id: 'history', nombre: 'Historial', icono: History },
 ];
+// Usuario de revisión: solo ve los expedientes que le comparten
+const PRINCIPALES_REVISOR = [
+  { id: 'compartidos', nombre: 'Compartidos', icono: Inbox },
+];
 const MAS = [
+  { id: 'compartidos', nombre: 'Compartidos conmigo', detalle: 'Expedientes que otras personas te compartieron', icono: Inbox, compartidos: true },
   { id: 'excel', nombre: 'Carga Excel / Lote', detalle: 'Generar varios expedientes desde un Excel', icono: FileSpreadsheet },
   { id: 'kpis', nombre: 'Reportes por Persona', detalle: 'Rendimiento de cada usuario', icono: BarChart3, admin: true },
   { id: 'users', nombre: 'Usuarios', detalle: 'Altas, contraseñas y permisos', icono: Users, admin: true },
@@ -27,13 +32,14 @@ const TITULOS_PESTANA = {
   manual: 'Captura Manual',
   excel: 'Carga Excel / Lote',
   history: 'Mi Historial',
+  compartidos: 'Compartidos conmigo',
   kpis: 'Reportes por Persona',
   users: 'Usuarios',
   perfil: 'Mi perfil',
 };
 
 export default function NavegacionMovil() {
-  const { theme, isDarkMode, toggleTheme, activeTab, setActiveTab, currentUser, esAdmin, setShowLogoutModal } = useApp();
+  const { theme, isDarkMode, toggleTheme, activeTab, setActiveTab, currentUser, esAdmin, esRevisor, hayCompartidos, setShowLogoutModal } = useApp();
   const [cuenta, setCuenta] = useState(false);
   const [mas, setMas] = useState(false);
   const botonCuenta = useRef(null);
@@ -69,7 +75,8 @@ export default function NavegacionMovil() {
     else setArrastre(0);
   };
 
-  const masVisibles = MAS.filter((m) => !m.admin || esAdmin);
+  const masVisibles = esRevisor ? [] : MAS.filter((m) => (!m.admin || esAdmin) && (!m.compartidos || hayCompartidos));
+  const principales = esRevisor ? PRINCIPALES_REVISOR : PRINCIPALES;
   const enMas = masVisibles.some((m) => m.id === activeTab);
 
   useEffect(() => {
@@ -88,7 +95,7 @@ export default function NavegacionMovil() {
     window.scrollTo({ top: 0 });
   };
   const nombre = currentUser?.nombre_mostrar || currentUser?.username || '';
-  const rol = currentUser?.es_admin || currentUser?.role === 'admin' ? 'Administrador' : 'Operador';
+  const rol = currentUser?.es_admin || currentUser?.role === 'admin' ? 'Administrador' : (currentUser?.role === 'revisor' ? 'Revisor' : 'Operador');
   const superficie = { backgroundColor: theme.cardBg, borderColor: theme.border, color: theme.textPrimary };
 
   return (
@@ -181,7 +188,7 @@ export default function NavegacionMovil() {
 
           {/* BARRA DE PESTAÑAS (abajo) */}
           <nav className="pestanas-movil" aria-label="Secciones" style={superficie}>
-            {PRINCIPALES.map((p) => {
+            {principales.map((p) => {
               const Icono = p.icono;
               const activa = activeTab === p.id;
               return (
@@ -192,11 +199,11 @@ export default function NavegacionMovil() {
                 </button>
               );
             })}
-            <button type="button" onClick={() => { if (mas) cerrarMas(); else { setArrastre(0); setMas(true); } setCuenta(false); }} aria-expanded={mas}
+            {masVisibles.length > 0 && <button type="button" onClick={() => { if (mas) cerrarMas(); else { setArrastre(0); setMas(true); } setCuenta(false); }} aria-expanded={mas}
               className={enMas || mas ? 'activa' : ''} style={{ color: enMas || mas ? theme.accent : theme.textSecondary }}>
               <span className="pestana-icono" style={enMas || mas ? { backgroundColor: `${theme.accent}1f` } : undefined}><LayoutGrid size={21} /></span>
               <span>Más</span>
-            </button>
+            </button>}
           </nav>
         </div>,
         document.body,

@@ -21,6 +21,7 @@ import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla }
 import Sidebar from './components/Sidebar';
 import TabExcel from './components/TabExcel';
 import TabHistorial from './components/TabHistorial';
+import ModalCompartir from './components/ModalCompartir';
 import TabIndividual from './components/TabIndividual';
 import TabManual from './components/TabManual';
 import TabMasivo from './components/TabMasivo';
@@ -230,6 +231,9 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     setFuncionesServidor((prev) => (prev.join('|') === nuevas.join('|') ? prev : nuevas));
   };
   const puedeServidor = (funcion) => funcionesServidor.includes(funcion);
+  // Compartir expedientes: ventana abierta ({ ids } o { todos }) y si a esta persona le compartieron algo
+  const [modalCompartir, setModalCompartir] = useState(null);
+  const [hayCompartidos, setHayCompartidos] = useState(false);
   // Ventana de contraseña: null, { modo: 'propio' } o { modo: 'reset', usuario }
   const [modalPassword, setModalPassword] = useState(null);
   // Evitan doble clic mientras se descarga o guarda algo
@@ -378,7 +382,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
 
   useEffect(() => {
     if (isAuthenticated) {
-      if (activeTab === 'history') cargarHistorialUsuario();
+      if (activeTab === 'history' || activeTab === 'compartidos') cargarHistorialUsuario(activeTab);
       if (activeTab === 'users' && (currentUser?.es_admin || currentUser?.role === 'admin')) cargarUsuarios();
       if (activeTab === 'templates' && (currentUser?.es_admin || currentUser?.role === 'admin')) cargarPlantillas();
     }
@@ -673,7 +677,8 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setLoginPassword('');
       setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]);
       setBatchResults([]);
-      setHistorial([]);
+      setHistorial([]); fuenteHistorial.current = '';
+      setModalCompartir(null); setHayCompartidos(false);
 
       // Al cerrar la sesión (a mano o por inactividad) se quita todo lo cargado: nada queda para el siguiente que entre
       setCartaSingle(null); setConstanciaSingle(null); setCarta2Single(null); setCoacManual(false);
@@ -699,13 +704,19 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     }
   };
 
-  const cargarHistorialUsuario = async () => {
+  const fuenteHistorial = useRef('');
+  const cargarHistorialUsuario = async (pestana = activeTab) => {
     setCargandoHistorial(true);
+    // «Compartidos conmigo» usa la misma tabla que Mi Historial, con otra lista
+    const fuente = pestana === 'compartidos' ? 'compartidos' : 'history';
+    if (fuenteHistorial.current !== fuente) { setHistorial([]); fuenteHistorial.current = fuente; }
     try {
-      const res = await api.get('/expedientes', {
-        params: { usuario: currentUser.username }
-      });
+      const res = fuente === 'compartidos'
+        ? await api.get('/compartidos')
+        : await api.get('/expedientes', { params: { usuario: currentUser.username } });
+      if (fuenteHistorial.current !== fuente) return; // se cambió de pestaña mientras cargaba
       setHistorial(res.data || []);
+      if (fuente === 'compartidos') setHayCompartidos((res.data || []).length > 0);
     } catch (err) {
       console.error('Error al cargar historial:', err);
       avisar.error('No se pudo cargar el historial.');
@@ -824,7 +835,8 @@ const handlePreviewExcel = async (file) => {
       const formDataObj = new FormData();
       formDataObj.append('username', nuevoUsuario.username);
       formDataObj.append('password', nuevoUsuario.password);
-      formDataObj.append('es_admin', nuevoUsuario.es_admin);
+      formDataObj.append('es_admin', nuevoUsuario.role === 'admin');
+      formDataObj.append('rol', nuevoUsuario.role || 'operador');
 
       await api.post('/admin/usuarios', formDataObj);
       setNuevoUsuario({ username: '', password: '', role: 'operador', es_admin: false });
@@ -931,19 +943,24 @@ const handlePreviewExcel = async (file) => {
     }
   };
 
-  const handleCambiarRol = async (usuario) => {
-    const darAdmin = !usuario.es_admin;
+  const handleCambiarRol = async (usuario, nuevo) => {
+    const ROL_TXT = { admin: 'Administrador', operador: 'Operador', revisor: 'Revisor' };
+    const antes = usuario.rol || (usuario.es_admin ? 'admin' : 'operador');
+    if (!nuevo || nuevo === antes) return;
     const nombre = usuario.nombre_mostrar || usuario.username;
-    const pregunta = darAdmin
-      ? `¿Dar permisos de administrador a ${nombre}? Podrá ver Usuarios, Reportes y Respaldos, y administrar cuentas.`
-      : `¿Quitar los permisos de administrador a ${nombre}? Quedará como operador. Si tiene la sesión abierta, tendrá que volver a entrar.`;
-    if (!(await confirmar(pregunta, { titulo: darAdmin ? 'Hacer administrador' : 'Quitar permisos de administrador', textoConfirmar: darAdmin ? 'Sí, hacer administrador' : 'Sí, dejar como operador', peligro: darAdmin }))) return;
+    const que = {
+      admin: 'Podrá ver Usuarios, Reportes y Respaldos, y administrar cuentas.',
+      operador: 'Podrá hacer expedientes (Caso Individual, Carga Masiva, etc.) y compartirlos.',
+      revisor: 'Solo verá los expedientes que le compartan, para revisarlos, editarlos, cambiar su estado y descargarlos. Ya no podrá hacer expedientes nuevos.',
+    }[nuevo];
+    if (!(await confirmar(`¿Cambiar a ${nombre} de ${ROL_TXT[antes]} a ${ROL_TXT[nuevo]}?\n\n${que}\n\nSi tiene la sesión abierta, tendrá que volver a entrar.`,
+      { titulo: 'Cambiar tipo de usuario', textoConfirmar: `Sí, hacerlo ${ROL_TXT[nuevo]}`, peligro: nuevo === 'admin' }))) return;
     try {
-      const r = await api.put(`/admin/usuarios/${usuario.id}/rol`, { es_admin: darAdmin });
-      avisar.exito(r.data?.mensaje || 'Permisos actualizados.');
+      const r = await api.put(`/admin/usuarios/${usuario.id}/rol`, { rol: nuevo, es_admin: nuevo === 'admin' });
+      avisar.exito(r.data?.mensaje || 'Tipo de usuario actualizado.');
       cargarUsuarios();
     } catch (err) {
-      avisar.error(err.response?.status === 404 ? 'El servidor todavía no tiene esta función (falta publicar la versión nueva).' : (err.response?.data?.detail || 'No se pudieron cambiar los permisos.'));
+      avisar.error(err.response?.status === 404 ? 'El servidor todavía no tiene esta función (falta publicar la versión nueva).' : (err.response?.data?.detail || 'No se pudo cambiar el tipo de usuario.'));
     }
   };
 
@@ -1888,6 +1905,24 @@ const handleExcelSubmit = async (e) => {
   const formatLabel = (key) => etiquetaDe(key);
 
   const esAdmin = currentUser?.es_admin || currentUser?.role === 'admin';
+  // Usuario de revisión: no hace expedientes, solo revisa/edita/descarga los que le comparten
+  const esRevisor = !esAdmin && currentUser?.role === 'revisor';
+  const puedeCompartir = puedeServidor('compartir') && !esRevisor;
+  const abrirCompartir = (opciones) => setModalCompartir(opciones || null);
+  const PESTANAS_OPERADOR = ['single', 'batch', 'manual', 'excel', 'history', 'users', 'kpis', 'templates'];
+
+  // Al entrar: ¿le han compartido algo? (para mostrar «Compartidos conmigo» en el menú)
+  useEffect(() => {
+    if (!isAuthenticated || !puedeServidor('compartir')) return undefined;
+    let vivo = true;
+    api.get('/compartidos').then((r) => { if (vivo) setHayCompartidos((r.data || []).length > 0); }).catch(() => {});
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, currentUser?.username, funcionesServidor]);
+
+  // El revisor solo ve «Compartidos conmigo» (y Caso Individual mientras edita uno)
+  // (se ajusta durante el render, antes de dibujar la pestaña que no le corresponde)
+  if (esRevisor && PESTANAS_OPERADOR.includes(activeTab) && !(activeTab === 'single' && edicionSingle)) setActiveTab('compartidos');
   // --- CÁLCULOS DINÁMICOS DE FECHAS, SEMANAS Y DÍAS DEL MES ---
   const getWeekOfMonth = (date) => {
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -2107,6 +2142,7 @@ const cambiarEstado = async (ids, estado) => {
     limpiarSingle();
     setEdicionSingle({
       id,
+      origen: activeTab === 'compartidos' ? 'compartidos' : 'history',
       nombre: d.nombre_acreditado || item.acreditado || 'Expediente',
       credito: d.numero_credito || item.numero_credito || '',
       estado: item.estado || 'GENERADO',
@@ -2137,8 +2173,9 @@ const cambiarEstado = async (ids, estado) => {
   // Salir de la edición y regresar a Mi Historial
   const salirEdicionSingle = async () => {
     if (pendienteSingle() && !(await confirmar('Los cambios que hiciste no se han guardado y se perderán.', { titulo: '¿Salir sin guardar?', textoConfirmar: 'Salir sin guardar', peligro: true }))) return;
+    const origen = edicionSingle?.origen || 'history';
     limpiarSingle();
-    cambiarPestana('history');
+    cambiarPestana(origen);
   };
 
   // Coacreditados: ya leído el expediente, se agrega la carta del trabajador dos y se vuelve a leer
@@ -2345,6 +2382,10 @@ const cambiarEstado = async (ids, estado) => {
     handleConfirmLogout,
     handleCrearUsuario,
     handleDownloadWord,
+    esRevisor,
+    puedeCompartir,
+    abrirCompartir,
+    hayCompartidos,
     plantillaGuardada,
     handleDownloadZip,
     handleDragOver,
@@ -2478,6 +2519,7 @@ const cambiarEstado = async (ids, estado) => {
               {activeTab === 'manual' && <TabManual />}
               {activeTab === 'excel' && <TabExcel />}
               {activeTab === 'history' && <TabHistorial />}
+              {activeTab === 'compartidos' && <TabHistorial />}
               {activeTab === 'users' && esAdmin && <TabUsuarios />}
               {activeTab === 'kpis' && esAdmin && <TabKpis />}
               {activeTab === 'perfil' && <TabPerfil />}
@@ -2490,6 +2532,10 @@ const cambiarEstado = async (ids, estado) => {
 
       {/* MODAL DE CIERRE DE SESIÓN */}
       {showLogoutModal && <LogoutModal />}
+      {modalCompartir && (
+        <ModalCompartir {...modalCompartir} onCerrar={() => setModalCompartir(null)}
+          onListo={() => { modalCompartir.onListo?.(); if (activeTab === 'history') cargarHistorialUsuario('history'); }} />
+      )}
 
       {/* PRESENTACIÓN DESPUÉS DE INICIAR SESIÓN */}
       {isAuthenticated && bienvenida && (

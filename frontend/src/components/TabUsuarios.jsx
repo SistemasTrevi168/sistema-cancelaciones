@@ -1,4 +1,12 @@
-import { KeyRound, Loader2, Plus, Power, ShieldCheck, ShieldOff, Trash2, Users } from 'lucide-react';
+import { Eye, KeyRound, Loader2, Plus, Power, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react';
+import Selector from './Selector';
+
+// Tipos de usuario: el operador hace expedientes y los comparte; el revisor solo revisa los que le comparten
+const TIPOS_USUARIO = [
+  { id: 'operador', nombre: 'Operador', detalle: 'Hace expedientes y los comparte', icono: UserCog },
+  { id: 'revisor', nombre: 'Revisor', detalle: 'Solo revisa, edita y descarga los que le comparten', icono: Eye },
+  { id: 'admin', nombre: 'Administrador', detalle: 'Todo, más usuarios, reportes y respaldos', icono: ShieldCheck },
+];
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
 import PanelRespaldos from './PanelRespaldos';
@@ -50,14 +58,22 @@ export default function TabUsuarios() {
                     />
                   </div>
 
-                  <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input
-                      type="checkbox"
-                      id="es_admin_cb"
-                      checked={nuevoUsuario.es_admin}
-                      onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, es_admin: e.target.checked, role: e.target.checked ? 'admin' : 'operador' })}
-                    />
-                    <label htmlFor="es_admin_cb" style={{ fontSize: '13px', color: theme.textPrimary, cursor: 'pointer' }}>Es Administrador</label>
+                  <div style={{ marginBottom: '20px' }}>
+                    <span style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: theme.textSecondary, marginBottom: '6px' }}>Tipo de usuario</span>
+                    <div className="tipos-usuario" role="radiogroup" aria-label="Tipo de usuario">
+                      {TIPOS_USUARIO.map((tu) => {
+                        const activo = (nuevoUsuario.role || 'operador') === tu.id;
+                        const Icono = tu.icono;
+                        return (
+                          <button key={tu.id} type="button" role="radio" aria-checked={activo} className={`tipo-usuario ${activo ? 'activo' : ''}`}
+                            onClick={() => setNuevoUsuario({ ...nuevoUsuario, role: tu.id, es_admin: tu.id === 'admin' })}
+                            style={{ borderColor: activo ? theme.accent : theme.border, backgroundColor: activo ? `${theme.accent}12` : theme.inputBg, color: theme.textPrimary }}>
+                            <Icono size={16} color={activo ? theme.accent : theme.textSecondary} />
+                            <span><strong>{tu.nombre}</strong><small style={{ color: theme.textSecondary }}>{tu.detalle}</small></span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <button
@@ -108,7 +124,15 @@ export default function TabUsuarios() {
                                 </span>
                               </span>
                             </td>
-                            <td data-etiqueta="Rol" style={{ padding: '10px', color: theme.textSecondary }}>{esUsuarioAdmin ? 'Administrador' : 'Operador'}</td>
+                            <td data-etiqueta="Rol" style={{ padding: '10px', color: theme.textSecondary }}>
+                              {esYo || u.username === 'admin' ? (esUsuarioAdmin ? 'Administrador' : (u.rol === 'revisor' ? 'Revisor' : 'Operador')) : (
+                                <Selector value={u.rol || (esUsuarioAdmin ? 'admin' : 'operador')} onChange={(e) => handleCambiarRol(u, e.target.value)}
+                                  className="selector-rol" aria-label={`Tipo de usuario de ${u.username}`}
+                                  style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '12px', padding: '5px 8px', cursor: 'pointer' }}>
+                                  {TIPOS_USUARIO.map((tu) => <option key={tu.id} value={tu.id}>{tu.nombre}</option>)}
+                                </Selector>
+                              )}
+                            </td>
                             <td data-etiqueta="Estado" style={{ padding: '10px' }}>
                               <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '999px', backgroundColor: activo ? '#dcfce7' : '#f1f5f9', color: activo ? '#166534' : '#475569' }}>
                                 {activo ? 'Activo' : 'Inactivo'}
@@ -118,11 +142,6 @@ export default function TabUsuarios() {
                               {!esYo && (
                                 <button type="button" onClick={() => setModalPassword({ modo: 'reset', usuario: u })} style={{ ...btnIcono, color: theme.accent }} title="Asignar nueva contraseña">
                                   <KeyRound size={16} />
-                                </button>
-                              )}
-                              {!esYo && u.username !== 'admin' && (
-                                <button type="button" onClick={() => handleCambiarRol(u)} style={{ ...btnIcono, color: u.es_admin ? '#7c3aed' : theme.textSecondary }} title={u.es_admin ? 'Quitar permisos de administrador' : 'Hacer administrador'}>
-                                  {u.es_admin ? <ShieldOff size={16} /> : <ShieldCheck size={16} />}
                                 </button>
                               )}
                               {!esUsuarioAdmin && !esYo && (

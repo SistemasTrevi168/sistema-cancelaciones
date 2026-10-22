@@ -19,6 +19,9 @@ class Usuario(Base):
     foto = Column(Text, nullable=True)            # imagen recortada (data:image/jpeg;base64,...)
     color_acento = Column(String, nullable=True)  # color del sistema elegido por el usuario (#rrggbb)
     tema = Column(String, nullable=True)          # claro / oscuro / sistema
+    # Tipo de usuario (además de es_admin): "operador" (hace expedientes) o "revisor"
+    # (solo revisa, edita, cambia el estado y descarga los expedientes que le comparten)
+    rol = Column(String, nullable=True)
 
 class Expediente(Base):
     __tablename__ = "expedientes"
@@ -94,3 +97,20 @@ class Respaldo(Base):
     creado_por = Column(String, nullable=True)
     tamano = Column(Integer, nullable=True)
     contenido = Column(LargeBinary, nullable=False)
+
+
+class Compartido(Base):
+    """
+    Acceso a expedientes de otra persona.
+    - expediente_id con valor: ese expediente en particular.
+    - todos=True (expediente_id vacío): TODOS los expedientes del propietario, también los que haga después.
+    """
+    __tablename__ = "compartidos"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    propietario = Column(String, index=True, nullable=False)   # quién hizo los expedientes
+    con_usuario = Column(String, index=True, nullable=False)   # a quién se le da acceso
+    expediente_id = Column(String, index=True, nullable=True)
+    todos = Column(Boolean, nullable=False, default=False)
+    creado_por = Column(String, nullable=True)
+    creado_en = Column(DateTime(timezone=True), server_default=func.now())

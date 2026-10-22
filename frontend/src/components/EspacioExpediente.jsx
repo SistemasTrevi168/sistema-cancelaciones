@@ -75,7 +75,7 @@ export default function EspacioExpediente({
               {guardado
                 ? <span className="chip-dato chip-ok" title="Ya está en Mi Historial"><CheckCircle size={12} /> {edicion ? 'Cambios guardados' : 'Guardado'}</span>
                 : edicion
-                  ? <span className="chip-dato chip-borrador chip-edicion" title="Al guardar se actualiza este expediente en Mi Historial"><PencilLine size={12} /> Editando · guardado en Mi Historial</span>
+                  ? <span className="chip-dato chip-borrador chip-edicion" title="Al guardar se actualiza este expediente en Mi Historial"><PencilLine size={12} /> {edicion.origen === 'compartidos' ? 'Editando · compartido contigo' : 'Editando · guardado en Mi Historial'}</span>
                   : <span className="chip-dato chip-borrador" title="Todavía no se guarda en la base: revisa y corrige, y después guárdalo"><PencilLine size={12} /> Borrador · sin guardar</span>}
               {credito && <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><Hash size={12} /> Crédito {credito}</span>}
               <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><FileText size={12} /> {archivos.length} PDF</span>

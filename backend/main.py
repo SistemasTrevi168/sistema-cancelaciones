@@ -27,6 +27,7 @@ import perfil
 import versiones
 import respaldos
 import reparaciones
+import compartir
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -40,7 +41,7 @@ models.Base.metadata.create_all(bind=engine)
 try:
     with engine.begin() as _conn:
         _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE"))
-        for _col in ("nombre_mostrar VARCHAR", "foto TEXT", "color_acento VARCHAR", "tema VARCHAR"):
+        for _col in ("nombre_mostrar VARCHAR", "foto TEXT", "color_acento VARCHAR", "tema VARCHAR", "rol VARCHAR"):
             _conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {_col}"))
         for _col in ("user_agent VARCHAR", "ip VARCHAR", "ultimo_uso TIMESTAMP WITH TIME ZONE"):
             _conn.execute(text(f"ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS {_col}"))
@@ -95,7 +96,7 @@ def obtener_expediente_autorizado(db: Session, expediente_id: str, usuario: dict
     if not expediente:
         raise HTTPException(status_code=404, detail="Expediente no encontrado")
 
-    if not es_admin(usuario) and expediente.usuario_propietario != usuario["username"]:
+    if not compartir.tiene_acceso(db, expediente, usuario):
         # Se responde 404 para no revelar que el expediente existe
         raise HTTPException(status_code=404, detail="Expediente no encontrado")
     return expediente
@@ -300,7 +301,7 @@ def descargar_zip(
                 continue 
             
             exp = db.query(models.Expediente).filter(models.Expediente.id == uuid_val).first()
-            if exp and not es_admin(usuario) and exp.usuario_propietario != usuario["username"]:
+            if exp and not compartir.tiene_acceso(db, exp, usuario):
                 continue
             if not exp:
                 continue
@@ -844,6 +845,7 @@ app.include_router(auth.router)
 app.include_router(kpis.router)
 app.include_router(perfil.router)
 app.include_router(respaldos.router)
+app.include_router(compartir.router)
 
 
 @app.on_event("startup")
@@ -975,9 +977,38 @@ def obtener_historial(
         query = query.filter(models.Expediente.usuario_propietario == usuario_activo)
 
     expedientes = query.order_by(models.Expediente.fecha_creacion.desc()).all()
-        
-    resultado = [renglon_historial(exp) for exp in expedientes]
+    accesos = compartir.resumen_por_expediente(db, expedientes)
+    nombres = {u.username: (u.nombre_mostrar or u.username) for u in db.query(models.Usuario).all()} if accesos else {}
+    resultado = []
+    for exp in expedientes:
+        fila = renglon_historial(exp)
+        gente = accesos.get(str(exp.id)) or []
+        fila["compartido_con"] = [{"usuario": u, "nombre": nombres.get(u, u)} for u in gente]
+        resultado.append(fila)
     return resultado
+
+
+@app.get("/api/compartidos")
+def expedientes_compartidos_conmigo(db: Session = Depends(get_db), sesion: dict = Depends(require_user)):
+    """Expedientes de otras personas que me compartieron (para revisar, editar, cambiar estado y descargar)."""
+    condicion = compartir.filtro_compartidos_con(db, sesion["username"])
+    if condicion is None:
+        return []
+    expedientes = (db.query(models.Expediente).filter(condicion, models.Expediente.usuario_propietario != sesion["username"])
+                   .order_by(models.Expediente.fecha_creacion.desc()).all())
+    nombres = {u.username: (u.nombre_mostrar or u.username) for u in db.query(models.Usuario).all()}
+    resultado = []
+    for exp in expedientes:
+        fila = renglon_historial(exp)
+        fila["compartido_por"] = nombres.get(exp.usuario_propietario, exp.usuario_propietario)
+        resultado.append(fila)
+    return resultado
+
+
+def solo_operadores(sesion: dict):
+    """Los usuarios de revisión no crean expedientes: solo revisan los que les comparten."""
+    if compartir.es_revisor(sesion):
+        raise HTTPException(status_code=403, detail="Tu usuario es de revisión: solo puedes revisar, editar y descargar los expedientes que te comparten.")
 
 
 @app.post("/api/expedientes/procesar")
@@ -988,6 +1019,7 @@ def procesar_documento(
     db: Session = Depends(get_db),
     sesion: dict = Depends(require_user)
 ):
+    solo_operadores(sesion)
     try:
         # El propietario siempre es el usuario de la sesión
         propietario_final = sesion["username"]
@@ -1052,6 +1084,7 @@ def procesar_masivo(
     db: Session = Depends(get_db),
     sesion: dict = Depends(require_user)
 ):
+    solo_operadores(sesion)
     try:
         propietario_final = sesion["username"]
 
@@ -1500,6 +1533,8 @@ def guardar_expedientes(
     Guarda en la base los expedientes ya revisados y genera su Word.
     payload: {"expedientes": [{"ref", "datos", "plantilla", "archivos"}]}
     """
+    if compartir.es_revisor(sesion) and any(not it.get("actualizar") for it in (payload.get("expedientes") or [])):
+        solo_operadores(sesion)
     resultados = []
     for item in payload.get("expedientes") or []:
         ref = item.get("ref")
@@ -1900,7 +1935,8 @@ def bitacora_expediente(
         "usuario": a.username,
         "nombre_usuario": nombres.get(a.username, a.username),
         "fecha": a.creado_en.isoformat() if a.creado_en else None,
-        "detalle": a.detalle or {},
+        "detalle": ({**a.detalle, "con_nombres": [nombres.get(u, u) for u in (a.detalle.get("con") or [])]}
+                    if a.tipo in ("compartir", "quitar_acceso") and isinstance(a.detalle, dict) else (a.detalle or {})),
     } for a in filas]
     if not any(e["tipo"] in ("guardar", "manual", "excel") for e in eventos):
         # Expedientes de antes de la bitácora: al menos se muestra cuándo y quién lo creó
@@ -1931,6 +1967,7 @@ def obtener_usuarios(db: Session = Depends(get_db), admin: dict = Depends(requir
         {
             "id": str(u.id),
             "expedientes": int(conteo.get(u.username, 0)),
+            "rol": compartir.rol_de(u),
             "username": u.username,
             "es_admin": u.es_admin,
             "creado_en": u.creado_en.isoformat() if hasattr(u, "creado_en") and u.creado_en else None,
@@ -1947,9 +1984,13 @@ def crear_usuario_admin(
     username: str = Form(...),
     password: str = Form(...),
     es_admin: bool = Form(False),
+    rol: str = Form(""),
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin)
 ):
+    rol = (rol or "").strip().lower()
+    if rol == "admin":
+        es_admin = True
     usuario_existente = db.query(models.Usuario).filter(models.Usuario.username == username).first()
     if usuario_existente:
         raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
@@ -1960,7 +2001,8 @@ def crear_usuario_admin(
     nuevo_usuario = models.Usuario(
         username=username,
         password_hash=pass_hash,
-        es_admin=es_admin
+        es_admin=es_admin,
+        rol=None if es_admin else (rol if rol in compartir.ROLES else "operador"),
     )
     db.add(nuevo_usuario)
     db.commit()
@@ -2025,6 +2067,7 @@ def eliminar_usuario(
         # Su actividad (inicios de sesión, lecturas…) también se va, para que no cuente en los reportes
         db.query(models.Actividad).filter(models.Actividad.username == nombre_usuario).delete(synchronize_session=False)
         db.query(models.Sesion).filter(models.Sesion.username == nombre_usuario).delete(synchronize_session=False)
+        db.query(models.Compartido).filter((models.Compartido.propietario == nombre_usuario) | (models.Compartido.con_usuario == nombre_usuario)).delete(synchronize_session=False)
         db.delete(usuario)
         db.commit()
         print(f"--> {admin.get('username')} eliminó al usuario {nombre_usuario} con {len(ids)} expediente(s); respaldo previo #{respaldo_id}")
@@ -2107,7 +2150,8 @@ def cambiar_estado_usuario(
 
 
 class CambiarRolRequest(BaseModel):
-    es_admin: bool
+    es_admin: Optional[bool] = None
+    rol: Optional[str] = None   # admin / operador / revisor
 
 
 @app.put("/api/admin/usuarios/{usuario_id}/rol")
@@ -2117,23 +2161,28 @@ def cambiar_rol_usuario(
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin)
 ):
-    """Da o quita permisos de administrador. La cuenta principal «admin» y la propia no se pueden cambiar."""
+    """Cambia el tipo de usuario: administrador, operador o revisor. La cuenta «admin» y la propia no se cambian."""
     usuario = _buscar_usuario(db, usuario_id)
     if usuario.username == admin["username"]:
         raise HTTPException(status_code=400, detail="No puedes cambiar tus propios permisos.")
     if usuario.username.lower() == "admin":
         raise HTTPException(status_code=400, detail="La cuenta principal «admin» siempre es administrador.")
-    if bool(usuario.es_admin) == bool(data.es_admin):
-        return {"status": "exito", "mensaje": "Sin cambios.", "es_admin": bool(usuario.es_admin)}
-    usuario.es_admin = bool(data.es_admin)
-    if hasattr(usuario, "role"):
-        usuario.role = "admin" if data.es_admin else "operador"
+    nuevo = (data.rol or "").strip().lower()
+    if not nuevo:
+        nuevo = "admin" if data.es_admin else "operador"
+    if nuevo not in ("admin",) + compartir.ROLES:
+        raise HTTPException(status_code=400, detail="Tipo de usuario no válido.")
+    antes = compartir.rol_de(usuario)
+    if antes == nuevo:
+        return {"status": "exito", "mensaje": "Sin cambios.", "es_admin": bool(usuario.es_admin), "rol": antes}
+    usuario.es_admin = nuevo == "admin"
+    usuario.rol = None if nuevo == "admin" else nuevo
     # Sus sesiones abiertas tienen los permisos anteriores: se cierran para que entre con los nuevos
     auth.cerrar_sesiones_de(db, usuario.username)
     db.commit()
-    print(f"--> {admin['username']} {'dio' if data.es_admin else 'quitó'} permisos de administrador a {usuario.username}")
-    rol = "administrador" if data.es_admin else "operador"
-    return {"status": "exito", "mensaje": f"{usuario.username} ahora es {rol}.", "es_admin": bool(usuario.es_admin)}
+    nombres_rol = {"admin": "administrador", "operador": "operador", "revisor": "revisor"}
+    print(f"--> {admin['username']} cambió a {usuario.username} de {antes} a {nuevo}")
+    return {"status": "exito", "mensaje": f"{usuario.username} ahora es {nombres_rol[nuevo]}.", "es_admin": bool(usuario.es_admin), "rol": nuevo}
 
 
 @app.post("/api/admin/plantilla")
@@ -2187,6 +2236,7 @@ def generar_expediente_manual(
     db: Session = Depends(get_db),
     sesion: dict = Depends(require_user)
 ):
+    solo_operadores(sesion)
     try:
         usuario = sesion["username"]
         plantilla = payload.get("plantilla") or payload.get("plantilla_seleccionada") or "plantilla_manera2.docx"
@@ -2239,6 +2289,7 @@ def procesar_excel(
     db: Session = Depends(get_db),
     sesion: dict = Depends(require_user)
 ):
+    solo_operadores(sesion)
     try:
         import json
         usuario_propietario = sesion["username"]
@@ -2363,6 +2414,7 @@ def procesar_excel(
 
 @app.post("/api/expedientes/previsualizar-excel")
 def previsualizar_excel(file: UploadFile = File(...), sesion: dict = Depends(require_user)):
+    solo_operadores(sesion)
     try:
         if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
             raise HTTPException(status_code=400, detail="El archivo debe ser un Excel o CSV válido.")

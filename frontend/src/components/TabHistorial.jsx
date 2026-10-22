@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
-  ArrowUpDown, ChevronLeft, Pencil, ChevronRight, Download, Eye, Filter, History, ListChecks, Loader2, RefreshCw, Search, X,
+  ArrowUpDown, ChevronLeft, Pencil, ChevronRight, Download, Eye, Filter, History, Inbox, ListChecks, Loader2, RefreshCw, Search, Share2, Users, X,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
@@ -24,6 +24,9 @@ export default function TabHistorial() {
     handleDownloadWord,
     plantillaGuardada,
     iniciarEdicionSingle,
+    activeTab,
+    abrirCompartir,
+    puedeCompartir,
     handleExport,
     mesesNombres,
     parsearFechaExpediente,
@@ -71,6 +74,9 @@ export default function TabHistorial() {
     setPagina(Math.min(Math.max(1, n), totalPaginas));
     document.getElementById('tabla-historial-export')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+  // «Compartidos conmigo»: la misma lista, con los expedientes que otras personas me compartieron
+  const enCompartidos = activeTab === 'compartidos';
+  const nombresDe = (lista) => (lista || []).map((g) => g.nombre || g.usuario).join(', ');
   const marcarVarios = async (estado) => {
     if (await cambiarEstado(marcadosIds, estado)) setMarcados({});
   };
@@ -79,8 +85,16 @@ export default function TabHistorial() {
 <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
                 <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <History size={20} color={theme.accent} /> Historial de Expedientes
+                  {enCompartidos
+                    ? <><Inbox size={20} color={theme.accent} /> Compartidos conmigo</>
+                    : <><History size={20} color={theme.accent} /> Historial de Expedientes</>}
                 </h2>
+                {!enCompartidos && puedeCompartir && (
+                  <button type="button" className="boton-barra" onClick={() => abrirCompartir({ todos: true })} title="Dar acceso a TODOS tus expedientes (también a los que hagas después)"
+                    style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+                    <Users size={15} color={theme.accent} /> Compartir todos mis expedientes
+                  </button>
+                )}
                 
                 <div className="historial-filtros" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                   {/* Búsqueda por texto */}
@@ -198,6 +212,11 @@ export default function TabHistorial() {
                       </button>
                     );
                   })}
+                  {!enCompartidos && puedeCompartir && (
+                    <button type="button" className="boton-barra boton-compartir" onClick={() => abrirCompartir({ ids: marcadosIds, onListo: () => setMarcados({}) })}>
+                      <Share2 size={14} /> Compartir ({marcadosIds.length})
+                    </button>
+                  )}
                   <button type="button" className="enlace-pequeno" onClick={() => setMarcados({})} style={{ marginLeft: 'auto' }}>Quitar marcas</button>
                 </div>
               )}
@@ -252,7 +271,9 @@ export default function TabHistorial() {
                 </div>
               ) : filteredHistorial.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: theme.textSecondary, fontSize: '14px' }}>
-                  No se encontraron expedientes con los criterios seleccionados.
+                  {enCompartidos && totalEstados === 0 && !searchQuery
+                    ? <><Inbox size={28} color={theme.accent} style={{ display: 'block', margin: '0 auto 8px' }} />Todavía nadie te ha compartido expedientes. Cuando te den acceso, aparecerán aquí.</>
+                    : 'No se encontraron expedientes con los criterios seleccionados.'}
                 </div>
               ) : (
                 <div id="tabla-historial-export" style={{ overflowX: 'auto', backgroundColor: theme.cardBg, padding: '8px', borderRadius: '8px' }}>
@@ -291,6 +312,17 @@ export default function TabHistorial() {
                             </td>
                             <td className="celda-titulo" style={{ padding: '12px', fontWeight: '600', color: theme.textPrimary }}>
                               {nombre}
+                              {enCompartidos && item.compartido_por && (
+                                <span className="chip-compartido-por" title={`${item.compartido_por} te compartió este expediente`}>
+                                  <Share2 size={11} /> de {item.compartido_por}
+                                </span>
+                              )}
+                              {!enCompartidos && item.compartido_con?.length > 0 && (
+                                <button type="button" className="chip-compartido" onClick={() => puedeCompartir && abrirCompartir({ ids: [idDe(item)], titulo: nombre })}
+                                  title={`Compartido con: ${nombresDe(item.compartido_con)}${puedeCompartir ? '\nClic para ver o quitar el acceso' : ''}`}>
+                                  <Users size={11} /> Compartido ({item.compartido_con.length})
+                                </button>
+                              )}
                               {item.plantilla_cambio && (
                                 <span className="chip-plantilla-cambio" title="La plantilla cambió después de generar este Word. Se sigue descargando con la versión original; en el historial de cambios puedes descargarlo con la plantilla actual.">
                                   <RefreshCw size={11} /> Plantilla actualizada

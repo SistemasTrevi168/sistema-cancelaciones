@@ -372,6 +372,82 @@ with cliente() as c_ed:
     chk("edición completa: queda como «editó» en su historial", "editar" in tipos, tipos)
     chk("edición completa: guarda la plantilla nueva", b.get("plantilla") == "EDOMEX_AP_M_SOLTERA", b.get("plantilla"))
 
+# ---- Compartir expedientes con usuarios de revisión
+with cliente() as c_sh:
+    def entrar_como(u, p):
+        tok = c_sh.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
+        c_sh.cookies.clear()  # cada petición va con su propio token (sin la cookie del último login)
+        return {"Authorization": "Bearer " + tok}
+    h_adm = entrar_como("admin", os.getenv("ADMIN_PASSWORD", "admin123"))
+    prov, rev, otro = f"proy_{SUF}", f"rev_{SUF}", f"otro_{SUF}"
+    c_sh.post("/api/admin/usuarios", data={"username": prov, "password": "Prueba2026!", "rol": "operador"}, headers=h_adm)
+    c_sh.post("/api/admin/usuarios", data={"username": rev, "password": "Prueba2026!", "rol": "revisor"}, headers=h_adm)
+    c_sh.post("/api/admin/usuarios", data={"username": otro, "password": "Prueba2026!"}, headers=h_adm)
+    lista_u = {u["username"]: u for u in c_sh.get("/api/admin/usuarios", headers=h_adm).json()}
+    chk("revisor: se crea con su tipo", lista_u[rev]["rol"] == "revisor" and lista_u[prov]["rol"] == "operador", lista_u[rev].get("rol"))
+    h_p = entrar_como(prov, "Prueba2026!")
+    ids = []
+    for i in range(3):
+        r = c_sh.post("/api/expedientes/guardar", headers=h_p, json={"expedientes": [{"ref": f"s{i}", "plantilla": "CDMX_AP_H_SOLTERO",
+            "datos": {"numero_credito": f"16{i}{SUF[:7]}".ljust(10, "1")[:10], "nombre_acreditado": f"COMPARTIDO {i}"}}]})
+        ids.append(r.json()["resultados"][0]["expediente_id"])
+    h_r = entrar_como(rev, "Prueba2026!")
+    chk("revisor: entra con rol revisor", c_sh.get("/api/auth/me", headers=h_r).json()["user"]["role"] == "revisor")
+    chk("revisor: sin compartir no ve nada", c_sh.get("/api/compartidos", headers=h_r).json() == [])
+    chk("revisor: no ve expedientes ajenos", c_sh.get(f"/api/expedientes/{ids[0]}/bitacora", headers=h_r).status_code == 404)
+    r = c_sh.post("/api/expedientes/guardar", headers=h_r, json={"expedientes": [{"ref": "x", "plantilla": "CDMX_AP_H_SOLTERO", "datos": {"numero_credito": "1234567890"}}]})
+    chk("revisor: no puede crear expedientes", r.status_code == 403, r.status_code)
+    r = c_sh.post("/api/expedientes/generar-manual", headers=h_r, json={"datos": {"numero_credito": "1234567890"}, "plantilla": "CDMX_AP_H_SOLTERO"})
+    chk("revisor: no puede usar captura manual", r.status_code == 403, r.status_code)
+    chk("revisor: no puede compartir", c_sh.get("/api/compartir/directorio", headers=h_r).status_code == 403)
+    dire = c_sh.get("/api/compartir/directorio", headers=h_p).json()
+    chk("directorio: aparece el revisor primero", dire and dire[0]["usuario"] == rev or any(d["usuario"] == rev for d in dire), str(dire)[:120])
+    # Compartir dos expedientes
+    r = c_sh.post("/api/compartir", headers=h_p, json={"ids": ids[:2], "usuarios": [rev]})
+    chk("compartir: dos expedientes", r.status_code == 200 and r.json()["nuevos"] == 2, r.text[:200])
+    vistos = {x["id"] for x in c_sh.get("/api/compartidos", headers=h_r).json()}
+    chk("compartidos: el revisor ve esos dos", vistos == set(ids[:2]), vistos)
+    chk("compartidos: no ve el tercero", c_sh.get(f"/api/expedientes/{ids[2]}/bitacora", headers=h_r).status_code == 404)
+    r = c_sh.put(f"/api/expedientes/{ids[0]}/estado", headers=h_r, json={"estado": "REVISADO"})
+    chk("revisor: cambia el estado", r.status_code == 200 and r.json()["estado"] == "REVISADO", r.text[:200])
+    r = c_sh.post(f"/api/expedientes/{ids[0]}/generar-word", headers=h_r, json={"datos": {}})
+    chk("revisor: descarga el Word", r.status_code == 200 and len(r.content) > 1000, r.status_code)
+    r = c_sh.post("/api/expedientes/guardar", headers=h_r, json={"expedientes": [{"ref": "e", "actualizar": ids[0], "tipo_edicion": "editar",
+        "plantilla": "CDMX_AP_H_SOLTERO", "datos": {"numero_credito": f"160{SUF[:7]}".ljust(10, "1")[:10], "nombre_acreditado": "COMPARTIDO EDITADO"}}]})
+    chk("revisor: edita un compartido", r.status_code == 200 and r.json().get("actualizados") == 1, r.text[:200])
+    from database import SessionLocal as _SL3  # noqa: E402
+    import models as _m3  # noqa: E402
+    _d3 = _SL3()
+    chk("compartido: sigue siendo de quien lo hizo", _d3.get(_m3.Expediente, uuid.UUID(ids[0])).usuario_propietario == prov)
+    _d3.close()
+    hist_p = {x["id"]: x for x in c_sh.get("/api/expedientes", headers=h_p).json()}
+    chk("Mi Historial: dice con quién está compartido", [g["usuario"] for g in hist_p[ids[0]]["compartido_con"]] == [rev], hist_p[ids[0]].get("compartido_con"))
+    acc = c_sh.get(f"/api/compartir/expediente/{ids[0]}", headers=h_p).json()
+    chk("accesos de un expediente", len(acc) == 1 and acc[0]["usuario"] == rev and acc[0]["directo"], acc)
+    tipos = [e["tipo"] for e in c_sh.get(f"/api/expedientes/{ids[0]}/bitacora", headers=h_p).json()["eventos"]]
+    chk("bitácora: compartir, estado y edición del revisor", "compartir" in tipos and "estado" in tipos and "editar" in tipos, tipos)
+    # Otro operador no puede compartir lo ajeno
+    h_o = entrar_como(otro, "Prueba2026!")
+    r = c_sh.post("/api/compartir", headers=h_o, json={"ids": ids, "usuarios": [rev]})
+    chk("compartir: nadie comparte expedientes ajenos", r.status_code == 400, r.status_code)
+    # Quitar acceso
+    c_sh.post("/api/compartir/quitar", headers=h_p, json={"ids": [ids[1]], "usuarios": [rev]})
+    vistos = {x["id"] for x in c_sh.get("/api/compartidos", headers=h_r).json()}
+    chk("quitar acceso: ya no lo ve", vistos == {ids[0]}, vistos)
+    # Compartir todo (incluye los futuros)
+    c_sh.post("/api/compartir", headers=h_p, json={"todos": True, "usuarios": [otro]})
+    r = c_sh.post("/api/expedientes/guardar", headers=h_p, json={"expedientes": [{"ref": "n", "plantilla": "CDMX_AP_H_SOLTERO",
+        "datos": {"numero_credito": f"169{SUF[:7]}".ljust(10, "1")[:10], "nombre_acreditado": "NUEVO DESPUES"}}]})
+    nuevo_id = r.json()["resultados"][0]["expediente_id"]
+    vistos_o = {x["id"] for x in c_sh.get("/api/compartidos", headers=h_o).json()}
+    chk("compartir todo: ve todos, también los nuevos", set(ids) | {nuevo_id} <= vistos_o, len(vistos_o))
+    chk("compartir todo: aparece en la lista", [x["usuario"] for x in c_sh.get("/api/compartir/todos", headers=h_p).json()] == [otro])
+    c_sh.post("/api/compartir/quitar", headers=h_p, json={"todos": True, "usuarios": [otro]})
+    chk("quitar todo: ya no ve nada", c_sh.get("/api/compartidos", headers=h_o).json() == [])
+    # Cambiar el tipo de usuario
+    r = c_sh.put(f"/api/admin/usuarios/{lista_u[rev]['id']}/rol", headers=h_adm, json={"rol": "operador"})
+    chk("tipo de usuario: revisor -> operador", r.status_code == 200 and r.json()["rol"] == "operador", r.text[:150])
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

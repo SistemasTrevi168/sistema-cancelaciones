@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
-  BarChart3, Edit3, FileSpreadsheet, UserCog, FileText, FolderPlus, History, LogOut, Moon, Sun, Users,
+  BarChart3, Edit3, FileSpreadsheet, UserCog, FileText, FolderPlus, History, Inbox, LogOut, Moon, Sun, Users,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
@@ -12,6 +12,8 @@ export default function Sidebar() {
     activeTab,
     currentUser,
     esAdmin,
+    esRevisor,
+    hayCompartidos,
     isDarkMode,
     setActiveTab,
     setShowLogoutModal,
@@ -79,6 +81,8 @@ export default function Sidebar() {
                     opacity: indicador.w ? 1 : 0,
                   }}
                 />
+                {!esRevisor && (
+                  <>
                 <button
                   onClick={() => setActiveTab('single')}
                   data-tab="single"
@@ -204,6 +208,38 @@ export default function Sidebar() {
                   <History size={18} /> Mi Historial
                 </button>
 
+                  </>
+                )}
+                {(esRevisor || hayCompartidos) && (
+                  <>
+                <button
+                  onClick={() => setActiveTab('compartidos')}
+                  data-tab="compartidos"
+                  aria-current={activeTab === 'compartidos' ? 'page' : undefined}
+                  className="nav-item"
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    backgroundColor: 'transparent',
+                    color: activeTab === 'compartidos' ? '#fff' : theme.textSecondary,
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    textAlign: 'left',
+                    transition: 'color 0.25s ease', position: 'relative', zIndex: 1
+                  }}
+                >
+                  <Inbox size={18} /> Compartidos conmigo
+                </button>
+
+                  </>
+                )}
+
                 {esAdmin && (
                   <>
                     <div style={{ height: '1px', backgroundColor: theme.border, margin: '12px 0' }} />
@@ -275,7 +311,7 @@ export default function Sidebar() {
                   <Avatar usuario={currentUser} tam={38} color={theme.accent} />
                   <span style={{ textAlign: 'left', minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: theme.textPrimary, maxWidth: '130px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentUser?.nombre_mostrar || currentUser?.username}</span>
-                    <span style={{ display: 'block', fontSize: '10px', color: theme.textSecondary, textTransform: 'uppercase' }}>{currentUser?.role || (currentUser?.es_admin ? 'admin' : 'operador')} · Mi perfil</span>
+                    <span style={{ display: 'block', fontSize: '10px', color: theme.textSecondary, textTransform: 'uppercase' }}>{currentUser?.es_admin ? 'admin' : (currentUser?.role || 'operador')} · Mi perfil</span>
                   </span>
                 </button>
                 <button

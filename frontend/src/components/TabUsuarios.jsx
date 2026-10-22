@@ -3,7 +3,7 @@ import Selector from './Selector';
 
 // Tipos de usuario: el operador hace expedientes y los comparte; el revisor solo revisa los que le comparten
 const TIPOS_USUARIO = [
-  { id: 'operador', nombre: 'Operador', detalle: 'Hace expedientes y los comparte', icono: UserCog },
+  { id: 'operador', nombre: 'Operador', detalle: 'Hace expedientes, los comparte y revisa los que le comparten', icono: UserCog },
   { id: 'revisor', nombre: 'Revisor', detalle: 'Solo revisa, edita y descarga los que le comparten', icono: Eye },
   { id: 'admin', nombre: 'Administrador', detalle: 'Todo, más usuarios, reportes y respaldos', icono: ShieldCheck },
 ];
@@ -61,7 +61,7 @@ export default function TabUsuarios() {
                   <div style={{ marginBottom: '20px' }}>
                     <span style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: theme.textSecondary, marginBottom: '6px' }}>Tipo de usuario</span>
                     <div className="tipos-usuario" role="radiogroup" aria-label="Tipo de usuario">
-                      {TIPOS_USUARIO.map((tu) => {
+                      {TIPOS_USUARIO.filter((tu) => tu.id !== 'revisor').map((tu) => {
                         const activo = (nuevoUsuario.role || 'operador') === tu.id;
                         const Icono = tu.icono;
                         return (
@@ -129,7 +129,7 @@ export default function TabUsuarios() {
                                 <Selector value={u.rol || (esUsuarioAdmin ? 'admin' : 'operador')} onChange={(e) => handleCambiarRol(u, e.target.value)}
                                   className="selector-rol" aria-label={`Tipo de usuario de ${u.username}`}
                                   style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '12px', padding: '5px 8px', cursor: 'pointer' }}>
-                                  {TIPOS_USUARIO.map((tu) => <option key={tu.id} value={tu.id}>{tu.nombre}</option>)}
+                                  {TIPOS_USUARIO.filter((tu) => tu.id !== 'revisor' || u.rol === 'revisor').map((tu) => <option key={tu.id} value={tu.id}>{tu.nombre}</option>)}
                                 </Selector>
                               )}
                             </td>

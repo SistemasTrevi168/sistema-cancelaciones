@@ -1908,6 +1908,9 @@ const handleExcelSubmit = async (e) => {
   // Usuario de revisión: no hace expedientes, solo revisa/edita/descarga los que le comparten
   const esRevisor = !esAdmin && currentUser?.role === 'revisor';
   const puedeCompartir = puedeServidor('compartir') && !esRevisor;
+  // «Compartidos conmigo» va en el menú de los operadores (y del revisor); el admin ya ve todo en Mi Historial.
+  // Si un admin tiene algo compartido de antes, también se le muestra.
+  const verCompartidos = puedeServidor('compartir') && (!esAdmin || hayCompartidos);
   const abrirCompartir = (opciones) => setModalCompartir(opciones || null);
   const PESTANAS_OPERADOR = ['single', 'batch', 'manual', 'excel', 'history', 'users', 'kpis', 'templates'];
 
@@ -2386,6 +2389,7 @@ const cambiarEstado = async (ids, estado) => {
     puedeCompartir,
     abrirCompartir,
     hayCompartidos,
+    verCompartidos,
     plantillaGuardada,
     handleDownloadZip,
     handleDragOver,

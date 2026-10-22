@@ -401,9 +401,9 @@ with cliente() as c_sh:
     chk("revisor: no puede usar captura manual", r.status_code == 403, r.status_code)
     chk("revisor: no puede compartir", c_sh.get("/api/compartir/directorio", headers=h_r).status_code == 403)
     dire = c_sh.get("/api/compartir/directorio", headers=h_p).json()
-    chk("directorio: solo revisores", any(d["usuario"] == rev for d in dire) and all(d["rol"] == "revisor" for d in dire), str(dire)[:120])
-    r = c_sh.post("/api/compartir", headers=h_p, json={"ids": ids[:1], "usuarios": [otro]})
-    chk("compartir: con un operador no se puede", r.status_code == 400, r.status_code)
+    chk("directorio: operadores y revisores, sin administradores", any(d["usuario"] == otro for d in dire) and all(d["rol"] != "admin" for d in dire), str(dire)[:120])
+    r = c_sh.post("/api/compartir", headers=h_p, json={"ids": ids[:1], "usuarios": ["admin"]})
+    chk("compartir: con un administrador no (ya ve todo)", r.status_code == 400, r.status_code)
     # Compartir dos expedientes
     r = c_sh.post("/api/compartir", headers=h_p, json={"ids": ids[:2], "usuarios": [rev]})
     chk("compartir: dos expedientes", r.status_code == 200 and r.json()["nuevos"] == 2, r.text[:200])

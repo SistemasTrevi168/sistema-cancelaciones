@@ -39,7 +39,7 @@ const TITULOS_PESTANA = {
 };
 
 export default function NavegacionMovil() {
-  const { theme, isDarkMode, toggleTheme, activeTab, setActiveTab, currentUser, esAdmin, esRevisor, hayCompartidos, setShowLogoutModal } = useApp();
+  const { theme, isDarkMode, toggleTheme, activeTab, setActiveTab, currentUser, esAdmin, esRevisor, verCompartidos, setShowLogoutModal } = useApp();
   const [cuenta, setCuenta] = useState(false);
   const [mas, setMas] = useState(false);
   const botonCuenta = useRef(null);
@@ -75,7 +75,7 @@ export default function NavegacionMovil() {
     else setArrastre(0);
   };
 
-  const masVisibles = esRevisor ? [] : MAS.filter((m) => (!m.admin || esAdmin) && (!m.compartidos || hayCompartidos));
+  const masVisibles = esRevisor ? [] : MAS.filter((m) => (!m.admin || esAdmin) && (!m.compartidos || verCompartidos));
   const principales = esRevisor ? PRINCIPALES_REVISOR : PRINCIPALES;
   const enMas = masVisibles.some((m) => m.id === activeTab);
 

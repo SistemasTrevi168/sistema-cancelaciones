@@ -13,7 +13,7 @@ export default function Sidebar() {
     currentUser,
     esAdmin,
     esRevisor,
-    hayCompartidos,
+    verCompartidos,
     isDarkMode,
     setActiveTab,
     setShowLogoutModal,
@@ -210,7 +210,7 @@ export default function Sidebar() {
 
                   </>
                 )}
-                {(esRevisor || hayCompartidos) && (
+                {(esRevisor || verCompartidos) && (
                   <>
                 <button
                   onClick={() => setActiveTab('compartidos')}

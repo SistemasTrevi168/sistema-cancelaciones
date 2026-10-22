@@ -43,6 +43,7 @@ try:
         _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE"))
         for _col in ("nombre_mostrar VARCHAR", "foto TEXT", "color_acento VARCHAR", "tema VARCHAR", "rol VARCHAR"):
             _conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {_col}"))
+        _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE"))
         for _col in ("user_agent VARCHAR", "ip VARCHAR", "ultimo_uso TIMESTAMP WITH TIME ZONE"):
             _conn.execute(text(f"ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS {_col}"))
 except Exception as _e:
@@ -1972,6 +1973,7 @@ def obtener_usuarios(db: Session = Depends(get_db), admin: dict = Depends(requir
             "es_admin": u.es_admin,
             "creado_en": u.creado_en.isoformat() if hasattr(u, "creado_en") and u.creado_en else None,
             "activo": bool(getattr(u, "activo", True)),
+            "debe_cambiar_password": bool(getattr(u, "debe_cambiar_password", False)),
             "nombre_mostrar": getattr(u, "nombre_mostrar", None) or "",
             "foto": getattr(u, "foto", None) or "",
         }
@@ -2083,6 +2085,39 @@ def eliminar_usuario(
         db.rollback()
         print(f"ERROR al eliminar usuario: {e}")
         raise HTTPException(status_code=500, detail="Error al eliminar usuario.")
+
+
+class RestablecerPasswordRequest(BaseModel):
+    password_admin: str      # contraseña del administrador que hace el cambio (confirma que es él)
+    password_nueva: str      # contraseña temporal para el usuario
+
+
+@app.post("/api/admin/usuarios/{usuario_id}/restablecer-password")
+def restablecer_password_olvidada(
+    usuario_id: str,
+    data: RestablecerPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """
+    Para cuando alguien olvidó su contraseña: el administrador confirma con SU propia contraseña y le asigna
+    una temporal. Al entrar con ella, el sistema le pide cambiarla por una propia. Se cierran sus sesiones.
+    """
+    usuario = _buscar_usuario(db, usuario_id)
+    if usuario.username == admin["username"]:
+        raise HTTPException(status_code=400, detail="Para tu propia contraseña usa Mi perfil → Cambiar contraseña.")
+    yo = db.query(models.Usuario).filter(models.Usuario.username == admin["username"]).first()
+    if not yo or not auth.comprobar_password(yo, data.password_admin, db):
+        raise HTTPException(status_code=400, detail="Tu contraseña de administrador no es correcta.")
+    auth.validar_password_nueva(data.password_nueva)
+    usuario.password_hash = auth.hash_password(data.password_nueva)
+    usuario.debe_cambiar_password = True
+    auth.cerrar_sesiones_de(db, usuario.username, motivo="contrasena")
+    db.commit()
+    kpis.registrar(admin["username"], "restablecer_password", usuario=usuario.username)
+    print(f"--> {admin['username']} restableció la contraseña de {usuario.username}")
+    return {"status": "exito", "mensaje": f"Contraseña de {usuario.username} restablecida. Al entrar deberá cambiarla."}
 
 
 class ResetPasswordRequest(BaseModel):

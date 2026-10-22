@@ -22,6 +22,8 @@ class Usuario(Base):
     # Tipo de usuario (además de es_admin): "operador" (hace expedientes) o "revisor"
     # (solo revisa, edita, cambia el estado y descarga los expedientes que le comparten)
     rol = Column(String, nullable=True)
+    # El administrador le restableció la contraseña: al entrar debe cambiarla por una propia
+    debe_cambiar_password = Column(Boolean, nullable=False, default=False, server_default=text("false"))
 
 class Expediente(Base):
     __tablename__ = "expedientes"

@@ -1,4 +1,5 @@
-import { Eye, KeyRound, Loader2, Plus, Power, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, LifeBuoy, Loader2, Plus, Power, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react';
+import { useState } from 'react';
 import Selector from './Selector';
 
 // Tipos de usuario: el operador hace expedientes y los comparte; el revisor solo revisa los que le comparten
@@ -17,6 +18,7 @@ export default function TabUsuarios() {
     currentUser,
     handleCambiarActivo,
     setModalPassword,
+    puedeServidor,
     handleCrearUsuario,
     handleEliminarUsuario,
     handleCambiarRol,
@@ -26,6 +28,7 @@ export default function TabUsuarios() {
     theme,
     usuariosLista
   } = useApp();
+  const [verPassword, setVerPassword] = useState(false);
 
   return (
 <>
@@ -49,13 +52,19 @@ export default function TabUsuarios() {
 
                   <div style={{ marginBottom: '16px' }}>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: theme.textSecondary, marginBottom: '6px' }}>Contraseña</label>
-                    <input
-                      type="password"
-                      required
-                      value={nuevoUsuario.password}
-                      onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', boxSizing: 'border-box' }}
-                    />
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={verPassword ? 'text' : 'password'}
+                        required
+                        value={nuevoUsuario.password}
+                        onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })}
+                        style={{ width: '100%', padding: '10px 40px 10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', boxSizing: 'border-box' }}
+                      />
+                      <button type="button" onClick={() => setVerPassword((v) => !v)} aria-label={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} title={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        data-sin-onda style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', padding: '6px', cursor: 'pointer', color: theme.textSecondary, display: 'flex' }}>
+                        {verPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
                   </div>
 
                   <div style={{ marginBottom: '20px' }}>
@@ -137,11 +146,21 @@ export default function TabUsuarios() {
                               <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '999px', backgroundColor: activo ? '#dcfce7' : '#f1f5f9', color: activo ? '#166534' : '#475569' }}>
                                 {activo ? 'Activo' : 'Inactivo'}
                               </span>
+                              {u.debe_cambiar_password && (
+                                <span title="Se le restableció la contraseña: al entrar deberá cambiarla" style={{ display: 'inline-block', marginLeft: '6px', fontSize: '10.5px', fontWeight: 700, padding: '3px 8px', borderRadius: '999px', backgroundColor: '#ecfeff', color: '#0e7490', whiteSpace: 'nowrap' }}>
+                                  Contraseña temporal
+                                </span>
+                              )}
                             </td>
                             <td className="celda-acciones" style={{ padding: '10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               {!esYo && (
-                                <button type="button" onClick={() => setModalPassword({ modo: 'reset', usuario: u })} style={{ ...btnIcono, color: theme.accent }} title="Asignar nueva contraseña">
+                                <button type="button" onClick={() => setModalPassword({ modo: 'reset', usuario: u })} style={{ ...btnIcono, color: theme.accent }} title="Cambiar contraseña (con la contraseña actual del usuario)">
                                   <KeyRound size={16} />
+                                </button>
+                              )}
+                              {!esYo && puedeServidor('restablecer_password') && (
+                                <button type="button" onClick={() => setModalPassword({ modo: 'restablecer', usuario: u })} style={{ ...btnIcono, color: '#0891b2' }} title="Restablecer contraseña (la olvidó)">
+                                  <LifeBuoy size={16} />
                                 </button>
                               )}
                               {!esUsuarioAdmin && !esYo && (

@@ -919,7 +919,11 @@ const handlePreviewExcel = async (file) => {
 
   // --- Contraseñas y estado de usuarios ---
   const handleGuardarPassword = async (actual, nueva) => {
-    if (modalPassword?.modo === 'reset') {
+    if (modalPassword?.modo === 'restablecer') {
+      await api.post(`/admin/usuarios/${modalPassword.usuario.id}/restablecer-password`, { password_admin: actual, password_nueva: nueva });
+      avisar.exito(`Contraseña de ${modalPassword.usuario.username} restablecida. Entrégale la contraseña temporal: al entrar, el sistema le pedirá cambiarla.`);
+      cargarUsuarios();
+    } else if (modalPassword?.modo === 'reset') {
       await api.post(`/admin/usuarios/${modalPassword.usuario.id}/password`, { password_actual: actual, password_nueva: nueva });
       avisar.exito(`Contraseña de ${modalPassword.usuario.username} actualizada. Sus sesiones abiertas se cerraron.`);
     } else {
@@ -2561,8 +2565,35 @@ const cambiarEstado = async (ids, estado) => {
         <AvisoSesionCerrada motivo={avisoSesion.motivo} segundos={avisoSesion.segundos} onAceptar={() => setAvisoSesion(null)} theme={theme} isDarkMode={isDarkMode} />
       )}
 
+      {/* CONTRASEÑA TEMPORAL: el administrador la restableció y hay que cambiarla antes de trabajar */}
+      {isAuthenticated && currentUser?.debe_cambiar_password && !modalPassword && (
+        <ModalPassword
+          titulo="Crea tu contraseña"
+          descripcion="Entraste con una contraseña temporal que te dio el administrador. Por seguridad, cámbiala ahora por una que solo tú conozcas."
+          etiquetaActual="Contraseña temporal"
+          textoCancelar="Cerrar sesión"
+          onCancelar={handleConfirmLogout}
+          onGuardar={async (actual, nueva) => {
+            await api.post('/auth/cambiar-password', { password_actual: actual, password_nueva: nueva });
+            setCurrentUser((u) => (u ? { ...u, debe_cambiar_password: false } : u));
+            avisar.exito('Listo: tu contraseña nueva quedó guardada.');
+          }}
+        />
+      )}
+
       {/* VENTANA DE CONTRASEÑA */}
-      {modalPassword && (
+      {modalPassword && modalPassword.modo === 'restablecer' && (
+        <ModalPassword
+          titulo={`Restablecer contraseña de ${modalPassword.usuario.nombre_mostrar || modalPassword.usuario.username}`}
+          descripcion="Para cuando olvidó su contraseña. Confirma con TU contraseña de administrador y asígnale una temporal: al entrar con ella, el sistema le pedirá cambiarla. Sus sesiones abiertas se cerrarán."
+          etiquetaActual="Tu contraseña de administrador"
+          etiquetaNueva={`Contraseña temporal para ${modalPassword.usuario.username}`}
+          generar
+          onCancelar={() => setModalPassword(null)}
+          onGuardar={handleGuardarPassword}
+        />
+      )}
+      {modalPassword && modalPassword.modo !== 'restablecer' && (
         <ModalPassword
           titulo={modalPassword.modo === 'reset' ? `Nueva contraseña para ${modalPassword.usuario.username}` : 'Cambiar mi contraseña'}
           descripcion={modalPassword.modo === 'reset'

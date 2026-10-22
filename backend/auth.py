@@ -25,7 +25,7 @@ DURACION_SESION = timedelta(hours=24)
 INACTIVIDAD_SEGUNDOS = int(os.getenv("INACTIVIDAD_SEGUNDOS", "900"))  # 15 minutos
 # Funciones que tiene esta versión del servidor: la pantalla solo muestra las que el servidor ya sabe hacer
 # (así, si la pantalla se publica antes que el servidor, no aparecen botones que todavía no funcionarían)
-FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir"]
+FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir", "restablecer_password"]
 GRACIA_SEGUNDOS = int(os.getenv("GRACIA_SEGUNDOS", "45"))
 
 # Por qué se cerró una sesión (para avisarle al otro dispositivo). Se guarda en memoria unas horas.
@@ -216,6 +216,7 @@ def con_foto(usuario: dict, db: Session) -> dict:
     datos = {k: v for k, v in usuario.items() if k != "sesion_id"}
     datos["foto"] = getattr(user, "foto", None) or ""
     datos["genero"] = genero_de_usuario(user)
+    datos["debe_cambiar_password"] = bool(getattr(user, "debe_cambiar_password", False))
     return datos
 
 
@@ -315,6 +316,7 @@ def login(data: LoginRequest, response: Response, request: Request, db: Session 
             "tema": getattr(user, "tema", None) or "",
             "foto": getattr(user, "foto", None) or "",
             "genero": genero_de_usuario(user),
+            "debe_cambiar_password": bool(getattr(user, "debe_cambiar_password", False)),
         }
     }
 
@@ -408,6 +410,7 @@ def cambiar_password(
         raise HTTPException(status_code=400, detail="La contraseña nueva debe ser diferente a la actual.")
 
     user_db.password_hash = hash_password(data.password_nueva)
+    user_db.debe_cambiar_password = False  # ya puso una contraseña propia
     # Por seguridad se cierran sus otras sesiones abiertas (otras computadoras)
     cerrar_sesiones_de(db, user_db.username, excepto=session_id_de(request), motivo="contrasena")
     db.commit()

@@ -452,6 +452,29 @@ with cliente() as c_sh:
     r = c_sh.put(f"/api/admin/usuarios/{lista_u[rev]['id']}/rol", headers=h_adm, json={"rol": "operador"})
     chk("tipo de usuario: revisor -> operador", r.status_code == 200 and r.json()["rol"] == "operador", r.text[:150])
 
+# ---- Restablecer una contraseña olvidada (el admin confirma con la suya; el usuario debe cambiarla al entrar)
+with cliente() as c_rp:
+    def entrar_rp(u, p):
+        r = c_rp.post("/api/auth/login", json={"username": u, "password": p})
+        c_rp.cookies.clear()
+        return r
+    h_adm = {"Authorization": "Bearer " + entrar_rp("admin", os.getenv("ADMIN_PASSWORD", "admin123")).json()["token"]}
+    olv = f"olvido_{SUF}"
+    c_rp.post("/api/admin/usuarios", data={"username": olv, "password": "Original2026!"}, headers=h_adm)
+    uid = next(u["id"] for u in c_rp.get("/api/admin/usuarios", headers=h_adm).json() if u["username"] == olv)
+    r = c_rp.post(f"/api/admin/usuarios/{uid}/restablecer-password", headers=h_adm, json={"password_admin": "mala", "password_nueva": "Temporal2026!"})
+    chk("restablecer: con contraseña de admin incorrecta no", r.status_code == 400, r.status_code)
+    r = c_rp.post(f"/api/admin/usuarios/{uid}/restablecer-password", headers=h_adm, json={"password_admin": os.getenv("ADMIN_PASSWORD", "admin123"), "password_nueva": "Temporal2026!"})
+    chk("restablecer: sin saber la contraseña del usuario", r.status_code == 200, r.text[:200])
+    chk("restablecer: la anterior ya no sirve", entrar_rp(olv, "Original2026!").status_code == 401)
+    r = entrar_rp(olv, "Temporal2026!")
+    chk("restablecer: entra con la temporal y se le pide cambiarla", r.status_code == 200 and r.json()["user"]["debe_cambiar_password"] is True, r.text[:200])
+    h_o = {"Authorization": "Bearer " + r.json()["token"]}
+    r = c_rp.post("/api/auth/cambiar-password", headers=h_o, json={"password_actual": "Temporal2026!", "password_nueva": "Propia2026!"})
+    chk("restablecer: la cambia por una propia", r.status_code == 200, r.text[:200])
+    r = entrar_rp(olv, "Propia2026!")
+    chk("restablecer: ya no se le pide cambiarla", r.status_code == 200 and r.json()["user"]["debe_cambiar_password"] is False)
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

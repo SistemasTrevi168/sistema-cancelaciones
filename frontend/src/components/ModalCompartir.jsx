@@ -92,8 +92,8 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
 
   const encabezado = todos ? 'Compartir todos mis expedientes' : (uno ? 'Compartir expediente' : `Compartir ${ids.length} expedientes`);
   const explicacion = todos
-    ? 'Las personas que elijas verán TODOS tus expedientes, también los que hagas después. Podrán revisarlos, editarlos, cambiar su estado y descargar el Word.'
-    : 'Las personas que elijas podrán revisar, editar, cambiar el estado y descargar el Word. Los expedientes siguen siendo tuyos.';
+    ? 'Los revisores que elijas verán TODOS tus expedientes, también los que hagas después. Podrán revisarlos, editarlos, cambiar su estado y descargar el Word.'
+    : 'Los revisores que elijas podrán revisar, editar, cambiar el estado y descargar el Word. Los expedientes siguen siendo tuyos.';
 
   return (
     <div className={`fondo-modal ${saliendo ? 'saliendo' : ''}`} onClick={cerrar} role="dialog" aria-modal="true" aria-labelledby="compartir-titulo">
@@ -111,12 +111,18 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
 
         <label className="zona-buscador-campo modal-compartir-buscar" style={{ borderColor: theme.border, backgroundColor: theme.inputBg }}>
           <Search size={14} color={theme.textSecondary} />
-          <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar persona…" style={{ color: theme.textPrimary }} />
+          <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar revisor…" style={{ color: theme.textPrimary }} />
         </label>
 
         <div className="modal-compartir-lista">
           {gente === null && <div className="bitacora-cargando" style={{ color: theme.textSecondary }}><Loader2 size={18} className="girando" /> Cargando…</div>}
-          {gente && visibles.length === 0 && <div style={{ color: theme.textSecondary, fontSize: '13px', padding: '12px' }}>No hay personas que coincidan.</div>}
+          {gente && visibles.length === 0 && (
+            <div style={{ color: theme.textSecondary, fontSize: '13px', padding: '12px', lineHeight: 1.5 }}>
+              {gente.length === 0
+                ? 'Todavía no hay usuarios de tipo Revisor. El administrador los crea (o cambia su tipo) en Usuarios.'
+                : 'No hay revisores que coincidan.'}
+            </div>
+          )}
           {visibles.map((p, i) => {
             const marcado = !!elegidos[p.usuario];
             const porTodos = !todos && actuales[p.usuario]?.todos;
@@ -142,7 +148,7 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
 
         <footer className="modal-compartir-pie" style={{ borderColor: theme.border }}>
           <small style={{ color: isDarkMode ? '#a5b4fc' : theme.textSecondary }}>
-            {hayCambios ? [agregar.length ? `+${agregar.length} con acceso` : '', quitar.length ? `−${quitar.length} sin acceso` : ''].filter(Boolean).join(' · ') : 'Marca o desmarca personas'}
+            {hayCambios ? [agregar.length ? `+${agregar.length} con acceso` : '', quitar.length ? `−${quitar.length} sin acceso` : ''].filter(Boolean).join(' · ') : 'Marca o desmarca revisores'}
           </small>
           <button type="button" className="boton-barra" onClick={cerrar} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>Cancelar</button>
           <button type="button" className="boton-barra boton-guardar" onClick={guardar} disabled={guardando || !hayCambios}>

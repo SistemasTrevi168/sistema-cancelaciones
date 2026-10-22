@@ -401,7 +401,9 @@ with cliente() as c_sh:
     chk("revisor: no puede usar captura manual", r.status_code == 403, r.status_code)
     chk("revisor: no puede compartir", c_sh.get("/api/compartir/directorio", headers=h_r).status_code == 403)
     dire = c_sh.get("/api/compartir/directorio", headers=h_p).json()
-    chk("directorio: aparece el revisor primero", dire and dire[0]["usuario"] == rev or any(d["usuario"] == rev for d in dire), str(dire)[:120])
+    chk("directorio: solo revisores", any(d["usuario"] == rev for d in dire) and all(d["rol"] == "revisor" for d in dire), str(dire)[:120])
+    r = c_sh.post("/api/compartir", headers=h_p, json={"ids": ids[:1], "usuarios": [otro]})
+    chk("compartir: con un operador no se puede", r.status_code == 400, r.status_code)
     # Compartir dos expedientes
     r = c_sh.post("/api/compartir", headers=h_p, json={"ids": ids[:2], "usuarios": [rev]})
     chk("compartir: dos expedientes", r.status_code == 200 and r.json()["nuevos"] == 2, r.text[:200])
@@ -434,7 +436,9 @@ with cliente() as c_sh:
     c_sh.post("/api/compartir/quitar", headers=h_p, json={"ids": [ids[1]], "usuarios": [rev]})
     vistos = {x["id"] for x in c_sh.get("/api/compartidos", headers=h_r).json()}
     chk("quitar acceso: ya no lo ve", vistos == {ids[0]}, vistos)
-    # Compartir todo (incluye los futuros)
+    # Compartir todo (incluye los futuros): «otro» se vuelve revisor
+    c_sh.put(f"/api/admin/usuarios/{lista_u[otro]['id']}/rol", headers=h_adm, json={"rol": "revisor"})
+    h_o = entrar_como(otro, "Prueba2026!")
     c_sh.post("/api/compartir", headers=h_p, json={"todos": True, "usuarios": [otro]})
     r = c_sh.post("/api/expedientes/guardar", headers=h_p, json={"expedientes": [{"ref": "n", "plantilla": "CDMX_AP_H_SOLTERO",
         "datos": {"numero_credito": f"169{SUF[:7]}".ljust(10, "1")[:10], "nombre_acreditado": "NUEVO DESPUES"}}]})

@@ -107,21 +107,21 @@ def _mis_expedientes(db: Session, ids: List[str], usuario: dict):
 
 
 def _destinatarios(db: Session, usernames: List[str], yo: str) -> List[str]:
-    activos = {u.username for u in db.query(models.Usuario).filter(models.Usuario.activo.is_(True)).all()}
-    return [u for u in dict.fromkeys(usernames or []) if u in activos and u != yo]
+    """Solo se comparte con usuarios de revisión activos."""
+    revisores = {u.username for u in db.query(models.Usuario).filter(models.Usuario.activo.is_(True)).all() if rol_de(u) == "revisor"}
+    return [u for u in dict.fromkeys(usernames or []) if u in revisores and u != yo]
 
 
 # ---------------- ENDPOINTS ----------------
 
 @router.get("/directorio")
 def directorio(db: Session = Depends(get_db), usuario: dict = Depends(require_user)):
-    """Personas a las que se les puede compartir (activas, menos uno mismo)."""
+    """Personas a las que se les puede compartir: solo usuarios de revisión activos."""
     if es_revisor(usuario):
         raise HTTPException(status_code=403, detail="Tu usuario es de revisión: no puede compartir expedientes.")
     gente = db.query(models.Usuario).filter(models.Usuario.activo.is_(True), models.Usuario.username != usuario["username"]).all()
-    lista = [{"usuario": u.username, "nombre": u.nombre_mostrar or u.username, "rol": rol_de(u)} for u in gente]
-    orden = {"revisor": 0, "operador": 1, "admin": 2}
-    return sorted(lista, key=lambda x: (orden.get(x["rol"], 9), x["nombre"].lower()))
+    lista = [{"usuario": u.username, "nombre": u.nombre_mostrar or u.username, "rol": rol_de(u)} for u in gente if rol_de(u) == "revisor"]
+    return sorted(lista, key=lambda x: x["nombre"].lower())
 
 
 @router.get("/expediente/{expediente_id}")
@@ -154,7 +154,7 @@ def compartir(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)
     yo = usuario["username"]
     para = _destinatarios(db, payload.get("usuarios") or [], yo)
     if not para:
-        raise HTTPException(status_code=400, detail="Elige al menos a una persona.")
+        raise HTTPException(status_code=400, detail="Solo se puede compartir con usuarios de tipo Revisor. Elige al menos a uno.")
     C = models.Compartido
     nuevos = 0
     if payload.get("todos"):

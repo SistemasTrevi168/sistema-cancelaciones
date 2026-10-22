@@ -288,7 +288,7 @@ export default function TabHistorial() {
                         <th style={{ padding: '12px' }}>No. Crédito</th>
                         <th style={{ padding: '12px', textAlign: 'right' }}>Monto</th>
                         <th style={{ padding: '12px' }}>Fecha</th>
-                        <th style={{ padding: '12px' }}>Hora</th>
+                        <th className="col-hora" style={{ padding: '12px' }}>Hora</th>
                         <th style={{ padding: '12px' }}>Estado</th>
                         <th style={{ padding: '12px', textAlign: 'right' }}>Acciones</th>
                       </tr>
@@ -331,8 +331,8 @@ export default function TabHistorial() {
                             </td>
                             <td data-etiqueta="Crédito" style={{ padding: '12px', color: theme.textSecondary }}>{numCred}</td>
                             <td style={{ padding: '12px', color: montoStr === '—' ? theme.textSecondary : (isDarkMode ? '#34d399' : '#059669'), fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }} data-etiqueta="Monto">{montoStr}</td>
-                            <td data-etiqueta="Fecha" style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{fechaStr}</td>
-                            <td data-etiqueta="Hora" style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{horaStr}</td>
+                            <td data-etiqueta="Fecha" style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{fechaStr}<small className="hora-en-fecha">{horaStr}</small></td>
+                            <td data-etiqueta="Hora" className="col-hora" style={{ padding: '12px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>{horaStr}</td>
                             <td data-etiqueta="Estado" style={{ padding: '12px', whiteSpace: 'nowrap' }}>
                               <EstadoExpediente id={idDe(item)} estado={item.estado || 'GENERADO'} />
                             </td>
@@ -375,9 +375,9 @@ export default function TabHistorial() {
                               <button
                                 onClick={() => handleDownloadWord(item.id || item.expediente_id, dExtra, dExtra.plantilla_seleccionada || dExtra.plantilla)}
                                 disabled={descargandoId === (item.id || item.expediente_id)}
-                                className="accion-descargar" style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, borderColor: theme.border }}
+                                className="accion-descargar" title="Descargar el Word" aria-label={`Descargar el Word de ${nombre}`} style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, borderColor: theme.border }}
                               >
-                                {descargandoId === (item.id || item.expediente_id) ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={17} />} Descargar
+                                {descargandoId === (item.id || item.expediente_id) ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <IconoArchivo tipo="docx" size={17} />} <span className="accion-descargar-texto">Descargar</span>
                               </button>
                               </div>
                             </td>

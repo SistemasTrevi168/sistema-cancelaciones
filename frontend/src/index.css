@@ -3135,3 +3135,14 @@ input, textarea { caret-color: var(--acento, #2563eb); }
 .tipo-usuario strong { font-size: 13px; }
 .tipo-usuario small { font-size: 11px; }
 .selector-rol { min-width: 140px; }
+
+/* ---- Mi Historial en pantallas medianas (laptop): que las acciones se vean completas sin desplazar ---- */
+.hora-en-fecha { display: none; }
+@media (min-width: 769px) and (max-width: 1500px) {
+  #tabla-historial-export .col-hora { display: none; }
+  #tabla-historial-export .hora-en-fecha { display: block; font-size: 11px; opacity: .8; margin-top: 2px; }
+  #tabla-historial-export th, #tabla-historial-export td { padding-left: 8px !important; padding-right: 8px !important; }
+  #tabla-historial-export .accion-descargar { width: 34px; padding: 0 !important; justify-content: center; }
+  #tabla-historial-export .accion-descargar-texto { display: none; }
+  #tabla-historial-export .celda-titulo { min-width: 160px; }
+}

@@ -2978,3 +2978,62 @@ input, textarea { caret-color: var(--acento, #2563eb); }
 }
 .visor-vacio p { max-width: 380px; margin: 0; font-size: 13px; line-height: 1.5; }
 .visor-vacio-icono { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; animation: softPulse 2.4s ease-in-out infinite; }
+
+/* ---- Carga masiva: buscador en cada recuadro y archivos sin pareja ---- */
+.zona-buscador { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.zona-buscador-campo {
+  flex: 1 1 180px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 5px 8px;
+  min-width: 0;
+}
+.zona-buscador-campo input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.zona-buscador-campo input::-webkit-search-cancel-button { display: none; }
+.chip-sin-pareja {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.chip-sin-pareja.activo { background: #f59e0b; color: #fff; }
+.tema-oscuro .chip-sin-pareja:not(.activo) { background: #422006; color: #fcd34d; }
+.zona-buscador-resumen { display: flex; align-items: center; gap: 10px; font-size: 11px; }
+.zona-tipo-lista li.sin-pareja { box-shadow: inset 3px 0 0 #f59e0b; }
+.etiqueta-sin-pareja {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 6px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.tema-oscuro .etiqueta-sin-pareja { background: #422006; color: #fcd34d; }
+.boton-descartar {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fef2f2;
+  animation: fadeIn 0.2s ease-out both;
+}
+.tema-oscuro .boton-descartar { color: #fca5a5; border-color: #7f1d1d; background: #450a0a; }

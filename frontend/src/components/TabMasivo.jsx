@@ -48,6 +48,7 @@ export default function TabMasivo() {
     moverArchivoLote,
     quitarArchivoLote,
     quitarExpedienteLote,
+    quitarMarcadosLote,
     numeroEnNombre,
   } = useApp();
 
@@ -62,6 +63,7 @@ export default function TabMasivo() {
       ...constanciasLote.filter((f) => { const n = numeroEnNombre(f.name); return n && !nCartas.has(n); }),
     ].map((f) => f.name);
   })();
+  const sinParejaSet = new Set(sinPareja);
 
   const [abierto, setAbierto] = useState(null); // expediente en revisión (índice)
   const [cargaAbierta, setCargaAbierta] = useState(false);
@@ -149,6 +151,7 @@ export default function TabMasivo() {
               onElegir={(fs) => agregarArchivosLote('carta', fs)}
               onSoltar={(e) => soltarArchivosLote('carta', e)}
               onQuitar={(f) => quitarArchivoDeLote('carta', f)}
+              sinPareja={sinParejaSet}
               ayuda="Arrastra aquí las cartas (PDF sueltos o una carpeta)"
             />
             <ZonaArchivos
@@ -158,6 +161,7 @@ export default function TabMasivo() {
               onElegir={(fs) => agregarArchivosLote('constancia', fs)}
               onSoltar={(e) => soltarArchivosLote('constancia', e)}
               onQuitar={(f) => quitarArchivoDeLote('constancia', f)}
+              sinPareja={sinParejaSet}
               ayuda="Arrastra aquí las constancias (PDF sueltos o una carpeta)"
             />
           </div>
@@ -186,7 +190,7 @@ export default function TabMasivo() {
               )}
               {!batchLoading && sinPareja.length > 0 && (
                 <p className="aviso-sin-pareja" style={{ fontSize: '12px', color: '#b45309', margin: 0 }}>
-                  Sin pareja con el mismo número ({sinPareja.length}): {sinPareja.slice(0, 4).join(', ')}{sinPareja.length > 4 ? '…' : ''}. Se leerán como expedientes incompletos.
+                  Sin pareja con el mismo número ({sinPareja.length}): {sinPareja.slice(0, 4).join(', ')}{sinPareja.length > 4 ? '…' : ''}. Se leerán como expedientes incompletos. Para encontrarlos rápido, usa el botón «Sin pareja» de cada recuadro.
                 </p>
               )}
               {!batchLoading && batchFiles.length > 0 && sinPareja.length === 0 && cartasLote.length !== constanciasLote.length && (
@@ -255,6 +259,11 @@ export default function TabMasivo() {
                 </option>
                 <OpcionesPlantilla />
               </Selector>
+              {selectedBatchIndices.length > 0 && (
+                <button type="button" className="boton-barra boton-descartar" onClick={quitarMarcadosLote} title="Quitar de esta lista los expedientes marcados">
+                  <Trash2 size={14} /> Descartar marcados ({selectedBatchIndices.length})
+                </button>
+              )}
               {validos.some((i) => sugerenciaDeLote(batchResults[i])?.plantilla) && (
                 <button type="button" onClick={usarSugeridasEnLote} className="chip-sugerida" style={{ padding: '7px 12px', fontSize: '12px' }} title="Pone a cada expediente la plantilla que le corresponde según sus documentos">
                   <Sparkles size={13} /> Usar las plantillas sugeridas

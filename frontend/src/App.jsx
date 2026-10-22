@@ -1564,6 +1564,24 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
     setSelectedBatchIndices([]);
     setBatchResults((prev) => prev.filter((r) => r.ref !== ref));
   };
+  // Quita de la lista todos los expedientes marcados con la casilla
+  const quitarMarcadosLote = async () => {
+    const marcados = selectedBatchIndices.map((i) => batchResults[i]).filter(Boolean);
+    if (marcados.length === 0) return;
+    const sinGuardar = marcados.filter((r) => !r.error && !r.expediente_id).length;
+    const guardados = marcados.filter((r) => r.expediente_id).length;
+    const partes = [];
+    if (sinGuardar) partes.push(`${sinGuardar} sin guardar (se pierden sus datos leídos y lo que hayas corregido)`);
+    if (guardados) partes.push(`${guardados} ya guardado(s) (siguen en Mi Historial; solo se quitan de esta lista)`);
+    const otros = marcados.length - sinGuardar - guardados;
+    if (otros) partes.push(`${otros} con error de lectura`);
+    if (!(await confirmar(`Se quitarán de la lista ${marcados.length} expediente(s):\n\n• ${partes.join('\n• ')}`,
+      { titulo: 'Descartar marcados', textoConfirmar: `Descartar ${marcados.length}`, peligro: sinGuardar > 0 }))) return;
+    const refs = new Set(marcados.map((r) => r.ref));
+    setSelectedBatchIndices([]);
+    setBatchResults((prev) => prev.filter((r) => !refs.has(r.ref)));
+    avisar.exito(`Se quitaron ${marcados.length} expediente(s) de la lista.`);
+  };
 
   // Guarda en la base los expedientes indicados (por índice); regresa { ref: expediente_id } de los guardados
   const guardarLote = async (indices) => {
@@ -2242,6 +2260,7 @@ const cambiarEstado = async (ids, estado) => {
     moverArchivoLote,
     quitarArchivoLote,
     quitarExpedienteLote,
+    quitarMarcadosLote,
     sugerenciaSingle,
     sugerenciaDeLote,
     usarPlantillaSugerida,

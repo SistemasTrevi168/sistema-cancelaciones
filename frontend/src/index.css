@@ -1781,7 +1781,22 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   gap: 6px;
 }
 .fila-plantilla .selector-plantilla {
-  max-width: 220px;
+  min-width: 270px;
+  max-width: 300px;
+}
+/* En pantallas medianas, la plantilla y los botones bajan a una segunda línea para que se lea
+   la plantilla completa (entidad, tipo, hombre/mujer, soltero/casado) y el nombre no se corte */
+@media (min-width: 1101px) and (max-width: 1500px) {
+  .fila-lote:not(.fila-error) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+  .fila-lote:not(.fila-error) > input[type='checkbox'] { grid-row: 1; grid-column: 1; }
+  .fila-lote:not(.fila-error) > .fila-nombre { grid-row: 1; grid-column: 2 / -1; }
+  .fila-lote:not(.fila-error) > .fila-avisos { grid-row: 2; grid-column: 2 / -1; }
+  .fila-lote:not(.fila-error) > .fila-archivos { grid-row: 3; grid-column: 2 / -1; }
+  .fila-lote:not(.fila-error) > .fila-plantilla { grid-row: 4; grid-column: 2; flex-wrap: wrap; }
+  .fila-lote:not(.fila-error) > .fila-acciones { grid-row: 4; grid-column: 3; }
 }
 .fila-acciones {
   display: flex;
@@ -2908,3 +2923,58 @@ input, textarea { caret-color: var(--acento, #2563eb); }
   .editar-acciones { width: 100%; }
   .editar-acciones .boton-barra { flex: 1; justify-content: center; }
 }
+
+/* =====================================================================
+   EDITAR UN EXPEDIENTE GUARDADO (desde Mi Historial, en el espacio del Caso Individual)
+   ===================================================================== */
+.edicion-banda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1.5px solid;
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.edicion-banda-texto {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex: 1 1 420px;
+  min-width: 0;
+}
+.edicion-banda-icono {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+}
+.edicion-banda-texto strong { font-size: 15px; }
+.edicion-banda-texto p { margin: 6px 0 0; font-size: 13px; line-height: 1.45; }
+.edicion-banda-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.edicion-banda-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip-edicion { animation: softPulse 2.4s ease-in-out infinite; }
+@media (max-width: 640px) {
+  .edicion-banda-botones { width: 100%; }
+  .edicion-banda-botones .boton-barra { flex: 1; justify-content: center; }
+}
+.visor-vacio {
+  width: 100%;
+  box-sizing: border-box;
+  flex: 1;
+  height: 100%;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+  border-radius: 12px;
+}
+.visor-vacio p { max-width: 380px; margin: 0; font-size: 13px; line-height: 1.5; }
+.visor-vacio-icono { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; animation: softPulse 2.4s ease-in-out infinite; }

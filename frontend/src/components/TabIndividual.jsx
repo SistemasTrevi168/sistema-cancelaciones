@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { AlertTriangle, CheckCircle, FilePlus, Loader2, Upload, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle, FilePlus, Hash, Loader2, PencilLine, Upload, Users, X } from 'lucide-react';
 import { esPlantillaCoac } from '../camposExpediente';
 import { useApp } from '../AppContext';
 import ZonaArchivos from './ZonaArchivos';
@@ -40,7 +40,12 @@ export default function TabIndividual() {
     agregarCarta2Single,
     isDarkMode,
     theme,
+    edicionSingle,
+    editarSinDocumentos,
+    salirEdicionSingle,
+    volverADocumentos,
   } = useApp();
+  const ESTADO_TXT = { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' };
   const carta2Ref = useRef(null);
 
   // ---- ESPACIO DE TRABAJO (ya hay datos extraídos) ----
@@ -79,10 +84,18 @@ export default function TabIndividual() {
         previaActiva={vistaPrevia?.origen === 'single'}
         onPrevia={() => abrirVistaPrevia({ origen: 'single' })}
         onGuardar={guardarSingle}
-        avisos={avisosSingle}
+        avisos={edicionSingle && edicionSingle.estado !== 'GENERADO' && !expedienteId
+          ? [...avisosSingle, `Este expediente está «${ESTADO_TXT[edicionSingle.estado] || edicionSingle.estado}». Si guardas cambios, su Word se vuelve a generar y regresa a «Generado».`]
+          : avisosSingle}
         avisoCoac={avisoCoac}
         guardandoAhora={!!guardando.single}
-        accionesExtra={(
+        edicion={edicionSingle}
+        onSubirDocumentos={edicionSingle ? volverADocumentos : null}
+        accionesExtra={edicionSingle ? (
+          <button type="button" onClick={salirEdicionSingle} className="boton-barra" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }} title="Regresar a Mi Historial">
+            <ArrowLeft size={15} color={theme.accent} /> Mi Historial
+          </button>
+        ) : (
           <button type="button" onClick={nuevoExpedienteSingle} className="boton-barra" style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }} title="Subir los documentos de otro expediente">
             <FilePlus size={15} color={theme.accent} /> Nuevo expediente
           </button>
@@ -95,11 +108,34 @@ export default function TabIndividual() {
   const listo = singleFiles.length > 0 && !loading && !conflictoSingle;
   return (
     <div className="carga-documentos">
+      {edicionSingle && (
+        <div className="edicion-banda slide-up" style={{ borderColor: theme.accent, backgroundColor: isDarkMode ? '#1e1b4b' : '#eef2ff' }}>
+          <div className="edicion-banda-texto">
+            <span className="edicion-banda-icono" style={{ backgroundColor: theme.accent }}><PencilLine size={18} color="#fff" /></span>
+            <div>
+              <strong style={{ color: theme.textPrimary }}>Editando · {edicionSingle.nombre}</strong>
+              <div className="edicion-banda-chips">
+                {edicionSingle.credito && <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><Hash size={12} /> Crédito {edicionSingle.credito}</span>}
+                <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}>{ESTADO_TXT[edicionSingle.estado] || edicionSingle.estado}</span>
+              </div>
+              <p style={{ color: theme.textSecondary }}>Sube otra vez la carta y la constancia para revisarlas junto a los datos (seleccionar texto, OCR, actos), o continúa con los datos guardados. Al guardar se <strong>actualiza este mismo expediente</strong>; no se crea otro.</p>
+            </div>
+          </div>
+          <div className="edicion-banda-botones">
+            <button type="button" className="boton-barra" onClick={salirEdicionSingle} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+              <ArrowLeft size={15} /> Cancelar
+            </button>
+            <button type="button" className="boton-barra" onClick={editarSinDocumentos} disabled={loading} style={{ backgroundColor: theme.accent, color: '#fff', borderColor: theme.accent }}>
+              <PencilLine size={15} /> Continuar sin documentos
+            </button>
+          </div>
+        </div>
+      )}
       <div className="carga-encabezado">
-        <h2 style={{ color: theme.textPrimary }}><Upload size={20} color={theme.accent} /> Cargar expediente individual</h2>
+        <h2 style={{ color: theme.textPrimary }}><Upload size={20} color={theme.accent} /> {edicionSingle ? 'Documentos del expediente' : 'Cargar expediente individual'}</h2>
         <p style={{ color: theme.textSecondary }}>{coacSingle
           ? <>Coacreditados: sube la <strong>carta de instrucción de cada trabajador</strong> y la <strong>constancia de folio</strong>, cada una en su recuadro; los tres archivos deben llevar el <strong>mismo número</strong>.</>
-          : <>Sube la <strong>carta de instrucción</strong> y la <strong>constancia de folio</strong> del mismo crédito, cada una en su recuadro.</>} Primero se leen los datos para que los revises y corrijas junto al PDF; <strong>nada se guarda</strong> hasta que le des “Guardar y procesar”.</p>
+          : <>Sube la <strong>carta de instrucción</strong> y la <strong>constancia de folio</strong> del mismo crédito, cada una en su recuadro.</>} Primero se leen los datos para que los revises y corrijas junto al PDF; <strong>nada se guarda</strong> hasta que le des “{edicionSingle ? 'Guardar cambios' : 'Guardar y procesar'}”.</p>
       </div>
 
       <div className={`zonas-tipo ${coacSingle ? 'zonas-tres' : ''}`}>

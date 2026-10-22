@@ -26,6 +26,7 @@ import kpis
 import perfil
 import versiones
 import respaldos
+import reparaciones
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -850,6 +851,13 @@ def programar_respaldos():
     respaldos.iniciar_programador()
 
 
+@app.on_event("startup")
+def correcciones_de_datos():
+    # Correcciones que se hacen una sola vez (por ejemplo, regresar cada expediente a la plantilla
+    # con la que se guardó). Si ya se hicieron, no hace nada.
+    reparaciones.ejecutar_pendientes(SessionLocal)
+
+
 @app.get("/")
 def home():
     return {"status": "OK", "mensaje": "Servidor backend conectado"}
@@ -1505,7 +1513,9 @@ def guardar_expedientes(
                     existente.ruta_pdf_constancia = archivos
                 metricas = kpis.metricas_de_guardado(item.get("metricas"))
                 metricas.pop("cambios", None)
-                aplicar_edicion(existente, dict(item.get("datos") or {}), plantilla, sesion["username"], db, tipo="actualizar",
+                # "editar": se cambió desde Mi Historial sin volver a subir documentos; "actualizar": con documentos
+                tipo_ed = item.get("tipo_edicion") if item.get("tipo_edicion") in ("editar", "actualizar") else "actualizar"
+                aplicar_edicion(existente, dict(item.get("datos") or {}), plantilla, sesion["username"], db, tipo=tipo_ed,
                                 detalle_extra={k: v for k, v in metricas.items() if k in ("origen", "leido_en", "segundos_revision", "avisos")})
                 db.refresh(existente)
                 resultados.append({
@@ -1914,9 +1924,13 @@ def bitacora_expediente(
 @app.get("/api/admin/usuarios")
 def obtener_usuarios(db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
     usuarios = db.query(models.Usuario).all()
+    from sqlalchemy import func as _func
+    conteo = dict(db.query(models.Expediente.usuario_propietario, _func.count(models.Expediente.id))
+                  .group_by(models.Expediente.usuario_propietario).all())
     return [
         {
             "id": str(u.id),
+            "expedientes": int(conteo.get(u.username, 0)),
             "username": u.username,
             "es_admin": u.es_admin,
             "creado_en": u.creado_en.isoformat() if hasattr(u, "creado_en") and u.creado_en else None,
@@ -1957,10 +1971,17 @@ def crear_usuario_admin(
 
 @app.delete("/api/admin/usuarios/{usuario_id}")
 def eliminar_usuario(
-    usuario_id: str, 
+    usuario_id: str,
+    con_expedientes: bool = Query(False),
+    confirmar: str = Query(""),
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin)
 ):
+    """
+    Elimina un usuario. Si tiene expedientes, solo se elimina si se pide con_expedientes=true y se confirma
+    con su nombre de usuario: entonces se borran también sus expedientes y su actividad (después de hacer
+    un respaldo automático, por si hay que recuperar algo).
+    """
     try:
         uuid_usuario = uuid.UUID(str(usuario_id))
     except ValueError:
@@ -1972,18 +1993,48 @@ def eliminar_usuario(
 
     if usuario.es_admin or usuario.username.lower() == "admin":
         raise HTTPException(status_code=400, detail="No se puede eliminar a un administrador")
-    
+
     nombre_usuario = usuario.username
+    expedientes = db.query(models.Expediente).filter(models.Expediente.usuario_propietario == nombre_usuario).all()
+    if expedientes and not con_expedientes:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{nombre_usuario} tiene {len(expedientes)} expediente(s). Puedes desactivarlo para quitarle el acceso, "
+                   f"o eliminarlo junto con sus expedientes.",
+        )
+    if expedientes and (confirmar or "").strip().lower() != nombre_usuario.lower():
+        raise HTTPException(status_code=400, detail="Para eliminar también sus expedientes hay que confirmar con su nombre de usuario.")
+
+    respaldo_id = None
     try:
+        if expedientes:
+            # Copia de todo ANTES de borrar, por si se necesita recuperar algo
+            respaldo_id = respaldos.crear(db, automatico=False, usuario=admin.get("username") or "admin").id
         auth.cerrar_sesiones_de(db, nombre_usuario, motivo="cerrada")
+        ids = [str(e.id) for e in expedientes]
+        if ids:
+            db.query(models.Actividad).filter(models.Actividad.expediente_id.in_(ids)).delete(synchronize_session=False)
+            for e in expedientes:
+                for ruta in (e.ruta_word_generado,):
+                    try:
+                        if ruta and os.path.isfile(ruta):
+                            os.remove(ruta)
+                    except Exception:
+                        pass
+                db.delete(e)
+        # Su actividad (inicios de sesión, lecturas…) también se va, para que no cuente en los reportes
+        db.query(models.Actividad).filter(models.Actividad.username == nombre_usuario).delete(synchronize_session=False)
+        db.query(models.Sesion).filter(models.Sesion.username == nombre_usuario).delete(synchronize_session=False)
         db.delete(usuario)
         db.commit()
-        return {"status": "exito", "mensaje": f"Usuario {nombre_usuario} eliminado correctamente"}
+        print(f"--> {admin.get('username')} eliminó al usuario {nombre_usuario} con {len(ids)} expediente(s); respaldo previo #{respaldo_id}")
+        return {"status": "exito", "mensaje": f"Usuario {nombre_usuario} eliminado correctamente",
+                "expedientes_eliminados": len(ids), "respaldo_id": respaldo_id}
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail=f"No se puede eliminar a {nombre_usuario} porque tiene expedientes registrados. Puedes desactivarlo para quitarle el acceso."
+            detail=f"No se puede eliminar a {nombre_usuario} porque tiene información relacionada. Puedes desactivarlo para quitarle el acceso."
         )
     except Exception as e:
         db.rollback()
@@ -2053,6 +2104,36 @@ def cambiar_estado_usuario(
     db.commit()
     estado = "activado" if data.activo else "desactivado"
     return {"status": "exito", "mensaje": f"Usuario {usuario.username} {estado}.", "activo": usuario.activo}
+
+
+class CambiarRolRequest(BaseModel):
+    es_admin: bool
+
+
+@app.put("/api/admin/usuarios/{usuario_id}/rol")
+def cambiar_rol_usuario(
+    usuario_id: str,
+    data: CambiarRolRequest,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Da o quita permisos de administrador. La cuenta principal «admin» y la propia no se pueden cambiar."""
+    usuario = _buscar_usuario(db, usuario_id)
+    if usuario.username == admin["username"]:
+        raise HTTPException(status_code=400, detail="No puedes cambiar tus propios permisos.")
+    if usuario.username.lower() == "admin":
+        raise HTTPException(status_code=400, detail="La cuenta principal «admin» siempre es administrador.")
+    if bool(usuario.es_admin) == bool(data.es_admin):
+        return {"status": "exito", "mensaje": "Sin cambios.", "es_admin": bool(usuario.es_admin)}
+    usuario.es_admin = bool(data.es_admin)
+    if hasattr(usuario, "role"):
+        usuario.role = "admin" if data.es_admin else "operador"
+    # Sus sesiones abiertas tienen los permisos anteriores: se cierran para que entre con los nuevos
+    auth.cerrar_sesiones_de(db, usuario.username)
+    db.commit()
+    print(f"--> {admin['username']} {'dio' if data.es_admin else 'quitó'} permisos de administrador a {usuario.username}")
+    rol = "administrador" if data.es_admin else "operador"
+    return {"status": "exito", "mensaje": f"{usuario.username} ahora es {rol}.", "es_admin": bool(usuario.es_admin)}
 
 
 @app.post("/api/admin/plantilla")

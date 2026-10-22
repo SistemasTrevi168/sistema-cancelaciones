@@ -283,6 +283,95 @@ with cliente() as c_pw:
     chk("saludo: Bienvenida para Laura Méndez", _auth.genero_de_usuario(_U("Laura Méndez", "laura")) == "FEMENINO")
     chk("saludo: Bienvenido para Pedro Salinas", _auth.genero_de_usuario(_U("Pedro Salinas", "pedro")) == "MASCULINO")
 
+# ---- Plantilla guardada: descargar desde Mi Historial no debe cambiarla, y la corrección la regresa
+with cliente() as c_pl:
+    import reparaciones as _rep  # noqa: E402
+    from database import SessionLocal as _SL  # noqa: E402
+    h_b = {"Authorization": "Bearer " + c_pl.post("/api/auth/login", json={"username": f"beto_{SUF}", "password": "Nueva2026!"}).json()["token"]}
+    cred = "19" + uuid.uuid4().hex[:8].translate(str.maketrans("abcdef", "123456"))
+    r = c_pl.post("/api/expedientes/guardar", headers=h_b, json={"expedientes": [{"ref": "p1", "plantilla": "EDOMEX_AP_M_SOLTERA",
+        "datos": {"numero_credito": cred, "nombre_acreditado": "MARIA PRUEBA PLANTILLA"}}]})
+    eid = r.json()["resultados"][0]["expediente_id"]
+    r = c_pl.post(f"/api/expedientes/{eid}/generar-word", headers=h_b, json={"datos": {"numero_credito": cred}})
+    _db = _SL()
+    from models import Expediente as _E  # noqa: E402
+    _p = lambda: (_db.get(_E, uuid.UUID(eid)).datos_extraidos or {}).get("plantilla_seleccionada")  # noqa: E731
+    chk("descarga sin plantilla usa la que se guardó", r.status_code == 200 and _p() == "EDOMEX_AP_M_SOLTERA", _p())
+    # Así descargaba la pantalla anterior desde Mi Historial (con la plantilla por defecto)
+    c_pl.post(f"/api/expedientes/{eid}/generar-word", headers=h_b, json={"plantilla": "CDMX_AP_H_SOLTERO", "datos": {"numero_credito": cred}})
+    _db.expire_all()
+    chk("(simulación) quedó con la plantilla por defecto", _p() == "CDMX_AP_H_SOLTERO", _p())
+    res = _rep.reparar_plantillas(_db)
+    _db.expire_all()
+    chk("corrección: regresa a la plantilla con la que se guardó", _p() == "EDOMEX_AP_M_SOLTERA", _p())
+    chk("corrección: lo reporta", any(x["id"] == eid for x in res["detalle"]), res["corregidos"])
+    res2 = _rep.reparar_plantillas(_db, simular=True)
+    chk("corrección: la segunda vez ya no cambia nada de ese expediente", not any(x["id"] == eid for x in res2["detalle"]))
+    _db.close()
+
+# ---- Eliminar un usuario que tiene expedientes (con respaldo previo)
+with cliente() as c_del:
+    h_adm = {"Authorization": "Bearer " + c_del.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+    nombre_del = f"borrar_{SUF}"
+    c_del.post("/api/admin/usuarios", data={"username": nombre_del, "password": "Prueba2026!", "es_admin": "false"}, headers=h_adm)
+    h_del = {"Authorization": "Bearer " + c_del.post("/api/auth/login", json={"username": nombre_del, "password": "Prueba2026!"}).json()["token"]}
+    for i in range(2):
+        c_del.post("/api/expedientes/guardar", headers=h_del, json={"expedientes": [{"ref": f"d{i}", "plantilla": "CDMX_AP_H_SOLTERO",
+            "datos": {"numero_credito": f"18{i}{SUF[:6]}".ljust(10, "0")[:10], "nombre_acreditado": "JUAN BORRAR"}}]})
+    # (el login del usuario deja su cookie: se vuelve a entrar como admin)
+    h_adm = {"Authorization": "Bearer " + c_del.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+    lista = c_del.get("/api/admin/usuarios", headers=h_adm).json()
+    u_del = next(u for u in lista if u["username"] == nombre_del)
+    chk("usuarios: dice cuántos expedientes tiene", u_del.get("expedientes") == 2, u_del.get("expedientes"))
+    r = c_del.delete(f"/api/admin/usuarios/{u_del['id']}", headers=h_adm)
+    chk("eliminar: con expedientes y sin confirmar, no lo borra (409)", r.status_code == 409, r.status_code)
+    r = c_del.delete(f"/api/admin/usuarios/{u_del['id']}", params={"con_expedientes": "true", "confirmar": "otro"}, headers=h_adm)
+    chk("eliminar: confirmando con otro nombre, no lo borra", r.status_code == 400, r.status_code)
+    n_resp = len(c_del.get("/api/admin/respaldos", headers=h_adm).json())
+    r = c_del.delete(f"/api/admin/usuarios/{u_del['id']}", params={"con_expedientes": "true", "confirmar": nombre_del}, headers=h_adm)
+    chk("eliminar: con sus expedientes", r.status_code == 200 and r.json().get("expedientes_eliminados") == 2, r.text[:200])
+    chk("eliminar: hace un respaldo antes", bool(r.json().get("respaldo_id")))
+    from database import SessionLocal as _SL2  # noqa: E402
+    import models as _m  # noqa: E402
+    _d = _SL2()
+    chk("eliminar: ya no quedan sus expedientes", _d.query(_m.Expediente).filter(_m.Expediente.usuario_propietario == nombre_del).count() == 0)
+    chk("eliminar: ya no queda su actividad", _d.query(_m.Actividad).filter(_m.Actividad.username == nombre_del).count() == 0)
+    _d.close()
+    chk("eliminar: ya no puede entrar", c_del.post("/api/auth/login", json={"username": nombre_del, "password": "Prueba2026!"}).status_code in (400, 401, 403))
+
+# ---- Quitar permisos de administrador a otro admin (para poder eliminarlo)
+with cliente() as c_rol:
+    h_adm = {"Authorization": "Bearer " + c_rol.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+    nombre_adm2 = f"jefa_{SUF}"
+    c_rol.post("/api/admin/usuarios", data={"username": nombre_adm2, "password": "Prueba2026!", "es_admin": "true"}, headers=h_adm)
+    u2 = next(u for u in c_rol.get("/api/admin/usuarios", headers=h_adm).json() if u["username"] == nombre_adm2)
+    chk("rol: se creó como administrador", u2["es_admin"] is True)
+    r = c_rol.delete(f"/api/admin/usuarios/{u2['id']}", headers=h_adm)
+    chk("rol: un administrador no se puede eliminar", r.status_code == 400, r.status_code)
+    r = c_rol.put(f"/api/admin/usuarios/{u2['id']}/rol", json={"es_admin": False}, headers=h_adm)
+    chk("rol: se le quitan los permisos de administrador", r.status_code == 200 and r.json()["es_admin"] is False, r.text[:200])
+    adm = next(u for u in c_rol.get("/api/admin/usuarios", headers=h_adm).json() if u["username"] == "admin")
+    r = c_rol.put(f"/api/admin/usuarios/{adm['id']}/rol", json={"es_admin": False}, headers=h_adm)
+    chk("rol: la cuenta principal admin no se puede cambiar", r.status_code == 400, r.status_code)
+    r = c_rol.delete(f"/api/admin/usuarios/{u2['id']}", headers=h_adm)
+    chk("rol: ya como operador sí se puede eliminar", r.status_code == 200, r.text[:200])
+
+# ---- Editar desde Mi Historial con el espacio de trabajo (guardar con actualizar + tipo_edicion)
+with cliente() as c_ed:
+    h_b = {"Authorization": "Bearer " + c_ed.post("/api/auth/login", json={"username": f"beto_{SUF}", "password": "Nueva2026!"}).json()["token"]}
+    cred = "17" + SUF[:6].translate(str.maketrans("abcdef", "123456")).ljust(8, "0")
+    r = c_ed.post("/api/expedientes/guardar", headers=h_b, json={"expedientes": [{"ref": "e1", "plantilla": "CDMX_AP_M_SOLTERA",
+        "datos": {"numero_credito": cred, "nombre_acreditado": "ROSA EDICION", "folio_real": "111"}}]})
+    eid = r.json()["resultados"][0]["expediente_id"]
+    r = c_ed.post("/api/expedientes/guardar", headers=h_b, json={"expedientes": [{"ref": "e1", "plantilla": "EDOMEX_AP_M_SOLTERA", "actualizar": eid,
+        "tipo_edicion": "editar", "datos": {"numero_credito": cred, "nombre_acreditado": "ROSA EDICION", "folio_real": "222"}}]})
+    res = r.json()
+    chk("edición completa: actualiza el mismo expediente", res.get("actualizados") == 1 and res["resultados"][0]["expediente_id"] == eid, str(res)[:200])
+    b = c_ed.get(f"/api/expedientes/{eid}/bitacora", headers=h_b).json()
+    tipos = [e.get("tipo") for e in b.get("eventos", [])]
+    chk("edición completa: queda como «editó» en su historial", "editar" in tipos, tipos)
+    chk("edición completa: guarda la plantilla nueva", b.get("plantilla") == "EDOMEX_AP_M_SOLTERA", b.get("plantilla"))
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

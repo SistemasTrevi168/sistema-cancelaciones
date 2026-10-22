@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import useCelular from '../usarCelular';
-import { AlertTriangle, CheckCircle, Eye, FileText, Hash, ListChecks, Loader2, PencilLine, Save } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Eye, FileText, FileUp, Hash, ListChecks, Loader2, PencilLine, Save } from 'lucide-react';
 import { useApp } from '../AppContext';
 import CamposDatos from './CamposDatos';
 import { esPlantillaCoac } from '../camposExpediente';
@@ -17,7 +17,7 @@ import Selector from './Selector';
 export default function EspacioExpediente({
   destino, prefijo, datos, archivos, actos, plantilla, onPlantilla, sugerencia, onUsarSugerida,
   onCambio, expedienteId, navegacion = null, accionesExtra = null, previaActiva = false, onPrevia,
-  onGuardar, guardandoAhora = false, avisos = [], avisoCoac = null,
+  onGuardar, guardandoAhora = false, avisos = [], avisoCoac = null, edicion = null, onSubirDocumentos = null,
 }) {
   const { theme, isDarkMode, faltantesPara, etiquetaCampo, handleDownloadWord, descargandoId } = useApp();
   const faltan = faltantesPara(datos, plantilla);
@@ -55,9 +55,9 @@ export default function EspacioExpediente({
                 onClick={onGuardar}
                 disabled={guardandoAhora}
                 className="boton-barra boton-guardar"
-                title="Guarda el expediente en la base (Mi Historial) y genera su Word"
+                title={edicion ? 'Actualiza este expediente en Mi Historial y vuelve a generar su Word' : 'Guarda el expediente en la base (Mi Historial) y genera su Word'}
               >
-                {guardandoAhora ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={15} />} Guardar y procesar
+                {guardandoAhora ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={15} />} {edicion ? 'Guardar cambios' : 'Guardar y procesar'}
               </button>
             )}
     </>
@@ -73,8 +73,10 @@ export default function EspacioExpediente({
             <h2 style={{ color: theme.textPrimary }}>{nombre}</h2>
             <div className="espacio-chips">
               {guardado
-                ? <span className="chip-dato chip-ok" title="Ya está en Mi Historial"><CheckCircle size={12} /> Guardado</span>
-                : <span className="chip-dato chip-borrador" title="Todavía no se guarda en la base: revisa y corrige, y después guárdalo"><PencilLine size={12} /> Borrador · sin guardar</span>}
+                ? <span className="chip-dato chip-ok" title="Ya está en Mi Historial"><CheckCircle size={12} /> {edicion ? 'Cambios guardados' : 'Guardado'}</span>
+                : edicion
+                  ? <span className="chip-dato chip-borrador chip-edicion" title="Al guardar se actualiza este expediente en Mi Historial"><PencilLine size={12} /> Editando · guardado en Mi Historial</span>
+                  : <span className="chip-dato chip-borrador" title="Todavía no se guarda en la base: revisa y corrige, y después guárdalo"><PencilLine size={12} /> Borrador · sin guardar</span>}
               {credito && <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><Hash size={12} /> Crédito {credito}</span>}
               <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><FileText size={12} /> {archivos.length} PDF</span>
               {faltan.length === 0
@@ -116,7 +118,18 @@ export default function EspacioExpediente({
       {/* CUERPO: PDF | DATOS */}
       <div className={`espacio-cuerpo ver-${vistaMovil}`}>
         <div className="espacio-columna espacio-docs">
-          <VisorDocumentos key={`${prefijo}-${archivos.map((a) => a.name).join('|')}`} archivos={archivos} actos={actos} destino={destino} />
+          {archivos.length === 0 && edicion && onSubirDocumentos ? (
+            <div className="visor-vacio fade-in" style={{ color: theme.textSecondary, backgroundColor: isDarkMode ? '#0b1220' : '#f8fafc' }}>
+              <span className="visor-vacio-icono" style={{ backgroundColor: `${theme.accent}1a`, color: theme.accent }}><FileUp size={28} /></span>
+              <strong style={{ color: theme.textPrimary }}>Sin documentos en pantalla</strong>
+              <p>Estás editando con los datos guardados. Si subes otra vez la carta y la constancia, las ves aquí para seleccionar texto, usar el OCR y elegir el acto.</p>
+              <button type="button" className="boton-barra" onClick={onSubirDocumentos} style={{ backgroundColor: theme.accent, color: '#fff', borderColor: theme.accent }}>
+                <FileUp size={15} /> Subir documentos
+              </button>
+            </div>
+          ) : (
+            <VisorDocumentos key={`${prefijo}-${archivos.map((a) => a.name).join('|')}`} archivos={archivos} actos={actos} destino={destino} />
+          )}
         </div>
 
         <div className="espacio-columna espacio-datos" style={{ borderColor: theme.border }}>

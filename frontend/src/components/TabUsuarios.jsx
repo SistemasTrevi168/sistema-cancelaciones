@@ -1,4 +1,4 @@
-import { KeyRound, Loader2, Plus, Power, Trash2, Users } from 'lucide-react';
+import { KeyRound, Loader2, Plus, Power, ShieldCheck, ShieldOff, Trash2, Users } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
 import PanelRespaldos from './PanelRespaldos';
@@ -11,6 +11,7 @@ export default function TabUsuarios() {
     setModalPassword,
     handleCrearUsuario,
     handleEliminarUsuario,
+    handleCambiarRol,
     loadingUsuarios,
     nuevoUsuario,
     setNuevoUsuario,
@@ -101,7 +102,9 @@ export default function TabUsuarios() {
                                 <Avatar usuario={esYo ? { ...u, foto: currentUser?.foto ?? u.foto, nombre_mostrar: currentUser?.nombre_mostrar ?? u.nombre_mostrar } : u} tam={30} color={theme.accent} />
                                 <span>
                                   {u.nombre_mostrar || u.username}{esYo && <span style={{ fontWeight: 'normal', color: theme.textSecondary }}> (tú)</span>}
-                                  {u.nombre_mostrar && <span style={{ display: 'block', fontWeight: 'normal', fontSize: '11px', color: theme.textSecondary }}>@{u.username}</span>}
+                                  <span style={{ display: 'block', fontWeight: 'normal', fontSize: '11px', color: theme.textSecondary }}>
+                                    {u.nombre_mostrar ? `@${u.username}` : ''}{u.nombre_mostrar && typeof u.expedientes === 'number' ? ' · ' : ''}{typeof u.expedientes === 'number' ? `${u.expedientes} expediente${u.expedientes === 1 ? '' : 's'}` : ''}
+                                  </span>
                                 </span>
                               </span>
                             </td>
@@ -115,6 +118,11 @@ export default function TabUsuarios() {
                               {!esYo && (
                                 <button type="button" onClick={() => setModalPassword({ modo: 'reset', usuario: u })} style={{ ...btnIcono, color: theme.accent }} title="Asignar nueva contraseña">
                                   <KeyRound size={16} />
+                                </button>
+                              )}
+                              {!esYo && u.username !== 'admin' && (
+                                <button type="button" onClick={() => handleCambiarRol(u)} style={{ ...btnIcono, color: u.es_admin ? '#7c3aed' : theme.textSecondary }} title={u.es_admin ? 'Quitar permisos de administrador' : 'Hacer administrador'}>
+                                  {u.es_admin ? <ShieldOff size={16} /> : <ShieldCheck size={16} />}
                                 </button>
                               )}
                               {!esUsuarioAdmin && !esYo && (

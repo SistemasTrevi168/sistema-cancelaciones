@@ -6,7 +6,6 @@ import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
 import EstadoExpediente from './EstadoExpediente';
 import BitacoraExpediente from './BitacoraExpediente';
-import EditarExpediente from './EditarExpediente';
 import { ESTADOS, colorEstado } from '../estadosExpediente';
 import usePresencia from '../ui/usarPresencia';
 import Selector from './Selector';
@@ -23,6 +22,8 @@ export default function TabHistorial() {
     filterPeriod,
     filteredHistorial,
     handleDownloadWord,
+    plantillaGuardada,
+    iniciarEdicionSingle,
     handleExport,
     mesesNombres,
     parsearFechaExpediente,
@@ -43,20 +44,12 @@ export default function TabHistorial() {
     setFiltroEstado,
     conteoEstados,
     cambiarEstado,
-    setUnlockedFields,
     puedeServidor,
     theme
   } = useApp();
   const exportar = usePresencia(showExportMenu, 150);
   const [bitacora, setBitacora] = useState(null); // { id, titulo, datos }
-  const [editando, setEditando] = useState(null);  // expediente que se está editando
-  const abrirEdicion = (item) => {
-    const id = idDe(item);
-    // Al editar, todos los datos quedan abiertos (sin candado)
-    setUnlockedFields((prev) => ({ ...prev, ...Object.fromEntries(Object.keys(item.datos_extraidos || {}).map((k) => [`editar_${id}_${k}`, true])) }));
-    setEditando(item);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+
   const [marcados, setMarcados] = useState({});    // id -> true
   const idDe = (item) => String(item.id || item.expediente_id);
   const visiblesIds = filteredHistorial.map(idDe);
@@ -81,10 +74,6 @@ export default function TabHistorial() {
   const marcarVarios = async (estado) => {
     if (await cambiarEstado(marcadosIds, estado)) setMarcados({});
   };
-
-  if (editando) {
-    return <EditarExpediente key={idDe(editando)} item={editando} onCerrar={() => setEditando(null)} />;
-  }
 
   return (
 <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}` }}>
@@ -318,11 +307,13 @@ export default function TabHistorial() {
                             <td className="celda-acciones" style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               <div className="acciones-historial">
                               <button
-                                onClick={() => abrirVistaPrevia({
+                                onClick={async () => abrirVistaPrevia({
                                   origen: 'historial',
                                   id: item.id || item.expediente_id,
                                   datos: dExtra,
-                                  plantilla: dExtra.plantilla_seleccionada || dExtra.plantilla || selectedPlantilla,
+                                  // La plantilla con la que se guardó (nunca la que esté elegida en otra pantalla)
+                                  plantilla: dExtra.plantilla_seleccionada || dExtra.plantilla
+                                    || (await plantillaGuardada(item.id || item.expediente_id)) || selectedPlantilla,
                                   titulo: nombre,
                                 })}
                                 title="Vista previa"
@@ -331,9 +322,9 @@ export default function TabHistorial() {
                               >
                                 <Eye size={15} />
                               </button>
-                              {puedeServidor('editar_expediente') && <button
+                              {puedeServidor('actualizar_existente') && <button
                                 type="button"
-                                onClick={() => abrirEdicion(item)}
+                                onClick={() => iniciarEdicionSingle(item)}
                                 title="Editar expediente"
                                 aria-label={`Editar ${nombre}`}
                                 className="accion-icono" style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, borderColor: theme.border }}

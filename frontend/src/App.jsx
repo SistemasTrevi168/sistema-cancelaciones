@@ -10,7 +10,10 @@ import PanelVistaPrevia from './components/PanelVistaPrevia';
 import PantallaCarga from './components/PantallaCarga';
 import { avisar, confirmar } from './ui/notificaciones';
 import { instalarEfectoOnda } from './ui/efectoOnda';
-import { CAMPOS_DEL_ACTO, esPlantillaCoac, etiquetaDe } from './camposExpediente';
+import { CAMPOS_DEL_ACTO, CAMPOS_TRABAJADOR_DOS, GRUPOS_CAMPOS, esPlantillaCoac, esPuntoInmueble, etiquetaDe } from './camposExpediente';
+
+// Datos principales del expediente (los que se ven en pantalla, sin el desglose del inmueble)
+const CAMPOS_PRINCIPALES = new Set([...GRUPOS_CAMPOS.flatMap((g) => g.campos), ...CAMPOS_TRABAJADOR_DOS]);
 import { sugerenciaActual } from './sugerenciaPlantilla';
 import { generoDeNombre } from './ui/generoNombre';
 import { nombrePlantilla } from './plantillasCatalogo';
@@ -267,6 +270,9 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // Coacreditados: segunda carta (la del "TRABAJADOR DOS")
   const [carta2Single, setCarta2Single] = useState(null);
   const [coacManual, setCoacManual] = useState(false); // la persona pidió el recuadro de la carta dos
+  // Edición de un expediente ya guardado (desde Mi Historial) con el mismo espacio de trabajo del Caso Individual:
+  // { id, nombre, credito, estado, datos (los guardados), plantilla }
+  const [edicionSingle, setEdicionSingle] = useState(null);
   const singleFiles = [cartaSingle, carta2Single, constanciaSingle].filter(Boolean);
   const [loading, setLoading] = useState(false);
   const [progressSingle, setProgressSingle] = useState(0);
@@ -842,13 +848,48 @@ const handlePreviewExcel = async (file) => {
       avisar.error('ID de usuario no válido');
       return;
     }
+    const usuario = usuariosLista.find((u) => String(u.id) === String(usuarioId)) || {};
+    const nombre = usuario.nombre_mostrar || usuario.username || 'este usuario';
 
-    if (!(await confirmar('Se eliminará este usuario. Esta acción no se puede deshacer.', { titulo: 'Eliminar usuario', textoConfirmar: 'Sí, eliminar', peligro: true }))) {
-      return;
-    }
+    // Si tiene expedientes: se pregunta si desactivarlo o borrarlo junto con sus expedientes
+    const eliminarConExpedientes = async (total) => {
+      const cuantos = total ? `${total} expediente(s)` : 'expedientes';
+      const r = await confirmar(
+        `${nombre} tiene ${cuantos} registrados.\n\nPuedes desactivarlo (ya no podrá entrar y su trabajo se conserva) o eliminarlo junto con TODOS sus expedientes, su historial de cambios y su actividad en los reportes.\n\nAntes de borrar, el sistema hace un respaldo automático por si necesitas recuperar algo.`,
+        { titulo: 'Este usuario tiene expedientes', textoConfirmar: 'Eliminar con sus expedientes', textoAlterno: 'Mejor desactivarlo', peligro: true },
+      );
+      if (r === 'alterno') {
+        if (usuario.id && usuario.activo !== false) await handleCambiarActivo(usuario);
+        return;
+      }
+      if (r !== true) return;
+      if (!(await confirmar(
+        `Se van a borrar definitivamente ${cuantos} de ${nombre} (@${usuario.username}). Revisa que sean los que quieres quitar: no aparecerán más en Mi Historial ni en los reportes.`,
+        { titulo: '¿Seguro?', textoConfirmar: `Sí, borrar ${cuantos}`, peligro: true },
+      ))) return;
+      const res = await api.delete(`/admin/usuarios/${usuarioId}`, { params: { con_expedientes: true, confirmar: usuario.username } });
+      avisar.exito(`Usuario eliminado con ${res.data?.expedientes_eliminados ?? 0} expediente(s). Se guardó un respaldo antes de borrar.`);
+      cargarUsuarios();
+    };
 
     try {
-      await api.delete(`/admin/usuarios/${usuarioId}`);
+      if (usuario.expedientes > 0) {
+        await eliminarConExpedientes(usuario.expedientes);
+        return;
+      }
+      if (!(await confirmar('Se eliminará este usuario. Esta acción no se puede deshacer.', { titulo: 'Eliminar usuario', textoConfirmar: 'Sí, eliminar', peligro: true }))) {
+        return;
+      }
+      try {
+        await api.delete(`/admin/usuarios/${usuarioId}`);
+      } catch (error) {
+        // El servidor avisa que sí tiene expedientes
+        if (error.response?.status === 409 && usuario.username) {
+          await eliminarConExpedientes(0);
+          return;
+        }
+        throw error;
+      }
       avisar.exito('Usuario eliminado correctamente');
       cargarUsuarios();
     } catch (error) {
@@ -887,6 +928,22 @@ const handlePreviewExcel = async (file) => {
       cargarUsuarios();
     } catch (err) {
       avisar.error(err.response?.data?.detail || 'No se pudo cambiar el estado del usuario.');
+    }
+  };
+
+  const handleCambiarRol = async (usuario) => {
+    const darAdmin = !usuario.es_admin;
+    const nombre = usuario.nombre_mostrar || usuario.username;
+    const pregunta = darAdmin
+      ? `¿Dar permisos de administrador a ${nombre}? Podrá ver Usuarios, Reportes y Respaldos, y administrar cuentas.`
+      : `¿Quitar los permisos de administrador a ${nombre}? Quedará como operador. Si tiene la sesión abierta, tendrá que volver a entrar.`;
+    if (!(await confirmar(pregunta, { titulo: darAdmin ? 'Hacer administrador' : 'Quitar permisos de administrador', textoConfirmar: darAdmin ? 'Sí, hacer administrador' : 'Sí, dejar como operador', peligro: darAdmin }))) return;
+    try {
+      const r = await api.put(`/admin/usuarios/${usuario.id}/rol`, { es_admin: darAdmin });
+      avisar.exito(r.data?.mensaje || 'Permisos actualizados.');
+      cargarUsuarios();
+    } catch (err) {
+      avisar.error(err.response?.status === 404 ? 'El servidor todavía no tiene esta función (falta publicar la versión nueva).' : (err.response?.data?.detail || 'No se pudieron cambiar los permisos.'));
     }
   };
 
@@ -1064,6 +1121,11 @@ const handlePreviewExcel = async (file) => {
           : `Los archivos no son del mismo crédito (${conflictoSingle.carta} y ${conflictoSingle.constancia}).`);
       return;
     }
+    if (edicionSingle) {
+      const nArchivo = singleFiles.map((f) => numeroEnNombre(f.name)).find(Boolean);
+      const nExp = soloDigitos(edicionSingle.credito);
+      if (nArchivo && nExp && nArchivo !== nExp && !(await confirmar(`Los archivos son del crédito ${nArchivo}, pero estás editando el expediente del crédito ${nExp}.`, { titulo: '¿Son los documentos correctos?', textoConfirmar: 'Sí, leerlos' }))) return;
+    }
     await leerSingle(singleFiles);
   };
 
@@ -1096,10 +1158,27 @@ const handlePreviewExcel = async (file) => {
       setTimeout(() => {
         setExpedienteId('');
         const rawDatos = borrador.datos_extraidos || {};
-        setDatos({ numero_credito: rawDatos.numero_credito || '', ...rawDatos });
+        const leidos = { numero_credito: rawDatos.numero_credito || '', ...rawDatos };
+        const avisosEdicion = [];
+        if (edicionSingle) {
+          // Editando un expediente guardado: lo que no venga en los documentos se toma de lo guardado
+          const vacio = (v) => v == null || String(v).trim() === '' || /^NO_ENCONTRADO$/i.test(String(v).trim());
+          const guardados = edicionSingle.datos || {};
+          const tomados = [];
+          const distintos = [];
+          Object.keys(guardados).forEach((k) => {
+            if (k.startsWith('_') || k === 'plantilla_seleccionada' || k === 'plantilla' || typeof guardados[k] === 'object') return;
+            if (vacio(guardados[k])) return;
+            if (vacio(leidos[k])) { leidos[k] = guardados[k]; tomados.push(k); }
+            else if (String(leidos[k]).trim() !== String(guardados[k]).trim()) distintos.push(k);
+          });
+          if (tomados.length) avisosEdicion.push(`Se dejaron ${tomados.length} dato(s) que ya estaban guardados y no vienen en los documentos: ${tomados.map(etiquetaDe).join(', ')}.`);
+          if (distintos.length) avisosEdicion.push(`En los documentos vienen distintos ${distintos.length} dato(s) de lo guardado (se usan los de los documentos): ${distintos.map(etiquetaDe).join(', ')}.`);
+        }
+        setDatos(leidos);
         setActosSingle(borrador.actos || []);
         setSugerenciaBase(borrador.plantilla_sugerida || null);
-        setAvisosSingle(borrador.avisos || []);
+        setAvisosSingle([...(borrador.avisos || []), ...avisosEdicion]);
         setLecturaSingle({ datos: { ...rawDatos }, leido_en: borrador.leido_en || null });
         setUnlockedFields({});
         // Con dos cartas se usa directamente la plantilla de coacreditados
@@ -1226,6 +1305,7 @@ const handlePreviewExcel = async (file) => {
     if (!datos) return;
     const faltan = faltantesPara(datos, selectedPlantilla);
     if (faltan.length > 0 && !(await confirmar(mensajeFaltantes(faltan, 'guardar el expediente'), { titulo: 'Faltan datos', textoConfirmar: 'Guardar de todas formas' }))) return;
+    if (edicionSingle) { await guardarEdicionSingle(); return; }
     const actualizar = await decidirRepetidos([datos.numero_credito]);
     if (!actualizar) return;
     setGuardando((g) => ({ ...g, single: true }));
@@ -1234,6 +1314,57 @@ const handlePreviewExcel = async (file) => {
       if (!r || r.error) throw new Error(r?.error || 'No se pudo guardar');
       setExpedienteId(r.expediente_id);
       avisar.exito(r.actualizado ? 'Se actualizó el expediente que ya existía (su Word se volvió a generar).' : 'Expediente guardado y procesado. Ya está en Mi Historial.');
+    } catch (err) {
+      avisar.error(`No se pudo guardar: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setGuardando((g) => ({ ...g, single: false }));
+    }
+  };
+
+  // Cambios del expediente que se está editando contra lo que ya estaba guardado
+  const cambiosEdicion = () => {
+    if (!edicionSingle || !datos) return [];
+    const limpio = (v) => String(v ?? '').trim();
+    const g = edicionSingle.datos || {};
+    // Solo cuentan los datos que el expediente ya tenía (los detalles nuevos que traen los documentos,
+    // como el desglose del inmueble, se guardan pero no son "cambios")
+    const campos = Object.keys(datos).filter((k) => !k.startsWith('_') && !['plantilla_seleccionada', 'plantilla', 'texto_raw'].includes(k)
+      && typeof datos[k] !== 'object' && !esPuntoInmueble(k) && (k in g || CAMPOS_PRINCIPALES.has(k)) && limpio(datos[k]) !== limpio(g[k]));
+    if (limpio(selectedPlantilla) !== limpio(edicionSingle.plantilla)) campos.push('plantilla_seleccionada');
+    return campos;
+  };
+
+  const guardarEdicionSingle = async () => {
+    const ed = edicionSingle;
+    const cambios = cambiosEdicion();
+    const conDocs = singleFiles.length > 0;
+    if (cambios.length === 0 && !conDocs) {
+      avisar.aviso('No hay cambios por guardar.');
+      return;
+    }
+    const ESTADO_TXT = { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' };
+    const lista = cambios.map((k) => (k === 'plantilla_seleccionada' ? 'Plantilla' : etiquetaDe(k)));
+    const aviso = ed.estado && ed.estado !== 'GENERADO'
+      ? `\n\nEste expediente está «${ESTADO_TXT[ed.estado] || ed.estado}»: al guardar regresa a «Generado», porque su Word cambia.` : '';
+    const texto = cambios.length
+      ? `Se va a actualizar el expediente de ${ed.nombre} (crédito ${ed.credito || '—'}) con ${cambios.length} cambio(s): ${lista.join(', ')}.`
+      : `Se va a actualizar el expediente de ${ed.nombre} (crédito ${ed.credito || '—'}) con los documentos que subiste; los datos quedan igual.`;
+    if (!(await confirmar(texto + aviso, { titulo: 'Guardar cambios', textoConfirmar: 'Guardar cambios' }))) return;
+    setGuardando((g) => ({ ...g, single: true }));
+    try {
+      const [r] = await guardarEnBase([{
+        ref: 'single', datos, plantilla: selectedPlantilla, archivos: singleFiles.map((f) => f.name),
+        metricas: metricasDe('individual', lecturaSingle, datos, avisosSingle),
+        actualizar: ed.id, tipo_edicion: conDocs ? 'actualizar' : 'editar',
+      }]);
+      if (!r || r.error) throw new Error(r?.error || 'No se pudo guardar');
+      setExpedienteId(r.expediente_id || ed.id);
+      // Lo guardado ahora es la nueva base para comparar
+      setEdicionSingle((prev) => (prev ? { ...prev, datos: { ...datos }, plantilla: selectedPlantilla, estado: 'GENERADO', guardado: true } : prev));
+      setHistorial((prev) => prev.map((h) => (String(h.id || h.expediente_id) === String(ed.id)
+        ? { ...h, ...(r.datos_extraidos ? { datos_extraidos: r.datos_extraidos } : {}), estado: 'GENERADO' } : h)));
+      plantillasGuardadas.current[String(ed.id)] = selectedPlantilla;
+      avisar.exito('Se guardaron los cambios del expediente y su Word se volvió a generar.');
     } catch (err) {
       avisar.error(`No se pudo guardar: ${err.response?.data?.detail || err.message}`);
     } finally {
@@ -1474,6 +1605,26 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
     return nuevosIds;
   };
 
+// Plantilla con la que se guardó un expediente: primero la del historial ya cargado; si no viene ahí
+// (servidores anteriores no la mandaban en la lista), se pregunta a su historial de cambios.
+const plantillasGuardadas = React.useRef({});
+const plantillaGuardada = async (id) => {
+  const clave = String(id || '');
+  if (!clave) return null;
+  if (plantillasGuardadas.current[clave] !== undefined) return plantillasGuardadas.current[clave];
+  const fila = (historial || []).find((h) => String(h.id || h.expediente_id) === clave);
+  const d = fila?.datos_extraidos || {};
+  let p = d.plantilla_seleccionada || d.plantilla || fila?.plantilla_seleccionada || null;
+  if (!p) {
+    try {
+      const r = await api.get(`/expedientes/${clave}/bitacora`);
+      p = r.data?.plantilla || r.data?.info?.plantilla || null;
+    } catch { p = null; }
+  }
+  plantillasGuardadas.current[clave] = p;
+  return p;
+};
+
 // 📥 Función de descarga con el nombre basado en el Número de Crédito
 const handleDownloadWord = async (expedienteId, datosParam = null, plantillaParam = null, opciones = {}) => {
   try {
@@ -1483,17 +1634,21 @@ const handleDownloadWord = async (expedienteId, datosParam = null, plantillaPara
       return;
     }
 
-    // Aviso si faltan datos que la plantilla necesita
-    // Cada expediente usa su propia plantilla (lote/historial); si no trae, la seleccionada
-    const plantillaUsar = plantillaParam || selectedPlantilla;
-    const faltan = faltantesPara(datosParam || datos, plantillaUsar);
-    if (faltan.length > 0 && !(await confirmar(mensajeFaltantes(faltan), { titulo: 'Faltan datos', textoConfirmar: 'Generar de todas formas' }))) return;
+    // Cada expediente se descarga con SU plantilla (la que se guardó). Si no la conocemos aquí
+    // (por ejemplo, en Mi Historial), NO se manda ninguna y el servidor usa la que tiene guardada.
+    // Antes se mandaba la plantilla seleccionada en pantalla (por defecto CDMX Ap. Crédito Hombre Soltero)
+    // y el Word salía con esa.
+    const plantillaUsar = plantillaParam || (await plantillaGuardada(idReal)) || null;
+    if (plantillaUsar) {
+      const faltan = faltantesPara(datosParam || datos, plantillaUsar);
+      if (faltan.length > 0 && !(await confirmar(mensajeFaltantes(faltan), { titulo: 'Faltan datos', textoConfirmar: 'Generar de todas formas' }))) return;
+    }
 
     setDescargandoId(idReal);
     const response = await api.post(
       `/expedientes/${idReal}/generar-word`,
       {
-        plantilla: plantillaUsar,
+        ...(plantillaUsar ? { plantilla: plantillaUsar } : {}),
         datos: datosParam || datos,
         // true: con la plantilla actual; si no, con la misma versión con la que se generó la primera vez
         plantilla_actual: !!opciones.plantillaActual,
@@ -1848,23 +2003,6 @@ const conteoEstados = historialSinEstado.reduce((acc, item) => {
   return acc;
 }, {});
 
-// Edita un expediente ya guardado (desde Mi Historial). Regresa true si se guardó.
-const editarExpediente = async (id, datosNuevos, plantillaNueva) => {
-  try {
-    const res = await api.put(`/expedientes/${id}/editar`, { datos: datosNuevos, plantilla: plantillaNueva });
-    const actualizado = res.data?.expediente;
-    if (actualizado) {
-      setHistorial((prev) => prev.map((h) => (String(h.id || h.expediente_id) === String(id) ? { ...h, ...actualizado } : h)));
-    }
-    const n = Object.keys(res.data?.cambios || {}).length;
-    avisar.exito(n ? `Se guardaron ${n} cambio(s) y el Word se volvió a generar.` : 'No había cambios; el Word se volvió a generar.');
-    return true;
-  } catch (err) {
-    avisar.error(`No se pudo guardar: ${err.response?.data?.detail || err.message}`);
-    return false;
-  }
-};
-
 // Cambia el estado de uno o varios expedientes (Generado -> Revisado -> Entregado)
 const cambiarEstado = async (ids, estado) => {
   const lista = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
@@ -1919,13 +2057,70 @@ const cambiarEstado = async (ids, estado) => {
     }
   };
 
-  // Empieza un expediente nuevo en Caso Individual
-  const nuevoExpedienteSingle = async () => {
-    if (datos && !expedienteId && !(await confirmar('Este expediente todavía no está guardado; si continúas se pierden los datos leídos y lo que hayas corregido.', { titulo: '¿Descartar el expediente?', textoConfirmar: 'Descartar', peligro: true }))) return;
+  // Deja el Caso Individual vacío (sin preguntar)
+  const limpiarSingle = () => {
     cerrarVistaPrevia();
-    setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]);
+    setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]); setLecturaSingle(null);
     setCartaSingle(null); setConstanciaSingle(null); setCarta2Single(null); setCoacManual(false); setExpedienteId(''); setError(''); setProgressSingle(0);
     setUnlockedFields({});
+    setEdicionSingle(null);
+  };
+  // ¿Hay algo sin guardar en el Caso Individual?
+  const pendienteSingle = () => {
+    if (!datos || expedienteId) return false;
+    return edicionSingle ? (cambiosEdicion().length > 0 || singleFiles.length > 0) : true;
+  };
+
+  // Empieza un expediente nuevo en Caso Individual
+  const nuevoExpedienteSingle = async () => {
+    if (pendienteSingle() && !(await confirmar('Este expediente todavía no está guardado; si continúas se pierden los datos leídos y lo que hayas corregido.', { titulo: '¿Descartar el expediente?', textoConfirmar: 'Descartar', peligro: true }))) return;
+    limpiarSingle();
+  };
+
+  // ---- EDITAR UN EXPEDIENTE GUARDADO (desde Mi Historial) ----
+  // Se abre en el mismo espacio de trabajo que un expediente nuevo: documentos, visor, actos, «Usar como…»,
+  // vista previa… y al guardar se ACTUALIZA el expediente que ya existía.
+  const iniciarEdicionSingle = async (item) => {
+    const id = String(item.id || item.expediente_id || '');
+    if (!id) return;
+    if (pendienteSingle() && !(await confirmar('En Caso Individual tienes un expediente sin guardar; si continúas se pierde.', { titulo: '¿Descartar el expediente?', textoConfirmar: 'Descartar y editar', peligro: true }))) return;
+    const d = { ...(item.datos_extraidos || {}) };
+    const plantilla = d.plantilla_seleccionada || d.plantilla || (await plantillaGuardada(id)) || selectedPlantilla;
+    limpiarSingle();
+    setEdicionSingle({
+      id,
+      nombre: d.nombre_acreditado || item.acreditado || 'Expediente',
+      credito: d.numero_credito || item.numero_credito || '',
+      estado: item.estado || 'GENERADO',
+      datos: d,
+      plantilla,
+    });
+    setSelectedPlantilla(plantilla);
+    if (d._coacreditados || esPlantillaCoac(plantilla)) setCoacManual(true);
+    cambiarPestana('single');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  // Editar con los datos guardados, sin volver a subir los documentos
+  const editarSinDocumentos = () => {
+    if (!edicionSingle) return;
+    cerrarVistaPrevia();
+    const d = { ...edicionSingle.datos };
+    setDatos(d);
+    setLecturaSingle({ datos: { ...d }, leido_en: null });
+    setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]); setExpedienteId('');
+    setUnlockedFields({});
+  };
+  // Editando sin documentos: regresar a subirlos (lo que se haya cambiado en pantalla se pierde)
+  const volverADocumentos = async () => {
+    if (cambiosEdicion().length > 0 && !(await confirmar('Al subir los documentos se vuelven a leer y se pierden los cambios que hiciste en pantalla.', { titulo: '¿Subir documentos?', textoConfirmar: 'Sí, subir documentos' }))) return;
+    cerrarVistaPrevia();
+    setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]); setLecturaSingle(null); setExpedienteId('');
+  };
+  // Salir de la edición y regresar a Mi Historial
+  const salirEdicionSingle = async () => {
+    if (pendienteSingle() && !(await confirmar('Los cambios que hiciste no se han guardado y se perderán.', { titulo: '¿Salir sin guardar?', textoConfirmar: 'Salir sin guardar', peligro: true }))) return;
+    limpiarSingle();
+    cambiarPestana('history');
   };
 
   // Coacreditados: ya leído el expediente, se agrega la carta del trabajador dos y se vuelve a leer
@@ -2003,7 +2198,7 @@ const cambiarEstado = async (ids, estado) => {
   };
 
   // Aviso del navegador si se cierra o recarga la página con expedientes sin guardar
-  const hayBorradores = (!!datos && !expedienteId) || batchResults.some((r) => !r.error && !r.expediente_id);
+  const hayBorradores = pendienteSingle() || batchResults.some((r) => !r.error && !r.expediente_id);
   const hayVersionNueva = useVersionNueva();
   const [versionPospuesta, setVersionPospuesta] = useState(false);
   const actualizarVersion = async () => {
@@ -2058,7 +2253,12 @@ const cambiarEstado = async (ids, estado) => {
     setFiltroEstado,
     conteoEstados,
     cambiarEstado,
-    editarExpediente,
+    iniciarEdicionSingle,
+    editarSinDocumentos,
+    salirEdicionSingle,
+    volverADocumentos,
+    edicionSingle,
+    cambiosEdicion,
     puedeServidor,
     confirmarRepetidos,
     setHistorial,
@@ -2126,9 +2326,11 @@ const cambiarEstado = async (ids, estado) => {
     handleConfirmLogout,
     handleCrearUsuario,
     handleDownloadWord,
+    plantillaGuardada,
     handleDownloadZip,
     handleDragOver,
     handleEliminarUsuario,
+    handleCambiarRol,
     handleExcelSubmit,
     handleExport,
     handleInputChange,
@@ -2305,4 +2507,4 @@ const cambiarEstado = async (ids, estado) => {
     </div>
     </AppContext.Provider>
   );
-}
+}

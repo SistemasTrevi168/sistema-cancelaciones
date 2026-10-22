@@ -137,7 +137,9 @@ def _expedientes(db: Session, inicio, fin, usuario: Optional[str]):
 
 def _actividad(db: Session, inicio, fin, usuario: Optional[str]):
     A = models.Actividad
-    q = db.query(A).filter(A.creado_en >= inicio, A.creado_en < fin)
+    # Las correcciones internas del sistema no son trabajo de nadie: no cuentan en los reportes
+    q = db.query(A).filter(A.creado_en >= inicio, A.creado_en < fin,
+                           A.tipo.notin_(("corregir_plantilla", "mantenimiento")))
     if usuario:
         q = q.filter(A.username == usuario)
     return [{"usuario": a.username, "tipo": a.tipo, "expediente_id": a.expediente_id,

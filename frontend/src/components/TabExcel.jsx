@@ -4,6 +4,7 @@ import IconoArchivo from './IconoArchivo';
 import { tipoDeArchivo } from '../tiposArchivo';
 import { avisar } from '../ui/notificaciones';
 import Selector from './Selector';
+import OpcionesPlantilla from './OpcionesPlantilla';
 
 export default function TabExcel() {
   const {
@@ -37,40 +38,6 @@ export default function TabExcel() {
   const indicePrimeraFila = indiceUltimaFila - filasPorPagina;
   const filasPaginadas = (filasPreview || []).slice(indicePrimeraFila, indiceUltimaFila);
 
-  const OpcionesPlantillas = () => (
-    <>
-      <optgroup label="CDMX - APERTURA DE CRÉDITO">
-        <option value="CDMX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-        <option value="CDMX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-        <option value="CDMX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-        <option value="CDMX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-      </optgroup>
-      <optgroup label="CDMX - CONTRATO DE MUTUO">
-        <option value="CDMX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-        <option value="CDMX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-        <option value="CDMX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-        <option value="CDMX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-      </optgroup>
-      <optgroup label="MODELOS COACREDITADOS">
-        <option value="COAC_CDMX_AP">CDMX - Ap. Crédito</option>
-        <option value="COAC_CDMX_MUTUO">CDMX - C. Mutuo</option>
-        <option value="COAC_EDOMEX_AP">EDOMEX - Ap. Crédito</option>
-        <option value="COAC_EDOMEX_MUTUO">EDOMEX - C. Mutuo</option>
-      </optgroup>
-      <optgroup label="EDOMEX - APERTURA DE CRÉDITO">
-        <option value="EDOMEX_AP_H_SOLTERO">Ap. Crédito - Hombre Soltero</option>
-        <option value="EDOMEX_AP_H_CASADO">Ap. Crédito - Hombre Casado</option>
-        <option value="EDOMEX_AP_M_SOLTERA">Ap. Crédito - Mujer Soltera</option>
-        <option value="EDOMEX_AP_M_CASADA">Ap. Crédito - Mujer Casada</option>
-      </optgroup>
-      <optgroup label="EDOMEX - CONTRATO DE MUTUO">
-        <option value="EDOMEX_MUTUO_H_SOLTERO">C. Mutuo - Hombre Soltero</option>
-        <option value="EDOMEX_MUTUO_H_CASADO">C. Mutuo - Hombre Casado</option>
-        <option value="EDOMEX_MUTUO_M_SOLTERA">C. Mutuo - Mujer Soltera</option>
-        <option value="EDOMEX_MUTUO_M_CASADA">C. Mutuo - Mujer Casada</option>
-      </optgroup>
-    </>
-  );
 
   return (
     <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}`, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)' }}>
@@ -86,7 +53,7 @@ export default function TabExcel() {
           onChange={(e) => setSelectedPlantilla(e.target.value)}
           style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg || '#fff', color: theme.textPrimary, fontSize: '13px', fontWeight: '600', cursor: 'pointer', outline: 'none' }}
         >
-          <OpcionesPlantillas />
+          <OpcionesPlantilla />
         </Selector>
       </div>
 
@@ -205,7 +172,7 @@ export default function TabExcel() {
                           }}
                           style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg || '#fff', color: theme.textPrimary, fontSize: '12px', cursor: 'pointer', outline: 'none' }}
                         >
-                          <OpcionesPlantillas />
+                          <OpcionesPlantilla />
                         </Selector>
                       </td>
                       <td style={{ padding: '12px', textAlign: 'center' }}>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  AlertTriangle, ArrowRight, Clock, Download, FilePlus2, FileSpreadsheet, History, Loader2, PenLine, Save, Shuffle, X,
+  AlertTriangle, ArrowRight, Clock, Download, FilePlus2, FileSpreadsheet, History, Loader2, PenLine, Save, Shuffle, Wrench, X,
 } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../AppContext';
@@ -60,6 +60,13 @@ function describir(e) {
       color: '#2563eb',
     };
     case 'estado': return { icono: Shuffle, titulo: 'Cambió el estado', estado: [d.de, d.a], color: '#b45309' };
+    case 'corregir_plantilla': return {
+      icono: Wrench,
+      titulo: 'Se corrigió la plantilla',
+      sub: 'Regresó a la plantilla con la que se guardó',
+      cambios: d.de || d.a ? { plantilla_seleccionada: [d.de, d.a] } : null, tituloCambios: 'Corrección',
+      color: '#0f766e',
+    };
     default: return { icono: Clock, titulo: e.tipo, color: '#64748b' };
   }
 }
@@ -143,7 +150,7 @@ export default function BitacoraExpediente({ expedienteId, titulo, datos, onCerr
                           </span>
                         )}
                       </div>
-                      <small style={{ color: theme.textSecondary }}>{e.nombre_usuario || e.usuario} · {fechaHora(e.fecha)}{d.sub ? ` · ${d.sub}` : ''}</small>
+                      <small style={{ color: theme.textSecondary }}>{e.usuario === 'sistema' ? 'Sistema' : (e.nombre_usuario || e.usuario)} · {fechaHora(e.fecha)}{d.sub ? ` · ${d.sub}` : ''}</small>
                       {cambios.length > 0 && (
                         <div className="bitacora-cambios" style={{ borderColor: theme.border }}>
                           <div className="bitacora-cambios-titulo" style={{ color: theme.textSecondary }}>{d.tituloCambios} ({cambios.length})</div>

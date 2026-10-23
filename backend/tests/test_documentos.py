@@ -112,6 +112,15 @@ with mock_aws():
         eventos = bita.get("eventos", bita) if isinstance(bita, dict) else bita
         chk("bitácora: se registra la subida", any((e.get("tipo") == "documentos") for e in eventos), str(eventos)[:200])
 
+        # --- Carga de PDF de expedientes anteriores ---
+        r = cl.post("/api/documentos/emparejar", headers=h_d, json={"creditos": [cred, "1234567890"]})
+        ex = r.json()["expedientes"]
+        chk("emparejar: encuentra el expediente y sus PDF", len(ex) == 1 and ex[0]["id"] == eid and ex[0]["tiene"] == ["carta", "constancia"], ex)
+        chk("emparejar: otro operador no lo encuentra", cl.post("/api/documentos/emparejar", headers=h_o, json={"creditos": [cred]}).json()["expedientes"] == [])
+        files = [("archivos", ("x.pdf", PDF, "application/pdf"))]
+        r = cl.post(f"/api/expedientes/{eid}/documentos", headers=h_d, files=files, data={"tipos": ["carta"], "solo_si_falta": "true"})
+        chk("solo si falta: no reemplaza el que ya tenía", r.json().get("ya_tenia") == ["carta"] and not r.json().get("guardados"), r.text[:200])
+
         # --- 12 meses después de Entregado ---
         cl.put(f"/api/expedientes/{eid}/estado", headers=h_d, json={"estado": "ENTREGADO"})
         db = SessionLocal()

@@ -23,6 +23,7 @@ import Sidebar from './components/Sidebar';
 import TabExcel from './components/TabExcel';
 import TabHistorial from './components/TabHistorial';
 import ModalCompartir from './components/ModalCompartir';
+import ModalCompletarPdfs from './components/ModalCompletarPdfs';
 import TabIndividual from './components/TabIndividual';
 import TabManual from './components/TabManual';
 import TabMasivo from './components/TabMasivo';
@@ -235,6 +236,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const puedeServidor = (funcion) => funcionesServidor.includes(funcion);
   // Compartir expedientes: ventana abierta ({ ids } o { todos }) y si a esta persona le compartieron algo
   const [modalCompartir, setModalCompartir] = useState(null);
+  const [modalCompletarPdfs, setModalCompletarPdfs] = useState(false);
   const [hayCompartidos, setHayCompartidos] = useState(false);
   // Ventana de contraseña: null, { modo: 'propio' } o { modo: 'reset', usuario }
   const [modalPassword, setModalPassword] = useState(null);
@@ -682,7 +684,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setDatos(null); setActosSingle([]); setSugerenciaBase(null); setAvisosSingle([]);
       setBatchResults([]);
       setHistorial([]); fuenteHistorial.current = '';
-      setModalCompartir(null); setHayCompartidos(false);
+      setModalCompartir(null); setHayCompartidos(false); setModalCompletarPdfs(false);
 
       // Al cerrar la sesión (a mano o por inactividad) se quita todo lo cargado: nada queda para el siguiente que entre
       setCartaSingle(null); setConstanciaSingle(null); setCarta2Single(null); setCoacManual(false);
@@ -2483,6 +2485,8 @@ const cambiarEstado = async (ids, estado) => {
     esRevisor,
     puedeCompartir,
     abrirCompartir,
+    pdfsDeSoltar,
+    setModalCompletarPdfs,
     hayCompartidos,
     verCompartidos,
     plantillaGuardada,
@@ -2635,6 +2639,7 @@ const cambiarEstado = async (ids, estado) => {
         <ModalCompartir {...modalCompartir} onCerrar={() => setModalCompartir(null)}
           onListo={() => { modalCompartir.onListo?.(); if (activeTab === 'history') cargarHistorialUsuario('history'); }} />
       )}
+      {modalCompletarPdfs && <ModalCompletarPdfs onCerrar={() => setModalCompletarPdfs(false)} />}
 
       {/* PRESENTACIÓN DESPUÉS DE INICIAR SESIÓN */}
       {isAuthenticated && bienvenida && (

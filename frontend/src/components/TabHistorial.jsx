@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
-  ArrowUpDown, ChevronLeft, Pencil, ChevronRight, Download, Eye, Filter, History, Inbox, ListChecks, Loader2, RefreshCw, Search, Share2, ShieldAlert, Users, X,
+  ArrowUpDown, ChevronLeft, Pencil, ChevronRight, Download, Eye, FileStack, Filter, History, Inbox, ListChecks, Loader2, RefreshCw, Search, Share2, ShieldAlert, Users, X,
 } from 'lucide-react';
 import { etiquetaCampo, revisarIncidencia } from '../datosFaltantes';
 import { useApp } from '../AppContext';
@@ -49,6 +49,7 @@ export default function TabHistorial() {
     conteoEstados,
     cambiarEstado,
     puedeServidor,
+    setModalCompletarPdfs,
     theme
   } = useApp();
   const exportar = usePresencia(showExportMenu, 150);
@@ -90,6 +91,12 @@ export default function TabHistorial() {
                     ? <><Inbox size={20} color={theme.accent} /> Compartidos conmigo</>
                     : <><History size={20} color={theme.accent} /> Historial de Expedientes</>}
                 </h2>
+                {!enCompartidos && puedeServidor('documentos') && (
+                  <button type="button" className="boton-barra" onClick={() => setModalCompletarPdfs(true)} title="Subir los PDF de expedientes que se guardaron antes (se juntan por número de crédito)"
+                    style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+                    <FileStack size={15} color="#0891b2" /> Subir PDF de anteriores
+                  </button>
+                )}
                 {!enCompartidos && puedeCompartir && (
                   <button type="button" className="boton-barra" onClick={() => abrirCompartir({ todos: true })} title="Dar acceso a TODOS tus expedientes (también a los que hagas después)"
                     style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>

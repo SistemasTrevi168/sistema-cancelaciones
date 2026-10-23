@@ -158,17 +158,21 @@ async def subir(
     expediente_id: str,
     archivos: List[UploadFile] = File(...),
     tipos: List[str] = Form(...),
+    solo_si_falta: bool = Form(False),
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_user),
 ):
-    """Guarda (o reemplaza) los PDF del expediente. Si un PDF es idéntico al que ya estaba, no se vuelve a subir."""
+    """
+    Guarda (o reemplaza) los PDF del expediente. Si un PDF es idéntico al que ya estaba, no se vuelve a subir.
+    solo_si_falta=True (carga de expedientes anteriores): si ese tipo ya tiene PDF, se deja el que estaba.
+    """
     exp = _expediente_autorizado(db, expediente_id, usuario)
     if not configurado():
         raise HTTPException(status_code=503, detail="El almacenamiento de PDF no está configurado.")
     if len(archivos) != len(tipos):
         raise HTTPException(status_code=400, detail="Cada archivo necesita su tipo (carta, carta2 o constancia).")
     D = models.Documento
-    guardados, iguales = [], []
+    guardados, iguales, ya_tenia = [], [], []
     for archivo, tipo in zip(archivos, tipos):
         tipo = str(tipo or "").strip().lower()
         if tipo not in TIPOS:
@@ -180,6 +184,9 @@ async def subir(
             raise HTTPException(status_code=400, detail=f"{archivo.filename} no es un PDF.")
         huella = hashlib.sha256(contenido).hexdigest()
         anteriores = [d for d in vigentes(db, expediente_id) if d.tipo == tipo]
+        if anteriores and solo_si_falta:
+            ya_tenia.append(tipo)
+            continue
         if anteriores and anteriores[0].huella == huella:
             iguales.append(tipo)
             continue
@@ -206,7 +213,39 @@ async def subir(
     if guardados:
         kpis.registrar(usuario.get("username"), "documentos", exp.id, exp.numero_credito,
                        tipos=guardados, nombres=[NOMBRE_TIPO[t] for t in guardados])
-    return {"status": "exito", "guardados": guardados, "sin_cambios": iguales}
+    return {"status": "exito", "guardados": guardados, "sin_cambios": iguales, "ya_tenia": ya_tenia}
+
+
+@router.post("/api/documentos/emparejar")
+def emparejar(payload: Dict[str, Any], db: Session = Depends(get_db), usuario: dict = Depends(require_user)):
+    """
+    Carga de PDF de expedientes anteriores: recibe los NÚMEROS DE CRÉDITO de los archivos elegidos y regresa
+    los expedientes con ese crédito a los que esta persona tiene acceso, con los PDF que ya tienen.
+    (Los archivos no se mandan aquí; se suben después a cada expediente.)
+    """
+    if not configurado():
+        raise HTTPException(status_code=503, detail="El almacenamiento de PDF no está configurado.")
+    creditos = {re.sub(r"\D", "", str(c)) for c in (payload.get("creditos") or [])}
+    creditos = sorted(c for c in creditos if 6 <= len(c) <= 14)[:3000]
+    if not creditos:
+        return {"expedientes": []}
+    E, D = models.Expediente, models.Documento
+    exps = [e for e in db.query(E).filter(E.numero_credito.in_(creditos)).order_by(E.fecha_creacion.desc()).all()
+            if compartir.tiene_acceso(db, e, usuario)]
+    ids = [str(e.id) for e in exps]
+    tiene: Dict[str, set] = {}
+    if ids:
+        for d in db.query(D.expediente_id, D.tipo).filter(D.expediente_id.in_(ids), D.borrado_en.is_(None)).all():
+            tiene.setdefault(d[0], set()).add(d[1])
+    nombres = {u.username: (u.nombre_mostrar or u.username) for u in db.query(models.Usuario).all()}
+    return {"expedientes": [{
+        "id": str(e.id), "credito": e.numero_credito,
+        "acreditado": str((e.datos_extraidos or {}).get("nombre_acreditado") or ""),
+        "propietario": nombres.get(e.usuario_propietario, e.usuario_propietario),
+        "fecha": e.fecha_creacion.isoformat() if e.fecha_creacion else None,
+        "coacreditados": bool((e.datos_extraidos or {}).get("_coacreditados")),
+        "tiene": sorted(tiene.get(str(e.id), set())),
+    } for e in exps]}
 
 
 @router.get("/api/documentos/{documento_id}/archivo")

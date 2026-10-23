@@ -3277,3 +3277,23 @@ button.semaforo[aria-disabled='true'] { cursor: default; }
 .panel-pdfs { margin-top: 24px; }
 .panel-pdfs-aviso { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.45; margin-top: 4px; }
 .edicion-cargando-pdf { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin: 4px 0; }
+
+/* ---- Subir PDF de expedientes anteriores ---- */
+.modal-completar { width: min(900px, 100%); max-height: min(92vh, 860px); }
+.modal-completar-cuerpo { padding: 14px 18px; overflow-y: auto; flex: 1; min-height: 0; }
+.modal-completar .zonas-tipo { margin-bottom: 8px; }
+.completar-aviso { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #b45309; margin: 6px 0; }
+.completar-resumen { margin-top: 12px; }
+.completar-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.completar-reemplazar { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin-left: auto; cursor: pointer; }
+.completar-tabla { border: 1px solid; border-radius: 10px; max-height: 280px; overflow-y: auto; }
+.completar-fila { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid; font-size: 12.5px; }
+.completar-fila:last-child { border-bottom: none; }
+.completar-fila.sin-exp { opacity: .65; }
+.completar-tipos { display: flex; gap: 4px; flex-shrink: 0; }
+.tipo-pdf { font-size: 10.5px; font-weight: 700; border-radius: 99px; padding: 2px 8px; white-space: nowrap; }
+.tipo-pdf.subir { background: #dcfce7; color: #15803d; }
+.tipo-pdf.omitir { background: #f1f5f9; color: #64748b; text-decoration: line-through; }
+.tema-oscuro .tipo-pdf.subir { background: #14532d; color: #86efac; }
+.tema-oscuro .tipo-pdf.omitir { background: #1e293b; color: #94a3b8; }
+.completar-resultado { margin-top: 12px; border: 1px solid; border-radius: 10px; padding: 10px 12px; font-size: 13px; display: block; }

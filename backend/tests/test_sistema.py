@@ -486,6 +486,43 @@ chk("inmueble: al volver a limpiarlo no se pierde nada", _l1 == _arm, _l1)
 _l2 = main.limpiar_datos_para_plantilla({"datos_inmueble": "Vivienda: CASA 14, Manzana: 15", "numero_credito": "1"})["datos_inmueble"]
 chk("inmueble: guardado antes con dos puntos sale sin ellos", _l2 == "Vivienda CASA 14, Manzana 15", _l2)
 
+# --- Montos escritos de muchas formas ---
+for _txt, _esp in [("$1,250,300.00", 1250300.0), ("$1´250,300.00", 1250300.0), ("$1'250,300.00", 1250300.0), ("$1.800.000.00", 1800000.0),
+                   ("$1 250 300.00", 1250300.0), ("$170,869 02 M.N.", 170869.02), ("$250000", 250000.0), ("$198,640.00", 198640.0)]:
+    chk(f"monto: {_txt}", services.normalizar_monto(_txt) == _esp, services.normalizar_monto(_txt))
+chk("monto con letra de $1.800.000.00", services.numero_a_letras("$1.800.000.00").startswith("UN MILLÓN OCHOCIENTOS MIL PESOS"))
+_d = actos_ifrem.datos_de_acto({"texto": "IMPORTE DE LA OBLIGACION GARANTIZADA: $170,869 02 M.N., EQUIVALENTE A 106.8765 VSMM.", "clave": "A.C.S."}, services)
+chk("monto del acto con centavos separados por espacio", _d.get("monto_credito") == "$170,869.02", _d.get("monto_credito"))
+
+# --- Número de escritura en distintas redacciones ---
+for _txt in ["TESTIMONIO DE LA ESCRITURA PUBLICA NUMERO 6511, DE FECHA", "ESCRITURA No. 6,511 DE FECHA", "ESC. 6511 DEL",
+             "ESCRITURA PUBLICA PASADA NUMERO 6511, ANTE", "INSTRUMENTO NOTARIAL 6511", "NUMERO DE ESCRITURA: 6511",
+             "ESCRITURA NUMERO SEIS MIL QUINIENTOS ONCE, DE FECHA", "ESCRlTURA PUBLICA NUMERO 65I1, DE FECHA", "ESCRITURA PUBLICA N° 6511"]:
+    chk(f"escritura: {_txt[:40]}", actos_ifrem.numero_escritura_de_texto(_txt) == "6511", actos_ifrem.numero_escritura_de_texto(_txt))
+chk("escritura: no confunde el número del notario", actos_ifrem.numero_escritura_de_texto("TESTIMONIO NOTARIAL, NOTARIO PUBLICO NUMERO 68") is None)
+
+# --- Notario: las redacciones más comunes de las constancias ---
+_ESP_NOT = "del Licenciado Carlos Lara Vazquez, Notario Público número sesenta y siete del Estado de México"
+for _txt in [
+    "PASADA ANTE LA FE DEL NOTARIO PÚBLICO NUMERO 67 LIC. CARLOS LARA VAZQUEZ CON RESIDENCIA EN TOLUCA ESTADO DE MEXICO. EN EL QUE",
+    "PASADA ANTE LA FE DEL NOTARIO PÚBLICO NUMERO 67 LIC.CARLOS LARA VAZQUEZ CON RESIDENCIA EN TOLUCA ESTADO DE MEXICO.",
+    "ANTE LA FE DEL NOTARIO PUBLICO No. 67 LICENCIADO CARLOS LARA VAZQUEZ, CON RESIDENCIA EN TOLUCA, ESTADO DE MEXICO,",
+    "ANTE LA FE DEL LIC. CARLOS LARA VAZQUEZ, NOTARIO PUBLICO NUMERO 67 DEL ESTADO DE MEXICO,",
+    "OTORGADA ANTE EL NOTARIO PUBLICO NUMERO 67 DEL ESTADO DE MEXICO, LIC. CARLOS LARA VAZQUEZ, EN LA QUE",
+    "ANTE LA NOTARIA PUBLICA NUMERO 67 A CARGO DEL LIC. CARLOS LARA VAZQUEZ, DEL ESTADO DE MEXICO",
+    "ANTE LA FE DEL NOTARIO PUBLICO NUMERO SESENTA Y SIETE LIC. CARLOS LARA VAZQUEZ CON RESIDENCIA EN TOLUCA",
+    "ANTE LA FE DEL NOT. PUB. NUM. 67 LIC. CARLOS LARA VAZQUEZ, CON RESIDENCIA EN TOLUCA",
+    "ANTE LA FE DEL NOTARIO PUBLICO NUMERO 67 DE TOLUCA, ESTADO DE MEXICO, LIC. CARLOS LARA VAZQUEZ.",
+]:
+    chk(f"notario: {_txt[:45]}", actos_ifrem.notario_de_acto(_txt, services) == _ESP_NOT, actos_ifrem.notario_de_acto(_txt, services))
+_n = actos_ifrem.notario_de_acto("ANTE LA FE DEL NOTARIO PUBLICO NUMERO 120 LIC. JORGE PEREZ GOMEZ CON RESIDENCIA EN LA CIUDAD DE MEXICO.", services) or ""
+chk("notario: de la Ciudad de México por su residencia", _n.endswith("de la Ciudad de México"), _n)
+_n = actos_ifrem.notario_de_acto("ANTE LA FE DE LA LICENCIADA ANA LUISA SOTO RUIZ, NOTARIA PUBLICA NUMERO 5 DEL ESTADO DE MEXICO,", services) or ""
+chk("notario: licenciada", _n == "de la Licenciada Ana Luisa Soto Ruiz, Notario Público número cinco del Estado de México", _n)
+chk("notario: guardado antes como «Notaria Publica» se corrige", services.acentos_notario("de la Licenciada Ana Soto, Notaria Publica numero cinco del Estado de Mexico") == "de la Licenciada Ana Soto, Notario Público número cinco del Estado de México")
+chk("personas: sin «LA SEÑORA»", actos_ifrem.separar_personas("ADRIAN MANUEL REBOLLO PEDRAZA Y LA SEÑORA TERESA MORALES CORONA") == ["ADRIAN MANUEL REBOLLO PEDRAZA", "TERESA MORALES CORONA"])
+chk("personas: sin «SU ESPOSA LA C.»", actos_ifrem.separar_personas("JUAN PEREZ LOPEZ Y SU ESPOSA LA C. MARIA RUIZ SOTO") == ["JUAN PEREZ LOPEZ", "MARIA RUIZ SOTO"])
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

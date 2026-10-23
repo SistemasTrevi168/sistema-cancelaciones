@@ -380,14 +380,59 @@ def _convertir_fecha_texto_anterior(texto_fecha):
 def limpiar_fecha_escritura(fecha_str):
     return convertir_fecha_texto(fecha_str)
 
+# ---------------------------------------------------------------------
+# MONTOS escritos de muchas formas en las constancias:
+#   $1,250,300.00  $1´250,300.00  $1'250,300.00  $1.800.000.00  $1 250 300.00  $170,869 02 M.N.  $250000
+# ---------------------------------------------------------------------
+_SEP_MILES = r"[,\.´'’`\s]"
+# Con separadores de miles (cualquiera) y centavos opcionales (con punto, coma o espacio)
+_MONTO_AGRUPADO = rf"[0-9]{{1,3}}(?:{_SEP_MILES}[0-9]{{3}})+(?:[\.,\s][0-9]{{2}})?(?![0-9])"
+# Sin separadores de miles
+_MONTO_SIMPLE = r"[0-9]+(?:[\.,][0-9]{1,2})?(?![0-9])"
+MONTO_NUMERO = rf"(?:{_MONTO_AGRUPADO}|{_MONTO_SIMPLE})"
+
+
+def normalizar_monto(texto):
+    """'$1´250,300.00' -> 1250300.0 · '$1.800.000.00' -> 1800000.0 · '$170,869 02' -> 170869.02. None si no hay monto."""
+    if texto is None:
+        return None
+    if isinstance(texto, (int, float)):
+        return float(texto)
+    t = str(texto).replace("$", " ").strip()
+    m = re.search(MONTO_NUMERO, t)
+    if not m:
+        return None
+    crudo = m.group(0).strip()
+    centavos = ""
+    mc = re.search(r"[\.,\s]([0-9]{2})$", crudo)
+    # Los últimos dos dígitos son centavos si van después de un separador y antes había un grupo de miles o un entero
+    if mc and not re.fullmatch(rf"[0-9]{{1,3}}{_SEP_MILES}[0-9]{{2}}", crudo) or (mc and re.fullmatch(r"[0-9]+[\.,][0-9]{2}", crudo)):
+        centavos = mc.group(1)
+        crudo = crudo[:mc.start()]
+    elif re.fullmatch(r"[0-9]+[\.,][0-9]", crudo):  # "250000.5"
+        crudo, centavos = re.split(r"[\.,]", crudo)[0], re.split(r"[\.,]", crudo)[1] + "0"
+    enteros = re.sub(r"[^0-9]", "", crudo)
+    if not enteros:
+        return None
+    try:
+        return float(f"{int(enteros)}.{centavos or '00'}")
+    except ValueError:
+        return None
+
+
+def formatear_monto(texto):
+    """Monto con formato '$1,250,300.00'; si no se entiende, regresa el texto como venía."""
+    n = normalizar_monto(texto)
+    return f"${n:,.2f}" if n is not None else texto
+
+
 def numero_a_letras(numero):
     """Monto con letra: CIENTO SESENTA Y SIETE MIL OCHOCIENTOS OCHENTA PESOS CON NOVENTA Y SEIS CENTAVOS, MONEDA NACIONAL."""
-    try:
-        val = float(str(numero).replace('$', '').replace(',', '').strip())
-        enteros = int(val)
-        centavos = int(round((val - enteros) * 100))
-    except Exception:
+    val = normalizar_monto(numero)
+    if val is None:
         return str(numero)
+    enteros = int(val)
+    centavos = int(round((val - enteros) * 100))
 
     if enteros == 0:
         texto_enteros = "CERO PESOS"
@@ -750,30 +795,47 @@ def nombre_propio(nombre):
     return " ".join(res)
 
 
+def acentos_notario(texto):
+    """
+    Palabras fijas del notario con sus acentos y siempre «Notario Público» (también si es licenciada):
+      'de la Licenciada Ana Soto, Notaria Publica numero cinco del Estado de Mexico'
+      -> 'de la Licenciada Ana Soto, Notario Público número cinco del Estado de México'
+    """
+    t = str(texto or "")
+    if not t or t.upper() == "NO_ENCONTRADO":
+        return texto
+    t = re.sub(r"\bNotari[oa]\s+P[uú]blic[oa]\b", "Notario Público", t)
+    t = re.sub(r"\bn[uú]mero\b", "número", t)
+    t = re.sub(r"\bM[eé]xico\b", "México", t)
+    t = re.sub(r"\bLicenciad([oa])\b", r"Licenciad\1", t)
+    return t
+
+
 def formatear_notario(texto):
     """
     Deja el notario listo para la plantilla ("ante la fe {{ notario_origen_completo }}"):
       del Licenciado Jorge Valdes Ramirez, Notario Público número veinticuatro del Estado de México
-      de la Licenciada Ana Luisa Martinez Soto, Notaria Pública número ochenta y ocho del Estado de México
-    Si ya tiene ese formato (o no se reconoce), se regresa igual.
+      de la Licenciada Ana Luisa Martinez Soto, Notario Público número ochenta y ocho del Estado de México
+    (si es mujer cambia a «de la Licenciada», pero el cargo se queda «Notario Público»).
+    Si ya tiene ese formato (o no se reconoce), solo se le ponen los acentos.
     """
     t = " ".join(str(texto or "").split())
     if not t or t.upper() == "NO_ENCONTRADO":
         return texto
     if re.match(r"^(del\s+licenciad[oa]|de\s+la\s+licenciad[oa])\b", t, re.I):
-        return t
+        return acentos_notario(t)
     m = re.search(r"\bNOTARI[OA]\s+P[UÚ]BLIC[OA]\b", t, re.I)
     if not m:
-        return t
+        return acentos_notario(t)
     nombre = t[:m.start()].strip(" ,.-")
     resto = t[m.start():].strip()
     nombre = re.sub(r"^(?:EL\s+|LA\s+)?(?:LICENCIAD[OA]|LIC\.?)\s*", "", nombre, flags=re.I).strip(" ,.")
     if not nombre or len(nombre.split()) < 2:
-        return t
+        return acentos_notario(t)
     mujer = genero_por_nombre(nombre) == "FEMENINO"
-    resto = re.sub(r"^NOTARI[OA]\s+P[UÚ]BLIC[OA]", "Notaria Pública" if mujer else "Notario Público", resto, flags=re.I)
+    resto = re.sub(r"^NOTARI[OA]\s+P[UÚ]BLIC[OA]", "Notario Público", resto, flags=re.I)
     titulo = "de la Licenciada" if mujer else "del Licenciado"
-    return f"{titulo} {nombre_propio(nombre)}, {resto}"
+    return acentos_notario(f"{titulo} {nombre_propio(nombre)}, {resto}")
 
 # Encabezado y pie que pone el navegador al imprimir la consulta del IFREM a PDF:
 #   "2/10/26, 4:19 p.m."  "nt.ifrem.gob.mx/portal/...?linea=..."  "https://nt.ifrem.gob.mx/..."  "1/2"
@@ -909,21 +971,21 @@ def extraer_datos_pdf(ruta_pdf):
         datos["credito_a_salario"] = convertir_vsm_a_letras(raw_vsm)
 
     match_monto_cred = re.search(
-        r'(?:IMPORTE\s+(?:DE\s+LA\s+OBLIGACION\s+GARANTIZADA|DEL\s+CREDITO)?[:\s]*|CANTIDAD\s+DE\s*|CRÉDITO\s+HASTA\s+POR\s+LA\s+CANTIDAD\s+DE\s*)\$\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?)',
+        r'(?:IMPORTE\s+(?:DE\s+LA\s+OBLIGACI[OÓ]N\s+GARANTIZADA|DEL\s+CR[EÉ]DITO)?[:\s]*|CANTIDAD\s+DE\s*|CR[EÉ]DITO\s+HASTA\s+POR\s+LA\s+CANTIDAD\s+DE\s*)\$\s*(' + MONTO_NUMERO + ')',
         texto_credito,
         re.IGNORECASE
     )
     monto_raw = None
     if match_monto_cred:
-        monto_raw = match_monto_cred.group(1).replace(',', '')
+        monto_raw = match_monto_cred.group(1)
     else:
-        match_monto_gen = re.search(r'\$\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?)', texto_credito, re.IGNORECASE)
+        match_monto_gen = re.search(r'\$\s*(' + MONTO_NUMERO + ')', texto_credito, re.IGNORECASE)
         if match_monto_gen:
-            monto_raw = match_monto_gen.group(1).replace(',', '')
+            monto_raw = match_monto_gen.group(1)
 
-    if monto_raw:
+    if monto_raw and normalizar_monto(monto_raw) is not None:
         try:
-            num = float(str(monto_raw).replace('$', '').replace(',', '').strip())
+            num = normalizar_monto(monto_raw)
             datos["monto_credito"] = f"${num:,.2f}"
             datos["monto_credito_letras"] = numero_a_letras(num)
             
@@ -1001,18 +1063,10 @@ def extraer_datos_pdf(ruta_pdf):
     datos["estado_civil"] = estado_civil
 
     # 10. ANTECEDENTES
-    patrones_escritura = [
-        r'(?:ESCRITURA|INSTRUMENTO)\s+(?:P[uú]blica\s+)?(?:N[oº°]|NÚM[EÉ]RO|NUMERO|NO)\.?\s*([0-9,\.]+)',
-        r'escritura\s+p[uú]blica\s+([0-9,\.]+)',
-        r'instrumento\s+([0-9,\.]+)'
-    ]
-    for pat in patrones_escritura:
-        match_esc = re.search(pat, texto_limpio, re.IGNORECASE)
-        if match_esc:
-            val_esc = match_esc.group(1).strip().rstrip(',').replace(',', '')
-            if val_esc.isdigit():
-                datos["numero_escritura"] = numero_a_palabras_generico(val_esc).lower()
-                break
+    import actos_ifrem  # el mismo lector que se usa en los actos de la constancia
+    val_esc = actos_ifrem.numero_escritura_de_texto(texto_limpio)
+    if val_esc:
+        datos["numero_escritura"] = numero_a_palabras_generico(val_esc).lower()
 
     patrones_fecha = [
         r'de\s+fecha\s+([0-9]{1,2}[-/][0-9A-Za-z]+[-/][0-9]{4})',

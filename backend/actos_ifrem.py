@@ -306,7 +306,8 @@ _NUMS = {
     "DIECIOCHO": 18, "DIECINUEVE": 19, "VEINTE": 20, "VEINTIUNO": 21, "VEINTIUN": 21, "VEINTIDOS": 22, "VEINTITRES": 23,
     "VEINTICUATRO": 24, "VEINTICINCO": 25, "VEINTISEIS": 26, "VEINTISIETE": 27, "VEINTIOCHO": 28, "VEINTINUEVE": 29,
     "TREINTA": 30, "CUARENTA": 40, "CINCUENTA": 50, "SESENTA": 60, "SETENTA": 70, "OCHENTA": 80, "NOVENTA": 90,
-    "NOVECIENTOS": 900, "OCHOCIENTOS": 800,
+    "NOVECIENTOS": 900, "OCHOCIENTOS": 800, "CIEN": 100, "CIENTO": 100, "DOSCIENTOS": 200, "TRESCIENTOS": 300,
+    "CUATROCIENTOS": 400, "QUINIENTOS": 500, "SEISCIENTOS": 600, "SETECIENTOS": 700,
 }
 
 
@@ -354,9 +355,12 @@ def _fecha_con_letra(texto, services):
 
 
 _PALABRA_NOMBRE = r"[A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ\.]*"
-_NUM_NOTARIA = r"(?:N[UÚ]M(?:ERO|\.)?|NO\.?|N[º°]\.?)\s*([0-9]{1,4})"
-_LIC = r"(?:LIC(?:ENCIAD[OA])?\.?\s+|LICDA?\.?\s+)"
-_NOTARIO = r"NOT(?:I)?AR[IÍ][OA](?:\s+P[UÚ]BLIC[OA])?"
+# Número de la notaría con dígitos o con letra ("67", "SESENTA Y SIETE")
+_PAL_NUM = r"(?:UNO?|DOS|TRES|CUATRO|CINCO|SEIS|SIETE|OCHO|NUEVE|DIEZ|ONCE|DOCE|TRECE|CATORCE|QUINCE|DIECI[A-ZÉ]+|VEINTI?[A-ZÚÓÉ]*|TREINTA|CUARENTA|CINCUENTA|SESENTA|SETENTA|OCHENTA|NOVENTA|CIENTO?|[A-Z]+CIENTOS)"
+_NUM_NOTARIA = rf"(?:N[UÚ]M(?:ERO|\.)?|NO\.?|N[º°]\.?)\s*([0-9]{{1,4}}|{_PAL_NUM}(?:\s+(?:Y\s+)?{_PAL_NUM}){{0,3}})(?![A-Z])"
+# "LIC. NOMBRE", "LIC.NOMBRE", "LICENCIADO NOMBRE", "LICDA. NOMBRE"
+_LIC = r"(?:LIC(?:ENCIAD[OA])?\.\s*|LIC(?:ENCIAD[OA])?\s+|LICDA?\.?\s*(?=[A-ZÁÉÍÓÚÑ]{2}))"
+_NOTARIO = r"(?:NOT(?:I)?AR[IÍ][OA](?:\s+P[UÚ]BLIC[OA])?|NOT\.\s*(?:P[UÚ]B(?:LIC[OA])?\.?)?)"
 _JURISDICCION = r"((?:DEL?|DE\s+LA)\s+[A-ZÁÉÍÓÚÑ\s]{3,60}?)(?=\s*[,\.;]|\s+CON\s+RES|\s+EN\s+(?:LA|EL|QUE)|\s+LIC|\s+QUE|\s*$)"
 
 
@@ -403,8 +407,9 @@ def notario_de_acto(texto, services):
         rf"{_NOTARIO}\s*,?\s*{_LIC}?{nombre_re}\s*,?\s*{_NUM_NOTARIA}\s*,?\s*(?:{_JURISDICCION})?",
         # LIC. NOMBRE, NOTARIO PUBLICO NUMERO 24 DEL ESTADO DE MEXICO
         rf"{_LIC}{nombre_re}\s*,?\s*(?:TITULAR\s+DE\s+LA\s+)?{_NOTARIO}\s*{_NUM_NOTARIA}\s*,?\s*(?:{_JURISDICCION})?",
-        # NOTARIO PUBLICO NUMERO 5 DEL ESTADO DE MEXICO, LIC. NOMBRE
-        rf"{_NOTARIO}\s*{_NUM_NOTARIA}\s*,?\s*(?:{_JURISDICCION})?\s*,?\s*{_LIC}{nombre_re}(?=\s*[,\.;]|\s+(?:EN|CON|QUE|Y)\b|\s*$)",
+        # NOTARIO PUBLICO NUMERO 5 DEL ESTADO DE MEXICO, LIC. NOMBRE  ·  NOTARIO PUBLICO NUMERO 67 LIC. NOMBRE CON RESIDENCIA EN ...
+        # NOTARIA PUBLICA NUMERO 67 A CARGO DEL LIC. NOMBRE  ·  NOTARIO PUBLICO NUMERO 67 DE TOLUCA, ESTADO DE MEXICO, LIC. NOMBRE
+        rf"{_NOTARIO}\s*{_NUM_NOTARIA}([^;\.]{{0,60}}?)\s*,?\s*(?:A\s+CARGO\s+DE(?:L|\s+LA)?\s+)?{_LIC}{nombre_re}(?=\s*[,\.;]|\s+(?:EN|CON|QUE|Y|DEL?|A)\b|\s*$)",
     ]
     for i, pat in enumerate(patrones):
         m = re.search(pat, t, re.I)
@@ -414,7 +419,16 @@ def notario_de_acto(texto, services):
             numero, jur, nombre = m.group(1), m.group(2), m.group(3)
         else:
             nombre, numero, jur = m.group(1), m.group(2), m.group(3)
+        # "... LIC. NOMBRE CON RESIDENCIA EN LA CIUDAD DE MEXICO": la entidad viene después del nombre
+        if not re.search(r"ESTADO\s+DE\s+M[EÉ]XICO|DISTRITO|CIUDAD\s+DE\s+M[EÉ]XICO", str(jur or ""), re.I):
+            cola = re.match(r"\s*,?\s*(?:CON\s+RESIDENCIA\s+EN|DEL?|EN)\s+([^;]{3,70})", t[m.end():], re.I)
+            if cola and re.search(r"ESTADO\s+DE\s+M[EÉ]XICO|DISTRITO|CIUDAD\s+DE\s+M[EÉ]XICO", cola.group(1), re.I):
+                jur = cola.group(1)
         nombre = _limpiar_nombre_notario(nombre)
+        if not str(numero).isdigit():
+            numero = _palabras_a_entero(numero)
+            if not numero:
+                continue
         if len(nombre.split()) < 2 or re.search(r"\b(?:NOTARI|ESCRITURA|INSTRUMENTO|FECHA|NUMERO|CONSTA)", nombre, re.I):
             continue
         texto_notario = f"{nombre} Notario Público número {services.numero_a_palabras_generico(numero).lower()} {_jurisdiccion_notaria(jur)}"
@@ -426,17 +440,66 @@ def numeros_texto(texto):
     return " ".join(str(texto or "").split())
 
 
+# ---- Número de escritura: tolera las variantes de redacción y los errores típicos del OCR ----
+_ESC = r"(?:E\s?[S5]\s?C\s?R\s?[I1lLÍ]\s?T\s?U?\s?R\s?A|ESCRITUA|ESC\.)"
+_PUB = r"(?:\s*(?:P[UÚ]BLICA|P[UÚ]B\.?|NOTARIAL))?"
+_NUMERO = r"(?:N[UÚO]M(?:ERO|\.)?|N[º°oO]\.?|NO\.?|NRO\.?|#)"
+# dígitos, con las confusiones del OCR (O por 0, I/l por 1) y separadores de miles
+_VALOR = r"([0-9OIl](?:[0-9OIl]|[,\.\s](?=[0-9OIl]{3}))*)(?![0-9A-Z])"
+_FIN_PALABRAS = r"(?=\s*[,;\.]|\s+(?:DE\s+FECHA|DEL?\s|OTORGAD|PASADA|ANTE|VOLUMEN|LIBRO|EN\s))"
+
+
+def _a_digitos(crudo):
+    t = str(crudo or "").strip().rstrip(",.")
+    if not re.search(r"[0-9]", t):  # sin un solo dígito real no se adivina
+        return None
+    t = t.translate(str.maketrans("OIl", "011"))
+    t = re.sub(r"[,\.\s]", "", t)
+    if not t.isdigit() or not (1 <= len(t) <= 6) or int(t) == 0:
+        return None
+    return str(int(t))
+
+
+def numero_escritura_de_texto(texto):
+    """
+    Número de la escritura en las redacciones que aparecen en las constancias, por ejemplo:
+      ESCRITURA PUBLICA NUMERO 6511 · ESCRITURA No. 6,511 · ESC. 6511 · ESCRITURA PÚBLICA PASADA NUMERO 6511
+      INSTRUMENTO NOTARIAL 6511 · NUMERO DE ESCRITURA: 6511 · ESCRITURA NUMERO SEIS MIL QUINIENTOS ONCE
+    y con errores de OCR (ESCRlTURA, 65I1). Regresa los dígitos ("6511") o None.
+    """
+    t = " ".join(str(texto or "").replace("­", "").split())
+    t = re.sub(r"(\w)-\s+(\w)", r"\1\2", t)  # palabras cortadas al final del renglón
+    T = t.upper()
+    patrones = [
+        rf"{_ESC}{_PUB}\s*,?\s*(?:{_NUMERO})?\s*:?\s*{_VALOR}",
+        rf"(?:{_NUMERO}|N[UÚ]MERO)\s*(?:DE\s+(?:LA\s+)?)?{_ESC}{_PUB}\s*:?\s*{_VALOR}",
+        rf"INSTRUMENTO(?:\s+(?:NOTARIAL|P[UÚ]BLICO))?\s*,?\s*(?:{_NUMERO})?\s*:?\s*{_VALOR}",
+        # "ESCRITURA PUBLICA PASADA NUMERO 6511" / "TESTIMONIO DE LA ESCRITURA ... NUMERO 6511" (sin pasar por el notario)
+        rf"(?:{_ESC}|TESTIMONIO)(?:(?!NOTARI|VOLUMEN|PARTIDA|\$)[^;]){{0,40}}?{_NUMERO}\s*:?\s*{_VALOR}",
+    ]
+    for pat in patrones:
+        for m in re.finditer(pat, T):
+            numero = _a_digitos(m.group(1))
+            if numero:
+                return numero
+    # Con letra: "ESCRITURA PUBLICA NUMERO SEIS MIL QUINIENTOS ONCE, DE FECHA ..."
+    m = re.search(rf"{_ESC}{_PUB}\s*(?:{_NUMERO})?\s*([A-ZÁÉÍÓÚ]+(?:\s+[A-ZÁÉÍÓÚ]+){{0,6}}?){_FIN_PALABRAS}", T)
+    if m:
+        n = _palabras_a_entero(m.group(1))
+        if n and 0 < n < 1000000:
+            return str(n)
+    return None
+
+
 def datos_de_acto(acto, services):
     """Datos que se pueden tomar de un acto, ya con el formato que usa el Word."""
     texto = acto.get("texto", "")
     datos = {}
 
-    m = re.search(r"(?:ESCRITURA|INSTRUMENTO|ESC\.)\s*(?:P[UÚ]BLICA\s+)?(?:N[UÚO]M(?:ERO|\.)?|NO\.?|N[º°]\.?)?\s*([0-9][0-9,\.]*)", texto, re.I)
-    if m:
-        numero = m.group(1).rstrip(",.").replace(",", "")
-        if numero.isdigit():
-            datos["numero_escritura"] = services.numero_a_palabras_generico(numero).lower()
-            datos["numero_escritura_digitos"] = numero
+    numero = numero_escritura_de_texto(texto)
+    if numero:
+        datos["numero_escritura"] = services.numero_a_palabras_generico(numero).lower()
+        datos["numero_escritura_digitos"] = numero
 
     for patron in [
         r"de\s+fecha\s+([0-9]{1,2}\s+de\s+[a-zA-ZÁÉÍÓÚáéíóú]+\s+de\s+[0-9]{4})",
@@ -461,12 +524,9 @@ def datos_de_acto(acto, services):
     # Monto: en pesos ("MONTO DEL CREDITO: $198,640.00") o en veces el salario mínimo ("IMPORTE ...: 162.9260 VSMM")
     etiqueta_monto = (r"(?:MONTO(?:\s+DEL\s+CR[EÉ]DITO)?|IMPORTE(?:\s+DE\s+LA\s+OBLIGACI[OÓ]N(?:\s+GARANTIZADA)?|\s+DEL\s+CR[EÉ]DITO|\s+GARANTIZADO)?|"
                       r"OBLIGACI[OÓ]N\s+GARANTIZADA|(?:POR\s+)?LA\s+CANTIDAD\s+DE|CANTIDAD\s+DE|CR[EÉ]DITO\s+POR)\s*:?\s*")
-    mm = re.search(etiqueta_monto + r"\$\s*([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)", texto, re.I)
-    if mm:
-        try:
-            datos["monto_credito"] = f"${float(mm.group(1).replace(',', '')):,.2f}"
-        except ValueError:
-            pass
+    mm = re.search(etiqueta_monto + r"\$\s*(" + services.MONTO_NUMERO + ")", texto, re.I)
+    if mm and services.normalizar_monto(mm.group(1)) is not None:
+        datos["monto_credito"] = services.formatear_monto(mm.group(1))
     mv = re.search(etiqueta_monto + r"([0-9]+(?:[\.,][0-9]+)?)\s*(?:V\.?\s?S\.?\s?M\.?\s?M\.?|V\.?\s?S\.?\s?M\.?|VECES\s+(?:EL\s+)?(?:SALARIO|S\.\s?M))", texto, re.I)
     if mv:
         vsm = mv.group(1).replace(",", ".")
@@ -513,7 +573,13 @@ def separar_personas(texto):
     partes = re.split(r"\s*[,;]\s*|\s+Y\s+|\s+E\s+(?=[A-ZÁÉÍÓÚÑ])", t)
     personas = []
     for p in partes:
-        p = re.sub(r"^(?:C\.|SR\.?|SRA\.?|SE[ÑN]OR(?:A)?|LIC\.?|EL|LA|LOS|SUS?)\s+", "", p.strip())
+        # Quita tratamientos al inicio, aunque vengan varios: "LA SEÑORA", "SU ESPOSA LA C.", "EL SR."
+        p = p.strip()
+        previo = None
+        while previo != p:
+            previo = p
+            p = re.sub(r"^(?:C\.|SR\.?|SRA\.?|SRITA\.?|SE[ÑN]OR(?:A|ITA)?|DO[ÑN]A|DON|CIUDADAN[OA]|LIC\.?|LICENCIAD[OA]|"
+                       r"ESPOS[OA]|C[OÓ]NYUGE|EL|LA|LOS|LAS|SUS?)\s+", "", p)
         p = " ".join(re.sub(r"[^A-ZÁÉÍÓÚÑÜ\.\s]", " ", p).split()).strip(" .")
         if len(p.split()) >= 2 and len(p) <= 70 and not _NO_ES_PERSONA.search(p) and p not in personas:
             personas.append(p)

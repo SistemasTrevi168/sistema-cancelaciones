@@ -239,7 +239,7 @@ def aplicar_acto_elegido(datos: Dict[str, Any], actos: List[Dict[str, Any]]) -> 
                 datos[campo] = valor
                 if campo == "monto_credito":
                     try:
-                        datos["monto_credito_letras"] = services.numero_a_letras(float(valor.replace("$", "").replace(",", "")))
+                        datos["monto_credito_letras"] = services.numero_a_letras(valor)
                     except Exception:
                         pass
 
@@ -434,11 +434,9 @@ def numero_a_letras(monto: Any) -> str:
     """Monto con letra en pesos (misma regla que services.numero_a_letras)."""
     if not monto:
         return ""
-    monto_str = re.sub(r"[^\d.]", "", str(monto))
-    try:
-        return services.numero_a_letras(float(monto_str))
-    except Exception:
+    if services.normalizar_monto(monto) is None:
         return str(monto)
+    return services.numero_a_letras(monto)
 
 
 def numero_folio_a_letras(monto: Any) -> str:
@@ -677,12 +675,8 @@ def _datos_trabajador_dos(datos: Dict[str, Any]) -> Dict[str, Any]:
     if re.fullmatch(r"[\d,]+(?:\.\d+)?", salario):
         salario = services.convertir_vsm_a_letras(salario.replace(",", ""))
     monto = v("monto_credito_2")
-    m = re.search(r"\d[\d,]*(?:\.\d+)?", monto)
-    if m and not monto.startswith("$"):
-        try:
-            monto = f"${float(m.group(0).replace(',', '')):,.2f}"
-        except ValueError:
-            pass
+    if monto and services.normalizar_monto(monto) is not None:
+        monto = services.formatear_monto(monto)
     return {
         "nombre_acreditado_2": corregir_numeros_compuestos(v("nombre_acreditado_2")).upper(),
         "numero_credito_2": re.sub(r"[^\d]", "", v("numero_credito_2")) or v("numero_credito_2"),
@@ -699,6 +693,9 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     """Filtra y devuelve los campos requeridos aplicando conversiones de romanos y dígitos."""
     acreditado = corregir_numeros_compuestos(str(datos_origen.get("nombre_acreditado") or datos_origen.get("acreditado") or datos_origen.get("cliente") or ""))
     monto = datos_origen.get("monto_credito") or datos_origen.get("monto") or ""
+    # "$1´250,300.00", "$1.800.000.00", "170,869 02"... -> "$1,250,300.00"
+    if monto and str(monto).strip().upper() not in _SIN_DATO and services.normalizar_monto(monto) is not None:
+        monto = services.formatear_monto(monto)
     num_credito = datos_origen.get("numero_credito") or num_credito_fallback or ""
     oficina = corregir_numeros_compuestos(str(datos_origen.get("oficina_registral") or datos_origen.get("oficina") or ""))
     carta = corregir_numeros_compuestos(str(datos_origen.get("numero_carta") or datos_origen.get("carta") or ""))
@@ -756,13 +753,15 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     else:
         notario_completo = services.numeros_de_notaria_a_digitos(notario_completo)
     notario_completo = corregir_numeros_compuestos(notario_completo)
-    # "del Licenciado Juan Perez, Notario Público número ..." (o "de la Licenciada ..., Notaria Pública ...")
+    # "del Licenciado Juan Perez, Notario Público número ..." (o "de la Licenciada ..., Notario Público ...")
     if notario_completo and not re.match(r"^(del\s+licenciad|de\s+la\s+licenciad)", notario_completo, re.I) and re.search(r"NOTI?AR", notario_completo, re.I):
         if re.search(r"\d", notario_completo):
             notario_completo = services.extraer_notario_robusto(notario_completo, notario_completo)
             if notario_completo == "NO_ENCONTRADO":
                 notario_completo = corregir_numeros_compuestos(str(datos_origen.get("notario_origen_completo") or ""))
         notario_completo = services.formatear_notario(notario_completo)
+    # Siempre «Notario Público» (también si es licenciada) y con acentos, aunque se haya guardado antes de otra forma
+    notario_completo = services.acentos_notario(notario_completo)
     conyuge = datos_origen.get("tiene_conyuge") or "No"
     nombre_conyuge = corregir_numeros_compuestos(str(datos_origen.get("nombre_conyuge") or datos_origen.get("nombre_conyugue") or ""))
     if nombre_conyuge.strip().upper() == "NO_ENCONTRADO":
@@ -1768,9 +1767,8 @@ def normalizar_campo(
             if convertida:
                 valor = convertida
         elif campo == "monto_credito":
-            m = re.search(r"[\d][\d,]*(?:\.\d+)?", texto)
-            if m:
-                valor = f"${float(m.group(0).replace(',', '')):,.2f}"
+            if services.normalizar_monto(texto) is not None:
+                valor = services.formatear_monto(texto)
                 extra["monto_letras" + sufijo] = numero_a_letras(valor)
         elif campo == "credito_a_salario" and re.fullmatch(r"[\d,\.\s]+", texto):
             valor = services.convertir_vsm_a_letras(texto.replace(",", "").strip())

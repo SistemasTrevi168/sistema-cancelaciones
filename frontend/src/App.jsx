@@ -2194,9 +2194,12 @@ const cambiarEstado = async (ids, estado) => {
     });
     setSelectedPlantilla(plantilla);
     if (d._coacreditados || esPlantillaCoac(plantilla)) setCoacManual(true);
+    // Con PDF guardados se abre directo el editor completo: mientras se revisan se muestra «Abriendo…»
+    const conPdfs = puedeServidor('documentos');
+    if (conPdfs) setCargandoPdfs(true);
     cambiarPestana('single');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (puedeServidor('documentos')) abrirPdfsGuardados(id, d);
+    if (conPdfs) abrirPdfsGuardados(id, d);
   };
 
   // ---- PDF guardados (Backblaze B2): se guardan con el expediente y se abren solos al editarlo ----
@@ -2220,8 +2223,9 @@ const cambiarEstado = async (ids, estado) => {
     let docs;
     try {
       docs = (await api.get(`/expedientes/${id}/documentos`)).data?.documentos || [];
-    } catch { return; }
-    if (!docs.length || turno !== turnoPdfs.current) return;
+    } catch { docs = []; }
+    if (turno !== turnoPdfs.current) return;
+    if (!docs.length) { setCargandoPdfs(false); return; } // sin PDF guardados: se muestra para subirlos
     setCargandoPdfs(true);
     try {
       const pares = await Promise.all(docs.map(async (doc) => {

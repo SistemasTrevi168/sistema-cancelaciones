@@ -3337,3 +3337,5 @@ button.semaforo[aria-disabled='true'] { cursor: default; }
 .completar-filtro:disabled { opacity: .55; cursor: default; }
 .completar-zonas-compactas { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid; border-radius: 10px; padding: 10px 14px; font-size: 13px; animation: desplegarLista .2s ease-out both; }
 .completar-zonas-compactas .enlace-pequeno { margin-left: auto; }
+.abriendo-expediente { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; min-height: 360px; border: 1px solid; border-radius: 16px; padding: 32px; font-size: 14px; }
+.abriendo-expediente strong { font-size: 17px; }

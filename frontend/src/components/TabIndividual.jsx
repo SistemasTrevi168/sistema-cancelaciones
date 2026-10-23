@@ -113,6 +113,18 @@ export default function TabIndividual() {
     );
   }
 
+  // ---- Abriendo un expediente guardado con sus PDF: directo al editor, sin pasar por la pantalla de subir ----
+  if (edicionSingle && cargandoPdfs) {
+    return (
+      <div className="abriendo-expediente fade-in" style={{ borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.textPrimary }}>
+        <Loader2 size={30} color={theme.accent} style={{ animation: 'spin 1s linear infinite' }} />
+        <strong>Abriendo {edicionSingle.nombre}…</strong>
+        <span style={{ color: theme.textSecondary }}>Cargando los datos y los PDF guardados{edicionSingle.credito ? ` del crédito ${edicionSingle.credito}` : ''}.</span>
+        <button type="button" className="enlace-pequeno" onClick={salirEdicionSingle}>Cancelar</button>
+      </div>
+    );
+  }
+
   // ---- CARGA DE DOCUMENTOS (carta y constancia por separado) ----
   const listo = singleFiles.length > 0 && !loading && !conflictoSingle;
   return (

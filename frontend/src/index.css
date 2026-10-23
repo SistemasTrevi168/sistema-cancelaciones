@@ -3312,3 +3312,28 @@ button.semaforo[aria-disabled='true'] { cursor: default; }
 .completar-quitar { flex-shrink: 0; }
 .completar-paginas { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; font-size: 12.5px; }
 .completar-tabla { max-height: none; }
+/* Avance de la carga de PDF anteriores */
+.completar-estado { padding: 12px 18px; border-bottom: 1px solid; animation: desplegarLista .2s ease-out both; }
+.completar-estado-linea { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; margin-bottom: 8px; }
+.completar-estado .barra-progreso { height: 8px; }
+.completar-estado.completo { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.completar-estado.completo .barra-progreso { background: #bbf7d0; }
+.completar-estado.completo .barra-progreso > div { background: #10b981; }
+.completar-estado.parcial { background: #fffbeb; color: #92400e; border-color: #fcd34d; }
+.completar-estado.parcial .barra-progreso { background: #fde68a; }
+.completar-estado.parcial .barra-progreso > div { background: #f59e0b; }
+.tema-oscuro .completar-estado.completo { background: #052e16; color: #86efac; border-color: #166534; }
+.tema-oscuro .completar-estado.parcial { background: #422006; color: #fcd34d; border-color: #a16207; }
+.completar-estado.completo strong { animation: latidoBoton .6s ease .1s; display: inline-block; }
+.estado-subida { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; white-space: nowrap; min-width: 92px; justify-content: flex-end; flex-shrink: 0; }
+.estado-subida.espera { color: #94a3b8; }
+.estado-subida.subiendo { color: var(--acento, #2563eb); }
+.estado-subida.listo { color: #059669; animation: aparecerMenuCampo .25s ease-out both; }
+.estado-subida.error { color: #dc2626; cursor: help; }
+.mini-barra { display: inline-block; width: 60px; height: 6px; border-radius: 99px; background: #e2e8f0; overflow: hidden; }
+.mini-barra > span { display: block; height: 100%; border-radius: 99px; transition: width .2s ease; }
+.tema-oscuro .mini-barra { background: #334155; }
+.completar-filtro.f-error:not(.activo) { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+.completar-filtro:disabled { opacity: .55; cursor: default; }
+.completar-zonas-compactas { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid; border-radius: 10px; padding: 10px 14px; font-size: 13px; animation: desplegarLista .2s ease-out both; }
+.completar-zonas-compactas .enlace-pequeno { margin-left: auto; }

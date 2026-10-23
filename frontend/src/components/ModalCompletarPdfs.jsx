@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, FileStack, FileX2, Loader2, Search, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, CircleDashed, FileStack, FileX2, Loader2, Search, Trash2, Upload, X, XCircle } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../AppContext';
 import { avisar, confirmar } from '../ui/notificaciones';
@@ -24,10 +24,12 @@ export default function ModalCompletarPdfs({ onCerrar }) {
   const [revision, setRevision] = useState(null); // { expedientes: [...] } del servidor
   const [revisando, setRevisando] = useState(false);
   const [reemplazar, setReemplazar] = useState(false);
-  const [subiendo, setSubiendo] = useState(null); // { hechos, total }
+  const [subiendo, setSubiendo] = useState(null); // { hechos, total, pct }
+  const [estados, setEstados] = useState({}); // por renglón: { estado: espera|subiendo|listo|igual|error, pct, msg }
   const [resultado, setResultado] = useState(null);
   const [saliendo, setSaliendo] = useState(false);
   const [busca, setBusca] = useState('');
+  const [verZonas, setVerZonas] = useState(true); // después de revisar se compactan para ver la lista
   const [danados, setDanados] = useState(() => new Set()); // archivos que no son PDF válidos
   const [filtro, setFiltro] = useState('todos');
   const [pagina, setPagina] = useState(1);
@@ -52,9 +54,9 @@ export default function ModalCompletarPdfs({ onCerrar }) {
       const ya = new Set(prev.map((f) => `${f.name}|${f.size}`));
       return [...prev, ...pdfs.filter((f) => !ya.has(`${f.name}|${f.size}`))];
     });
-    setRevision(null); setResultado(null);
+    setRevision(null); setResultado(null); setEstados({});
   };
-  const quitar = (fijar) => (f) => { fijar((prev) => (f ? prev.filter((x) => x !== f) : [])); setRevision(null); setResultado(null); };
+  const quitar = (fijar) => (f) => { fijar((prev) => (f ? prev.filter((x) => x !== f) : [])); setRevision(null); setResultado(null); setEstados({}); };
 
   // Archivos por crédito
   const porCredito = useMemo(() => {
@@ -83,6 +85,7 @@ export default function ModalCompletarPdfs({ onCerrar }) {
       }));
       setDanados(malos);
       setRevision((await api.post('/documentos/emparejar', { creditos })).data);
+      setVerZonas(false);
     } catch (e) {
       avisar.error(`No se pudo revisar: ${e.response?.data?.detail || e.message}`);
     } finally {
@@ -129,29 +132,54 @@ export default function ModalCompletarPdfs({ onCerrar }) {
     const trabajo = plan.filter((f) => f.subir.length);
     if (!trabajo.length) return;
     if (reemplazar && !(await confirmar(`Se van a reemplazar los PDF que ya tenían algunos expedientes por los que elegiste. ¿Continuar?`, { titulo: 'Reemplazar PDF', textoConfirmar: 'Sí, reemplazar' }))) return;
-    setSubiendo({ hechos: 0, total: trabajo.length });
+    // Se ve la lista de los que se suben, cada uno con su avance
+    setBusca(''); setFiltro('subir'); setPagina(1); setResultado(null);
+    setEstados(Object.fromEntries(trabajo.map((f) => [claveFila(f), { estado: 'espera', pct: 0 }])));
+    const pesoDe = (f) => f.subir.reduce((n, [file]) => n + (file.size || 0), 0) || 1;
+    const pesoTotal = trabajo.reduce((n, f) => n + pesoDe(f), 0);
+    let pesoHecho = 0;
+    setSubiendo({ hechos: 0, total: trabajo.length, pct: 0 });
     let ok = 0; let archivos = 0; const fallas = [];
     for (let i = 0; i < trabajo.length; i += 1) {
       const f = trabajo[i];
+      const k = claveFila(f);
+      setPagina(Math.floor(i / POR_PAGINA) + 1); // la página del que se está subiendo
+      setEstados((e) => ({ ...e, [k]: { estado: 'subiendo', pct: 0 } }));
+      // El renglón que se está subiendo se mantiene a la vista
+      setTimeout(() => document.querySelector(`[data-fila="${CSS.escape(k)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 80);
       const fd = new FormData();
       f.subir.forEach(([file, t]) => { fd.append('archivos', file); fd.append('tipos', t); });
       fd.append('solo_si_falta', reemplazar ? 'false' : 'true');
       try {
-        const r = await api.post(`/expedientes/${f.exp.id}/documentos`, fd);
-        ok += 1; archivos += (r.data?.guardados || []).length;
+        const r = await api.post(`/expedientes/${f.exp.id}/documentos`, fd, {
+          onUploadProgress: (ev) => {
+            const pct = ev.total ? Math.min(99, Math.round((ev.loaded / ev.total) * 100)) : 50;
+            setEstados((e) => ({ ...e, [k]: { estado: 'subiendo', pct } }));
+            setSubiendo((s) => (s ? { ...s, pct: Math.min(99, Math.round(((pesoHecho + pesoDe(f) * (pct / 100)) / pesoTotal) * 100)) } : s));
+          },
+        });
+        const n = (r.data?.guardados || []).length;
+        ok += 1; archivos += n;
+        setEstados((e) => ({ ...e, [k]: { estado: n ? 'listo' : 'igual', pct: 100, msg: n ? `${n} PDF` : 'Ya estaban' } }));
       } catch (e) {
-        fallas.push(`${f.credito}: ${e.response?.data?.detail || e.message}`);
+        const msg = e.response?.data?.detail || e.message;
+        fallas.push(`${f.credito}: ${msg}`);
+        setEstados((st) => ({ ...st, [k]: { estado: 'error', pct: 0, msg } }));
       }
-      setSubiendo({ hechos: i + 1, total: trabajo.length });
+      pesoHecho += pesoDe(f);
+      setSubiendo({ hechos: i + 1, total: trabajo.length, pct: Math.round((pesoHecho / pesoTotal) * 100) });
     }
     setSubiendo(null);
-    setResultado({ ok, archivos, fallas });
+    setResultado({ ok, archivos, fallas, total: trabajo.length });
     if (!fallas.length) avisar.exito(`Listo: se guardaron ${archivos} PDF en ${ok} expediente(s).`);
     else avisar.aviso(`Se guardaron ${archivos} PDF; ${fallas.length} expediente(s) tuvieron problema.`);
   };
 
+  const claveFila = (f) => `${f.credito}-${f.exp?.id || 'x'}`;
+  const nErrores = Object.values(estados).filter((e) => e.estado === 'error').length;
   const FILTROS = {
     todos: () => true,
+    error: (f) => estados[claveFila(f)]?.estado === 'error',
     subir: (f) => f.subir.length > 0,
     sinexp: (f) => !f.exp,
     sinpareja: (f) => f.sinPareja,
@@ -175,7 +203,7 @@ export default function ModalCompletarPdfs({ onCerrar }) {
     const queda = (f) => !fuera.has(creditoDeNombre(f.name));
     setCartas((prev) => prev.filter(queda));
     setConstancias((prev) => prev.filter(queda));
-    setResultado(null);
+    setResultado(null); setEstados({});
   };
   const quitarVisibles = async () => {
     const creditosVis = [...new Set(filasVisibles.map((f) => f.credito))];
@@ -198,7 +226,44 @@ export default function ModalCompletarPdfs({ onCerrar }) {
           <button type="button" className="bitacora-cerrar" onClick={cerrar} aria-label="Cerrar" disabled={!!subiendo} style={{ color: theme.textSecondary }}><X size={20} /></button>
         </header>
 
+        {/* Avance y resultado de la carga: siempre a la vista, arriba */}
+        {subiendo && (
+          <div className="completar-estado subiendo" aria-live="polite" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg }}>
+            <div className="completar-estado-linea">
+              <Loader2 size={16} className="girando" color={theme.accent} />
+              <strong>Subiendo PDF… {subiendo.pct || 0}%</strong>
+              <span style={{ color: theme.textSecondary }}>{subiendo.hechos} de {subiendo.total} expediente(s) · no cierres esta ventana</span>
+            </div>
+            <div className="barra-progreso" style={{ backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0' }}>
+              <div style={{ width: `${subiendo.pct || 0}%`, backgroundColor: theme.accent }} />
+            </div>
+          </div>
+        )}
+        {resultado && !subiendo && (
+          <div className={`completar-estado ${resultado.fallas.length ? 'parcial' : 'completo'}`} role="status">
+            <div className="completar-estado-linea">
+              {resultado.fallas.length ? <AlertTriangle size={18} /> : <CheckCircle size={18} />}
+              <strong>{resultado.fallas.length ? 'Carga terminada con errores' : '¡Carga completa!'}</strong>
+              <span>
+                {resultado.archivos ? `Se guardaron ${resultado.archivos} PDF en ${resultado.ok} de ${resultado.total} expediente(s).` : `Los PDF de los ${resultado.ok} expediente(s) ya estaban guardados.`}
+                {!resultado.fallas.length && ' Ya puedes editarlos con todo completo.'}
+              </span>
+              {resultado.fallas.length > 0 && (
+                <button type="button" className="enlace-pequeno" onClick={() => setFiltro('error')}>Ver los {resultado.fallas.length} con error</button>
+              )}
+            </div>
+            <div className="barra-progreso"><div style={{ width: '100%' }} /></div>
+          </div>
+        )}
+
         <div className="modal-completar-cuerpo">
+          {!verZonas && plan ? (
+            <div className="completar-zonas-compactas" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg }}>
+              <FileStack size={16} color="#0891b2" />
+              <span><strong>{cartas.length}</strong> carta(s) · <strong>{constancias.length}</strong> constancia(s)</span>
+              {!subiendo && <button type="button" className="enlace-pequeno" onClick={() => setVerZonas(true)}>Cambiar archivos</button>}
+            </div>
+          ) : (<>
           <p className="modal-compartir-texto" style={{ color: theme.textSecondary, margin: '0 0 12px' }}>
             Elige la carpeta de <strong>cartas</strong> y la de <strong>constancias</strong> (o arrástralas). Cada PDF se junta con su expediente por el
             <strong> número de crédito del nombre del archivo</strong>, igual que en la Carga Masiva. Antes de subir verás el resumen.
@@ -209,6 +274,7 @@ export default function ModalCompletarPdfs({ onCerrar }) {
             <ZonaArchivos tipo="constancia" varios archivos={constancias} sinPareja={sinParejaNombres} onElegir={agregar(setConstancias)} onSoltar={async (e) => { e.preventDefault(); agregar(setConstancias)(await pdfsDeSoltar(e)); }}
               onQuitar={quitar(setConstancias)} ayuda="Carpeta o PDF sueltos de constancias" />
           </div>
+          </>)}
           {sinNumero.length > 0 && (
             <p className="completar-aviso"><AlertTriangle size={14} /> {sinNumero.length} archivo(s) no traen número de crédito en el nombre y no se pueden juntar: {sinNumero.slice(0, 3).map((f) => f.name).join(', ')}{sinNumero.length > 3 ? '…' : ''}</p>
           )}
@@ -229,9 +295,10 @@ export default function ModalCompletarPdfs({ onCerrar }) {
                   sinExp > 0 && ['sinexp', `Sin expediente (${sinExp})`],
                   nSinPareja > 0 && ['sinpareja', `Sin pareja (${nSinPareja})`],
                   nDanados > 0 && ['danados', `Dañados (${nDanados})`],
+                  nErrores > 0 && ['error', `Con error (${nErrores})`],
                 ].filter(Boolean).map(([id, txt]) => (
-                  <button key={id} type="button" role="tab" aria-selected={filtro === id} className={`completar-filtro f-${id} ${filtro === id ? 'activo' : ''}`} onClick={() => setFiltro(id)}>
-                    {id === 'danados' && <FileX2 size={12} />}{(id === 'sinexp' || id === 'sinpareja') && <AlertTriangle size={12} />} {txt}
+                  <button key={id} type="button" role="tab" aria-selected={filtro === id} className={`completar-filtro f-${id} ${filtro === id ? 'activo' : ''}`} onClick={() => setFiltro(id)} disabled={!!subiendo}>
+                    {(id === 'danados' || id === 'error') && <FileX2 size={12} />}{(id === 'sinexp' || id === 'sinpareja') && <AlertTriangle size={12} />} {txt}
                   </button>
                 ))}
                 {filtro !== 'todos' && filtro !== 'subir' && filasVisibles.length > 0 && !subiendo && (
@@ -248,7 +315,7 @@ export default function ModalCompletarPdfs({ onCerrar }) {
               <div className="completar-tabla" style={{ borderColor: theme.border }}>
                 {filasPagina.length === 0 && <div className="completar-fila" style={{ color: theme.textSecondary }}>Ningún crédito coincide.</div>}
                 {filasPagina.map((f, i) => (
-                  <div key={`${f.credito}-${f.exp?.id || 'x'}`} className={`completar-fila ${f.exp ? '' : 'sin-exp'}`} style={{ borderColor: theme.border, animationDelay: `${Math.min(i, 14) * 20}ms` }}>
+                  <div key={`${f.credito}-${f.exp?.id || 'x'}`} data-fila={claveFila(f)} className={`completar-fila ${f.exp ? '' : 'sin-exp'}`} style={{ borderColor: theme.border, animationDelay: `${Math.min(i, 14) * 20}ms` }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <strong>{f.credito}</strong> <span style={{ color: theme.textSecondary }}>{f.exp ? `· ${f.exp.acreditado || 'Sin nombre'} · ${f.exp.propietario}` : '· no hay expediente con este crédito'}</span>
                       {(f.sinPareja || f.danados.length > 0) && (
@@ -262,7 +329,18 @@ export default function ModalCompletarPdfs({ onCerrar }) {
                       {f.subir.map(([, t]) => <span key={`s${t}`} className="tipo-pdf subir">{TIPO_TXT[t]}</span>)}
                       {f.omitir.map(([, t]) => <span key={`o${t}`} className="tipo-pdf omitir" title={f.exp ? 'Ya tenía este PDF: se deja el que estaba' : 'No se sube'}>{TIPO_TXT[t]}</span>)}
                     </div>
-                    {!subiendo && (
+                    {estados[claveFila(f)] && (() => {
+                      const st = estados[claveFila(f)];
+                      if (st.estado === 'espera') return <span className="estado-subida espera"><CircleDashed size={13} /> En espera</span>;
+                      if (st.estado === 'subiendo') return (
+                        <span className="estado-subida subiendo">
+                          <span className="mini-barra"><span style={{ width: `${st.pct}%`, backgroundColor: theme.accent }} /></span>{st.pct}%
+                        </span>
+                      );
+                      if (st.estado === 'error') return <span className="estado-subida error" title={st.msg}><XCircle size={13} /> Error</span>;
+                      return <span className="estado-subida listo" title={st.msg}><CheckCircle size={13} /> {st.estado === 'igual' ? 'Ya estaban' : 'Subido'}</span>;
+                    })()}
+                    {!subiendo && !estados[claveFila(f)] && (
                       <button type="button" className="quitar-archivo completar-quitar" title={`Quitar los archivos del crédito ${f.credito} (no se suben)`} aria-label={`Quitar ${f.credito}`}
                         onClick={() => quitarCreditos([f.credito])}><X size={14} /></button>
                     )}
@@ -279,22 +357,6 @@ export default function ModalCompletarPdfs({ onCerrar }) {
             </div>
           )}
 
-          {subiendo && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: theme.textSecondary, marginBottom: 6 }}>
-                <span>Subiendo PDF… no cierres esta ventana</span><span>{subiendo.hechos} de {subiendo.total}</span>
-              </div>
-              <div className="barra-progreso" style={{ backgroundColor: theme.subtleBg }}>
-                <div style={{ width: `${Math.round((subiendo.hechos / subiendo.total) * 100)}%`, backgroundColor: theme.accent }} />
-              </div>
-            </div>
-          )}
-          {resultado && (
-            <div className="completar-resultado" style={{ backgroundColor: isDarkMode ? '#052e16' : '#ecfdf5', color: isDarkMode ? '#86efac' : '#065f46', borderColor: isDarkMode ? '#166534' : '#a7f3d0' }}>
-              <CheckCircle size={16} /> Se guardaron {resultado.archivos} PDF en {resultado.ok} expediente(s). Ya puedes editarlos con todo completo.
-              {resultado.fallas.length > 0 && <div style={{ color: '#b91c1c', marginTop: 4 }}>Con problema: {resultado.fallas.slice(0, 3).join(' · ')}</div>}
-            </div>
-          )}
         </div>
 
         <footer className="modal-compartir-pie" style={{ borderColor: theme.border }}>

@@ -119,7 +119,7 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
           {gente && visibles.length === 0 && (
             <div style={{ color: theme.textSecondary, fontSize: '13px', padding: '12px', lineHeight: 1.5 }}>
               {gente.length === 0
-                ? 'No hay otros operadores activos para compartir.'
+                ? 'No hay otras personas activas para compartir.'
                 : 'No hay personas que coincidan.'}
             </div>
           )}

@@ -16,6 +16,9 @@ from database import get_db
 router = APIRouter(prefix="/api/compartir", tags=["compartir"])
 
 ROLES = ("operador", "revisor")
+# A quién se le puede compartir: operadores, revisores y también administradores
+# (el admin puede abrir cualquier expediente, pero así le aparecen en «Compartidos conmigo»)
+DESTINOS = ROLES + ("admin",)
 
 
 def es_admin(usuario: dict) -> bool:
@@ -107,8 +110,8 @@ def _mis_expedientes(db: Session, ids: List[str], usuario: dict):
 
 
 def _destinatarios(db: Session, usernames: List[str], yo: str) -> List[str]:
-    """Se comparte con operadores (o revisores) activos; los administradores ya ven todos los expedientes."""
-    validos = {u.username for u in db.query(models.Usuario).filter(models.Usuario.activo.is_(True)).all() if rol_de(u) in ROLES}
+    """Se comparte con usuarios activos (operadores, revisores o administradores)."""
+    validos = {u.username for u in db.query(models.Usuario).filter(models.Usuario.activo.is_(True)).all() if rol_de(u) in DESTINOS}
     return [u for u in dict.fromkeys(usernames or []) if u in validos and u != yo]
 
 
@@ -116,11 +119,11 @@ def _destinatarios(db: Session, usernames: List[str], yo: str) -> List[str]:
 
 @router.get("/directorio")
 def directorio(db: Session = Depends(get_db), usuario: dict = Depends(require_user)):
-    """Personas a las que se les puede compartir: operadores (y revisores) activos; los administradores ya ven todo."""
+    """Personas a las que se les puede compartir: operadores, revisores y administradores activos."""
     if es_revisor(usuario):
         raise HTTPException(status_code=403, detail="Tu usuario es de revisión: no puede compartir expedientes.")
     gente = db.query(models.Usuario).filter(models.Usuario.activo.is_(True), models.Usuario.username != usuario["username"]).all()
-    lista = [{"usuario": u.username, "nombre": u.nombre_mostrar or u.username, "rol": rol_de(u)} for u in gente if rol_de(u) in ROLES]
+    lista = [{"usuario": u.username, "nombre": u.nombre_mostrar or u.username, "rol": rol_de(u)} for u in gente if rol_de(u) in DESTINOS]
     return sorted(lista, key=lambda x: x["nombre"].lower())
 
 
@@ -154,7 +157,7 @@ def compartir(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)
     yo = usuario["username"]
     para = _destinatarios(db, payload.get("usuarios") or [], yo)
     if not para:
-        raise HTTPException(status_code=400, detail="Elige al menos a una persona (operador) para compartir.")
+        raise HTTPException(status_code=400, detail="Elige al menos a una persona para compartir.")
     C = models.Compartido
     nuevos = 0
     if payload.get("todos"):

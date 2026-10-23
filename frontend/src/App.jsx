@@ -17,6 +17,7 @@ const CAMPOS_PRINCIPALES = new Set([...GRUPOS_CAMPOS.flatMap((g) => g.campos), .
 import { sugerenciaActual } from './sugerenciaPlantilla';
 import { generoDeNombre } from './ui/generoNombre';
 import { nombrePlantilla } from './plantillasCatalogo';
+import { conMontoEnLetras } from './ui/montoLetras';
 import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla, revisarIncidencia } from './datosFaltantes';
 import Sidebar from './components/Sidebar';
 import TabExcel from './components/TabExcel';
@@ -1421,7 +1422,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
   };
 
   const handleInputChange = (field, value) => {
-    setDatos((prev) => ({ ...prev, [field]: value }));
+    setDatos((prev) => conMontoEnLetras(prev, field, value));
   };
 
   const handleBatchInputChange = (index, field, value) => {
@@ -1429,10 +1430,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
       const updated = [...prev];
       updated[index] = {
         ...updated[index],
-        datos_extraidos: {
-          ...updated[index].datos_extraidos,
-          [field]: value
-        }
+        datos_extraidos: conMontoEnLetras(updated[index].datos_extraidos, field, value),
       };
       return updated;
     });
@@ -1913,7 +1911,7 @@ const handleExcelSubmit = async (e) => {
   // Usuario de revisión: no hace expedientes, solo revisa/edita/descarga los que le comparten
   const esRevisor = !esAdmin && currentUser?.role === 'revisor';
   const puedeCompartir = puedeServidor('compartir') && !esRevisor;
-  // «Compartidos conmigo» va en el menú de los operadores (y del revisor); el admin ya ve todo en Mi Historial.
+  // «Compartidos conmigo» va en el menú de los operadores (y del revisor); al admin le sale cuando alguien le comparte algo.
   // Si un admin tiene algo compartido de antes, también se le muestra.
   const verCompartidos = puedeServidor('compartir') && (!esAdmin || hayCompartidos);
   const abrirCompartir = (opciones) => setModalCompartir(opciones || null);

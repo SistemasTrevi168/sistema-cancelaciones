@@ -55,7 +55,8 @@ def armar_zip(db: Session) -> bytes:
         resumen = {"creado_en": ahora.isoformat(), "tablas": {}}
         for nombre, modelo in [("usuarios", models.Usuario), ("expedientes", models.Expediente),
                                ("actividad", models.Actividad), ("plantillas_subidas", models.PlantillaSubida),
-                               ("plantilla_versiones", models.PlantillaVersion)]:
+                               ("plantilla_versiones", models.PlantillaVersion), ("documentos", models.Documento),
+                               ("compartidos", models.Compartido)]:
             filas = _tabla(db, modelo)
             resumen["tablas"][nombre] = len(filas)
             z.writestr(f"base/{nombre}.json", json.dumps(filas, ensure_ascii=False, indent=1, default=str))

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  AlertTriangle, ArrowRight, Clock, Download, FilePlus2, FileSpreadsheet, History, Loader2, PenLine, Save, Share2, Shuffle, UserMinus, Wrench, X,
+  AlertTriangle, ArrowRight, Clock, Download, FilePlus2, FileSpreadsheet, FileUp, History, Loader2, PenLine, Save, Share2, Shuffle, UserMinus, Wrench, X,
 } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../AppContext';
@@ -62,6 +62,7 @@ function describir(e) {
     case 'estado': return { icono: Shuffle, titulo: 'Cambió el estado', estado: [d.de, d.a], color: '#b45309' };
     case 'compartir': return { icono: Share2, titulo: 'Compartió el expediente', sub: d.con?.length ? `con ${(d.con_nombres || d.con).join(', ')}` : '', color: '#7c3aed' };
     case 'quitar_acceso': return { icono: UserMinus, titulo: 'Quitó el acceso', sub: d.con?.length ? `a ${(d.con_nombres || d.con).join(', ')}` : '', color: '#64748b' };
+    case 'documentos': return { icono: FileUp, titulo: 'Guardó los PDF', sub: (d.nombres || []).join(', '), color: '#0891b2' };
     case 'corregir_plantilla': return {
       icono: Wrench,
       titulo: 'Se corrigió la plantilla',

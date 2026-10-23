@@ -28,6 +28,7 @@ import versiones
 import respaldos
 import reparaciones
 import compartir
+import documentos
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -866,11 +867,16 @@ app.include_router(kpis.router)
 app.include_router(perfil.router)
 app.include_router(respaldos.router)
 app.include_router(compartir.router)
+app.include_router(documentos.router)
+# Guardar los PDF de los expedientes: solo si están las variables del almacenamiento (Backblaze B2 / S3)
+if documentos.configurado() and "documentos" not in auth.FUNCIONES:
+    auth.FUNCIONES.append("documentos")
 
 
 @app.on_event("startup")
 def programar_respaldos():
     respaldos.iniciar_programador()
+    documentos.iniciar_programador()
 
 
 @app.on_event("startup")
@@ -1471,10 +1477,12 @@ def leer_documentos(
     files: List[UploadFile] = File(...),
     agrupar: bool = Form(True),
     tipos: Optional[List[str]] = Form(None),
+    motivo: str = Form(""),
     sesion: dict = Depends(require_user)
 ):
     """
-    Lee los PDF y regresa los datos para revisarlos en pantalla. NO guarda nada en la base:
+    Lee los PDF y regresa los datos para revisarlos en pantalla.
+    motivo="pdf_guardados": se releen los PDF guardados de un expediente solo para mostrar sus actos (no cuenta en reportes). NO guarda nada en la base:
     eso se hace después con /api/expedientes/guardar.
     agrupar=True: separa los archivos en expedientes por número de crédito (carga masiva).
     agrupar=False: todos los archivos son un solo expediente (caso individual).
@@ -1530,9 +1538,10 @@ def leer_documentos(
                 })
             except Exception as e_grupo:
                 borradores.append({"id": uuid.uuid4().hex, "clave": clave, "archivos": nombres, "error": str(e_grupo)})
-        kpis.registrar(sesion["username"], "leer", modo="masivo" if agrupar else "individual",
-                       archivos=len(archivos), expedientes=len([b for b in borradores if not b.get("error")]),
-                       errores=len([b for b in borradores if b.get("error")]), segundos=round(time.time() - t_inicio, 1))
+        if motivo != "pdf_guardados":
+            kpis.registrar(sesion["username"], "leer", modo="masivo" if agrupar else "individual",
+                           archivos=len(archivos), expedientes=len([b for b in borradores if not b.get("error")]),
+                           errores=len([b for b in borradores if b.get("error")]), segundos=round(time.time() - t_inicio, 1))
         return {"status": "exito", "borradores": borradores}
     except HTTPException:
         raise
@@ -2084,6 +2093,8 @@ def eliminar_usuario(
                     except Exception:
                         pass
                 db.delete(e)
+            # Sus PDF guardados también se borran del almacenamiento
+            documentos.borrar_de_expedientes(db, ids)
         # Su actividad (inicios de sesión, lecturas…) también se va, para que no cuente en los reportes
         db.query(models.Actividad).filter(models.Actividad.username == nombre_usuario).delete(synchronize_session=False)
         db.query(models.Sesion).filter(models.Sesion.username == nombre_usuario).delete(synchronize_session=False)

@@ -116,3 +116,24 @@ class Compartido(Base):
     todos = Column(Boolean, nullable=False, default=False)
     creado_por = Column(String, nullable=True)
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Documento(Base):
+    """
+    PDF de un expediente (carta, carta del trabajador dos o constancia) guardado en el almacenamiento externo
+    (Backblaze B2 / S3). Aquí solo queda la referencia: el archivo vive en el bucket.
+    """
+    __tablename__ = "documentos"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    expediente_id = Column(String, index=True, nullable=False)
+    tipo = Column(String, nullable=False)              # carta / carta2 / constancia
+    nombre = Column(String, nullable=False)            # nombre original del archivo
+    clave = Column(String, nullable=False)             # ruta dentro del bucket
+    tamano = Column(Integer, nullable=False, default=0)
+    huella = Column(String, nullable=True)             # sha256 del contenido
+    subido_por = Column(String, nullable=True)
+    subido_en = Column(DateTime(timezone=True), server_default=func.now())
+    respaldado_en = Column(DateTime(timezone=True), nullable=True)  # se incluyó en un respaldo antes de borrarse
+    borrado_en = Column(DateTime(timezone=True), nullable=True)     # ya no está en el bucket
+    motivo_borrado = Column(String, nullable=True)

@@ -11,6 +11,7 @@ const TIPOS_USUARIO = [
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
 import PanelRespaldos from './PanelRespaldos';
+import PanelPdfs from './PanelPdfs';
 
 export default function TabUsuarios() {
   const {
@@ -207,6 +208,7 @@ export default function TabUsuarios() {
               </div>
             </div>
 <PanelRespaldos />
+<PanelPdfs />
 </>
   );
 }

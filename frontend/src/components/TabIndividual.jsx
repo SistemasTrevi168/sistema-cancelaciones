@@ -42,6 +42,7 @@ export default function TabIndividual() {
     isDarkMode,
     theme,
     edicionSingle,
+    cargandoPdfs,
     editarSinDocumentos,
     salirEdicionSingle,
     volverADocumentos,
@@ -126,6 +127,9 @@ export default function TabIndividual() {
                 {edicionSingle.credito && <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><Hash size={12} /> Crédito {edicionSingle.credito}</span>}
                 <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}>{ESTADO_TXT[edicionSingle.estado] || edicionSingle.estado}</span>
               </div>
+              {cargandoPdfs && (
+                <p className="edicion-cargando-pdf" style={{ color: theme.accent }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Abriendo los PDF guardados de este expediente…</p>
+              )}
               <p style={{ color: theme.textSecondary }}>Sube otra vez la carta y la constancia para revisarlas junto a los datos (seleccionar texto, OCR, actos), o continúa con los datos guardados. Al guardar se <strong>actualiza este mismo expediente</strong>; no se crea otro.</p>
             </div>
           </div>

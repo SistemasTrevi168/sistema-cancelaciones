@@ -279,6 +279,8 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // Edición de un expediente ya guardado (desde Mi Historial) con el mismo espacio de trabajo del Caso Individual:
   // { id, nombre, credito, estado, datos (los guardados), plantilla }
   const [edicionSingle, setEdicionSingle] = useState(null);
+  const [cargandoPdfs, setCargandoPdfs] = useState(false); // abriendo los PDF guardados de un expediente
+  const turnoPdfs = useRef(0); // si cambia mientras se bajan los PDF, ya no se usan
   const singleFiles = [cartaSingle, carta2Single, constanciaSingle].filter(Boolean);
   const [loading, setLoading] = useState(false);
   const [progressSingle, setProgressSingle] = useState(0);
@@ -688,6 +690,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setExpedienteId(''); setLecturaSingle(null); setUnlockedFields({});
       // Un expediente que se estaba editando (propio o compartido) no se queda abierto para la siguiente persona
       setEdicionSingle(null); setVistaPrevia(null); setModalPassword(null); setGuardando({});
+      turnoPdfs.current += 1; setCargandoPdfs(false);
       setNuevoUsuario({ username: '', password: '', role: 'operador', es_admin: false });
       setProgressSingle(0); setProgressBatch(0); setLoading(false); setBatchLoading(false);
       setSelectedPlantilla('CDMX_AP_H_SOLTERO');
@@ -1339,6 +1342,7 @@ const handlePreviewExcel = async (file) => {
       const [r] = await guardarEnBase([{ ref: 'single', datos, plantilla: selectedPlantilla, archivos: singleFiles.map((f) => f.name), metricas: metricasDe('individual', lecturaSingle, datos, avisosSingle), actualizar: actualizar[soloDigitos(datos.numero_credito)] || undefined }]);
       if (!r || r.error) throw new Error(r?.error || 'No se pudo guardar');
       setExpedienteId(r.expediente_id);
+      guardarPdfs(r.expediente_id, paresSingle());
       avisar.exito(r.actualizado ? 'Se actualizó el expediente que ya existía (su Word se volvió a generar).' : 'Expediente guardado y procesado. Ya está en Mi Historial.');
     } catch (err) {
       avisar.error(`No se pudo guardar: ${err.response?.data?.detail || err.message}`);
@@ -1363,7 +1367,9 @@ const handlePreviewExcel = async (file) => {
   const guardarEdicionSingle = async () => {
     const ed = edicionSingle;
     const cambios = cambiosEdicion();
-    const conDocs = singleFiles.length > 0;
+    // Los PDF que se abrieron del almacenamiento no cuentan como «documentos nuevos»
+    const nuevosDocs = singleFiles.filter((f) => !(ed.pdfGuardados || []).includes(f));
+    const conDocs = nuevosDocs.length > 0;
     if (cambios.length === 0 && !conDocs) {
       avisar.aviso('No hay cambios por guardar.');
       return;
@@ -1386,7 +1392,8 @@ const handlePreviewExcel = async (file) => {
       if (!r || r.error) throw new Error(r?.error || 'No se pudo guardar');
       setExpedienteId(r.expediente_id || ed.id);
       // Lo guardado ahora es la nueva base para comparar
-      setEdicionSingle((prev) => (prev ? { ...prev, datos: { ...datos }, plantilla: selectedPlantilla, estado: 'GENERADO', guardado: true } : prev));
+      if (conDocs) guardarPdfs(ed.id, paresSingle().filter(([f]) => f && nuevosDocs.includes(f)));
+      setEdicionSingle((prev) => (prev ? { ...prev, datos: { ...datos }, plantilla: selectedPlantilla, estado: 'GENERADO', guardado: true, pdfGuardados: [...singleFiles] } : prev));
       setHistorial((prev) => prev.map((h) => (String(h.id || h.expediente_id) === String(ed.id)
         ? { ...h, ...(r.datos_extraidos ? { datos_extraidos: r.datos_extraidos } : {}), estado: 'GENERADO' } : h)));
       plantillasGuardadas.current[String(ed.id)] = selectedPlantilla;
@@ -1634,6 +1641,26 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
         const x = porRef[r.ref];
         return x && !x.error ? { ...r, expediente_id: x.expediente_id, actualizado: !!x.actualizado } : r;
       }));
+      // Sus PDF se guardan en segundo plano (si el almacenamiento está configurado)
+      const subirPdfs = resultados.filter((x) => !x.error && x.expediente_id).map((x) => {
+        const r = items.find((it) => it.r.ref === x.ref)?.r;
+        if (!r) return null;
+        let cartas = 0;
+        const pares = archivosDeLote(r).map((f) => {
+          const t = r.tipos?.[f.name] || tipoDeArchivo(f);
+          if (t === 'constancia') return [f, 'constancia'];
+          cartas += 1;
+          return [f, cartas > 1 ? 'carta2' : 'carta'];
+        });
+        return [x.expediente_id, pares];
+      }).filter(Boolean);
+      if (subirPdfs.length && puedeServidor('documentos')) {
+        (async () => {
+          let fallas = 0;
+          for (const [id, pares] of subirPdfs) if (!(await guardarPdfs(id, pares, { silencioso: true }))) fallas += 1;
+          if (fallas) avisar.aviso(`Los expedientes se guardaron, pero los PDF de ${fallas} no se pudieron guardar. Al editarlos puedes subirlos de nuevo.`);
+        })();
+      }
       const errores = resultados.filter((x) => x.error);
       if (errores.length) avisar.error(`${errores.length} expediente(s) no se pudieron guardar: ${errores[0].error}`);
       if (guardados) avisar.exito(`${guardados} expediente(s) guardados y procesados. Ya están en Mi Historial.`);
@@ -2130,11 +2157,12 @@ const cambiarEstado = async (ids, estado) => {
     setCartaSingle(null); setConstanciaSingle(null); setCarta2Single(null); setCoacManual(false); setExpedienteId(''); setError(''); setProgressSingle(0);
     setUnlockedFields({});
     setEdicionSingle(null);
+    turnoPdfs.current += 1; setCargandoPdfs(false);
   };
   // ¿Hay algo sin guardar en el Caso Individual?
   const pendienteSingle = () => {
     if (!datos || expedienteId) return false;
-    return edicionSingle ? (cambiosEdicion().length > 0 || singleFiles.length > 0) : true;
+    return edicionSingle ? (cambiosEdicion().length > 0 || singleFiles.some((f) => !(edicionSingle.pdfGuardados || []).includes(f))) : true;
   };
 
   // Empieza un expediente nuevo en Caso Individual
@@ -2166,6 +2194,62 @@ const cambiarEstado = async (ids, estado) => {
     if (d._coacreditados || esPlantillaCoac(plantilla)) setCoacManual(true);
     cambiarPestana('single');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (puedeServidor('documentos')) abrirPdfsGuardados(id, d);
+  };
+
+  // ---- PDF guardados (Backblaze B2): se guardan con el expediente y se abren solos al editarlo ----
+  const paresSingle = () => [[cartaSingle, 'carta'], [carta2Single, 'carta2'], [constanciaSingle, 'constancia']];
+  const guardarPdfs = async (expId, pares, { silencioso = false } = {}) => {
+    if (!expId || !puedeServidor('documentos')) return true;
+    const lista = (pares || []).filter(([f, t]) => f && t && /\.pdf$/i.test(f.name));
+    if (!lista.length) return true;
+    const fd = new FormData();
+    lista.forEach(([f, t]) => { fd.append('archivos', f); fd.append('tipos', t); });
+    try {
+      await api.post(`/expedientes/${expId}/documentos`, fd);
+      return true;
+    } catch (err) {
+      if (!silencioso) avisar.aviso(`El expediente se guardó, pero sus PDF no se pudieron guardar (${err.response?.data?.detail || err.message}). Al editarlo puedes subirlos de nuevo.`);
+      return false;
+    }
+  };
+  const abrirPdfsGuardados = async (id, d) => {
+    const turno = ++turnoPdfs.current;
+    let docs;
+    try {
+      docs = (await api.get(`/expedientes/${id}/documentos`)).data?.documentos || [];
+    } catch { return; }
+    if (!docs.length || turno !== turnoPdfs.current) return;
+    setCargandoPdfs(true);
+    try {
+      const pares = await Promise.all(docs.map(async (doc) => {
+        const r = await api.get(`/documentos/${doc.id}/archivo`, { responseType: 'blob' });
+        return [doc.tipo, new File([r.data], doc.nombre, { type: 'application/pdf' })];
+      }));
+      if (turno !== turnoPdfs.current) return; // la persona ya salió o abrió otro expediente
+      const por = Object.fromEntries(pares);
+      setCartaSingle(por.carta || null); setCarta2Single(por.carta2 || null); setConstanciaSingle(por.constancia || null);
+      if (por.carta2) setCoacManual(true);
+      setEdicionSingle((prev) => (prev && prev.id === id ? { ...prev, pdfGuardados: Object.values(por) } : prev));
+      // Se abre con los datos guardados y sus PDF en el visor (selección de texto, OCR…)
+      // (si mientras tanto ya dio «Continuar sin documentos», se respetan los cambios que lleve)
+      setDatos((prev) => prev || { ...d }); setLecturaSingle((prev) => prev || { datos: { ...d }, leido_en: null });
+      // En segundo plano, los actos de la constancia (sin cambiar los datos guardados)
+      if (por.constancia) {
+        const fd = new FormData();
+        pares.forEach(([t, f]) => { fd.append('files', f); fd.append('tipos', t); });
+        fd.append('agrupar', 'false');
+        fd.append('motivo', 'pdf_guardados');
+        api.post('/expedientes/leer', fd).then((res) => {
+          const b = res.data?.borradores?.[0];
+          if (b && !b.error && turno === turnoPdfs.current) { setActosSingle(b.actos || []); setSugerenciaBase(b.plantilla_sugerida || null); }
+        }).catch(() => {});
+      }
+    } catch {
+      if (turno === turnoPdfs.current) avisar.aviso('No se pudieron abrir los PDF guardados. Puedes continuar sin documentos o subirlos.');
+    } finally {
+      if (turno === turnoPdfs.current) setCargandoPdfs(false);
+    }
   };
   // Editar con los datos guardados, sin volver a subir los documentos
   const editarSinDocumentos = () => {
@@ -2327,6 +2411,7 @@ const cambiarEstado = async (ids, estado) => {
     salirEdicionSingle,
     volverADocumentos,
     edicionSingle,
+    cargandoPdfs,
     cambiosEdicion,
     puedeServidor,
     confirmarRepetidos,

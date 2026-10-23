@@ -3297,3 +3297,18 @@ button.semaforo[aria-disabled='true'] { cursor: default; }
 .tema-oscuro .tipo-pdf.subir { background: #14532d; color: #86efac; }
 .tema-oscuro .tipo-pdf.omitir { background: #1e293b; color: #94a3b8; }
 .completar-resultado { margin-top: 12px; border: 1px solid; border-radius: 10px; padding: 10px 12px; font-size: 13px; display: block; }
+.completar-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.completar-filtro { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #cbd5e1; background: transparent; color: #475569; border-radius: 99px; padding: 4px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; font-family: inherit; transition: background-color .15s ease, color .15s ease, border-color .15s ease; }
+.completar-filtro:hover { border-color: var(--acento, #2563eb); }
+.completar-filtro.activo { background: var(--acento, #2563eb); border-color: var(--acento, #2563eb); color: #fff; }
+.completar-filtro.f-sinexp:not(.activo), .completar-filtro.f-sinpareja:not(.activo) { color: #92400e; border-color: #fcd34d; background: #fffbeb; }
+.completar-filtro.f-danados:not(.activo) { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+.tema-oscuro .completar-filtro { color: #cbd5e1; border-color: #334155; }
+.completar-quitar-todos { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: #b91c1c !important; }
+.completar-fila { animation: entradaFilaUsuario .25s ease-out both; }
+.completar-marcas { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; vertical-align: middle; }
+.etiqueta-danado { font-style: normal; font-size: 10px; font-weight: 700; color: #b91c1c; background: #fee2e2; border-radius: 6px; padding: 1px 6px; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.tema-oscuro .etiqueta-danado { background: #450a0a; color: #fca5a5; }
+.completar-quitar { flex-shrink: 0; }
+.completar-paginas { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; font-size: 12.5px; }
+.completar-tabla { max-height: none; }

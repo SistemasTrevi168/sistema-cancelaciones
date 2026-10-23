@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Camera, Check, KeyRound, Laptop, Loader2, LogOut, Monitor, Moon, Palette, ShieldCheck, Smartphone, Sun, Trash2, UserRound,
+  Camera, Check, ImagePlus, KeyRound, MoveVertical, Laptop, Loader2, LogOut, Monitor, Moon, Palette, ShieldCheck, Smartphone, Sun, Trash2, UserRound,
 } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../AppContext';
@@ -46,6 +46,10 @@ export default function TabPerfil() {
   const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [cerrando, setCerrando] = useState('');
   const entradaFoto = useRef(null);
+  const entradaPortada = useRef(null);
+  const [subiendoPortada, setSubiendoPortada] = useState(false);
+  const [acomodo, setAcomodo] = useState(null); // { pos } mientras se arrastra la portada
+  const arrastre = useRef(null);
   const temporizadorColor = useRef(null);
 
   const aplicar = (p) => {
@@ -109,6 +113,98 @@ export default function TabPerfil() {
     }
   };
 
+  // ---- Foto de portada (estilo Facebook) ----
+  const comprimirPortada = (f) => new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const escala = Math.min(1, 1600 / img.naturalWidth);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * escala);
+      c.height = Math.round(img.naturalHeight * escala);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      let calidad = 0.82;
+      let dato = c.toDataURL('image/jpeg', calidad);
+      while (dato.length > 1_500_000 && calidad > 0.45) { calidad -= 0.1; dato = c.toDataURL('image/jpeg', calidad); }
+      resolve(dato);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('imagen')); };
+    img.src = url;
+  });
+
+  const elegirPortada = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { avisar.aviso('Elige una imagen (JPG, PNG o WEBP).'); return; }
+    if (f.size > 20 * 1024 * 1024) { avisar.aviso('La imagen es muy grande (máximo 20 MB).'); return; }
+    setSubiendoPortada(true);
+    try {
+      const portada = await comprimirPortada(f);
+      const res = await api.put('/perfil/portada', { portada, posicion: 50 });
+      aplicar(res.data);
+      setAcomodo({ pos: 50 });
+      avisar.exito('Portada actualizada. Arrástrala para acomodarla.');
+    } catch (err) {
+      avisar.error(err.response?.data?.detail || 'No se pudo guardar la portada.');
+    } finally {
+      setSubiendoPortada(false);
+    }
+  };
+
+  const guardarAcomodo = async () => {
+    if (!acomodo) return;
+    setSubiendoPortada(true);
+    try {
+      const res = await api.put('/perfil/portada', { posicion: acomodo.pos });
+      aplicar(res.data);
+      setAcomodo(null);
+    } catch {
+      avisar.error('No se pudo acomodar la portada.');
+    } finally {
+      setSubiendoPortada(false);
+    }
+  };
+
+  const quitarPortada = async () => {
+    if (!(await confirmar('Se mostrará otra vez la franja de color.', { titulo: '¿Quitar la portada?', textoConfirmar: 'Quitar portada' }))) return;
+    try {
+      const res = await api.delete('/perfil/portada');
+      aplicar(res.data);
+      setAcomodo(null);
+    } catch {
+      avisar.error('No se pudo quitar la portada.');
+    }
+  };
+
+  const empezarArrastre = (e) => {
+    if (!acomodo || e.target.closest('button')) return;
+    e.preventDefault();
+    const alto = e.currentTarget.getBoundingClientRect().height;
+    arrastre.current = { y: e.clientY, pos: acomodo.pos, alto };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const moverArrastre = (e) => {
+    const a = arrastre.current;
+    if (!a) return;
+    // Arrastrar hacia abajo muestra más de arriba de la imagen
+    const pos = Math.max(0, Math.min(100, a.pos - ((e.clientY - a.y) / a.alto) * 60));
+    setAcomodo({ pos: Math.round(pos) });
+  };
+  const soltarArrastre = () => { arrastre.current = null; };
+  const teclaAcomodo = (e) => {
+    if (!acomodo) return;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      setAcomodo((a) => ({ pos: Math.max(0, Math.min(100, a.pos + (e.key === 'ArrowUp' ? 5 : -5))) }));
+    } else if (e.key === 'Enter') guardarAcomodo();
+    else if (e.key === 'Escape') setAcomodo(null);
+  };
+
   const elegirColor = (color, guardarYa = true) => {
     setColorAcento(color);
     clearTimeout(temporizadorColor.current);
@@ -159,7 +255,46 @@ export default function TabPerfil() {
 
       {/* Tarjeta principal */}
       <section className="perfil-portada" style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}>
-        <div className="perfil-franja" style={{ background: `linear-gradient(120deg, ${theme.accent}, ${theme.accent}99)` }} />
+        <div
+          className={`perfil-franja${perfil?.portada ? ' con-portada' : ''}${acomodo ? ' acomodando' : ''}`}
+          style={perfil?.portada
+            ? { backgroundImage: `url(${perfil.portada})`, backgroundPosition: `center ${acomodo ? acomodo.pos : perfil.portada_pos}%` }
+            : { background: `linear-gradient(120deg, ${theme.accent}, ${theme.accent}99)` }}
+          onPointerDown={empezarArrastre}
+          onPointerMove={moverArrastre}
+          onPointerUp={soltarArrastre}
+          onPointerCancel={soltarArrastre}
+          onKeyDown={teclaAcomodo}
+          tabIndex={acomodo ? 0 : undefined}
+          role={acomodo ? 'slider' : undefined}
+          aria-label={acomodo ? 'Acomodar portada' : undefined}
+          aria-valuenow={acomodo ? acomodo.pos : undefined}
+        >
+          {acomodo && <div className="portada-guia"><MoveVertical size={16} /> Arrastra para acomodar la portada</div>}
+          <div className="portada-acciones">
+            {acomodo ? (
+              <>
+                <button type="button" className="portada-boton" onClick={() => setAcomodo(null)} disabled={subiendoPortada}>Cancelar</button>
+                <button type="button" className="portada-boton principal" onClick={guardarAcomodo} disabled={subiendoPortada} style={{ backgroundColor: theme.accent, color: '#fff' }}>
+                  {subiendoPortada ? <Loader2 size={14} className="girando" /> : <Check size={14} />} Guardar
+                </button>
+              </>
+            ) : (
+              <>
+                {perfil?.portada && (
+                  <>
+                    <button type="button" className="portada-boton" onClick={() => setAcomodo({ pos: perfil.portada_pos ?? 50 })} title="Acomodar portada"><MoveVertical size={14} /> <span>Acomodar</span></button>
+                    <button type="button" className="portada-boton" onClick={quitarPortada} title="Quitar portada" aria-label="Quitar portada"><Trash2 size={14} /></button>
+                  </>
+                )}
+                <button type="button" className="portada-boton" onClick={() => entradaPortada.current?.click()} disabled={subiendoPortada || !perfil}>
+                  {subiendoPortada ? <Loader2 size={14} className="girando" /> : <ImagePlus size={14} />} <span>{perfil?.portada ? 'Cambiar portada' : 'Agregar portada'}</span>
+                </button>
+              </>
+            )}
+          </div>
+          <input ref={entradaPortada} type="file" accept="image/jpeg,image/png,image/webp" onChange={elegirPortada} style={{ display: 'none' }} />
+        </div>
         <div className="perfil-portada-contenido">
           <div className="perfil-foto">
             <Avatar usuario={usuarioVista} tam={112} color={theme.accent} borde={theme.cardBg} />

@@ -42,7 +42,7 @@ models.Base.metadata.create_all(bind=engine)
 try:
     with engine.begin() as _conn:
         _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE"))
-        for _col in ("nombre_mostrar VARCHAR", "foto TEXT", "color_acento VARCHAR", "tema VARCHAR", "rol VARCHAR"):
+        for _col in ("nombre_mostrar VARCHAR", "foto TEXT", "color_acento VARCHAR", "tema VARCHAR", "rol VARCHAR", "portada TEXT", "portada_pos INTEGER"):
             _conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {_col}"))
         _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE"))
         for _col in ("user_agent VARCHAR", "ip VARCHAR", "ultimo_uso TIMESTAMP WITH TIME ZONE"):

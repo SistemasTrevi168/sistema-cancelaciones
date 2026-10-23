@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/perfil", tags=["perfil"])
 ZONA = ZoneInfo("America/Mexico_City")
 TEMAS = {"claro", "oscuro", "sistema"}
 MAX_FOTO = 600_000  # caracteres del data URL (~450 KB); el navegador la manda recortada a 320x320
+MAX_PORTADA = 1_600_000  # ~1.2 MB; el navegador la reduce a 1600 px de ancho
 
 
 def _usuario(db: Session, sesion: dict) -> models.Usuario:
@@ -105,6 +106,8 @@ def _perfil(db: Session, user: models.Usuario, request: Request) -> Dict[str, An
         "username": user.username,
         "nombre_mostrar": user.nombre_mostrar or "",
         "foto": user.foto or "",
+        "portada": getattr(user, "portada", None) or "",
+        "portada_pos": 50 if getattr(user, "portada_pos", None) is None else user.portada_pos,
         "color_acento": user.color_acento or "",
         "tema": user.tema or "",
         "es_admin": bool(user.es_admin),
@@ -168,6 +171,40 @@ def cambiar_foto(
 def quitar_foto(request: Request, db: Session = Depends(get_db), sesion: dict = Depends(require_user)):
     user = _usuario(db, sesion)
     user.foto = None
+    db.commit()
+    return _perfil(db, user, request)
+
+
+@router.put("/portada")
+def cambiar_portada(
+    request: Request,
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user),
+):
+    """{portada: dataURL, posicion: 0-100} o solo {posicion} para acomodar la que ya está."""
+    user = _usuario(db, sesion)
+    if "portada" in payload:
+        portada = str(payload.get("portada") or "")
+        if not re.match(r"^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$", portada):
+            raise HTTPException(status_code=400, detail="La portada no es una imagen válida.")
+        if len(portada) > MAX_PORTADA:
+            raise HTTPException(status_code=400, detail="La portada es demasiado grande.")
+        user.portada = portada
+    if "posicion" in payload:
+        try:
+            user.portada_pos = max(0, min(100, int(round(float(payload.get("posicion"))))))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Posición no válida.")
+    db.commit()
+    return _perfil(db, user, request)
+
+
+@router.delete("/portada")
+def quitar_portada(request: Request, db: Session = Depends(get_db), sesion: dict = Depends(require_user)):
+    user = _usuario(db, sesion)
+    user.portada = None
+    user.portada_pos = None
     db.commit()
     return _perfil(db, user, request)
 

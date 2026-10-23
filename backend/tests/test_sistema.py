@@ -523,6 +523,21 @@ chk("notario: guardado antes como «Notaria Publica» se corrige", services.acen
 chk("personas: sin «LA SEÑORA»", actos_ifrem.separar_personas("ADRIAN MANUEL REBOLLO PEDRAZA Y LA SEÑORA TERESA MORALES CORONA") == ["ADRIAN MANUEL REBOLLO PEDRAZA", "TERESA MORALES CORONA"])
 chk("personas: sin «SU ESPOSA LA C.»", actos_ifrem.separar_personas("JUAN PEREZ LOPEZ Y SU ESPOSA LA C. MARIA RUIZ SOTO") == ["JUAN PEREZ LOPEZ", "MARIA RUIZ SOTO"])
 
+# --- Foto de portada del perfil ---
+with cliente() as c_por:
+    _h = {"Authorization": "Bearer " + c_por.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+    c_por.cookies.clear()
+    _img = "data:image/jpeg;base64," + "QUJD" * 10
+    _r = c_por.put("/api/perfil/portada", headers=_h, json={"portada": _img, "posicion": 30})
+    chk("portada: se guarda", _r.status_code == 200 and _r.json()["portada"] == _img and _r.json()["portada_pos"] == 30, _r.text[:200])
+    _r = c_por.put("/api/perfil/portada", headers=_h, json={"posicion": 140})
+    chk("portada: acomodar (se limita a 100)", _r.status_code == 200 and _r.json()["portada_pos"] == 100 and _r.json()["portada"] == _img, _r.text[:200])
+    chk("portada: no imagen se rechaza", c_por.put("/api/perfil/portada", headers=_h, json={"portada": "data:text/html;base64,QUJD"}).status_code == 400)
+    chk("portada: muy grande se rechaza", c_por.put("/api/perfil/portada", headers=_h, json={"portada": "data:image/jpeg;base64," + "A" * 1_700_000}).status_code == 400)
+    chk("portada: sin sesión no", c_por.put("/api/perfil/portada", json={"posicion": 10}).status_code in (401, 403))
+    _r = c_por.delete("/api/perfil/portada", headers=_h)
+    chk("portada: quitar", _r.status_code == 200 and _r.json()["portada"] == "" and _r.json()["portada_pos"] == 50, _r.text[:200])
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

@@ -17,6 +17,8 @@ class Usuario(Base):
     # Perfil (cada quien edita el suyo)
     nombre_mostrar = Column(String, nullable=True)
     foto = Column(Text, nullable=True)            # imagen recortada (data:image/jpeg;base64,...)
+    portada = Column(Text, nullable=True)         # foto de portada del perfil (data:image/jpeg;base64,...)
+    portada_pos = Column(Integer, nullable=True)  # qué parte se ve: 0 = arriba, 50 = centro, 100 = abajo
     color_acento = Column(String, nullable=True)  # color del sistema elegido por el usuario (#rrggbb)
     tema = Column(String, nullable=True)          # claro / oscuro / sistema
     # Tipo de usuario (además de es_admin): "operador" (hace expedientes) o "revisor"

@@ -2291,7 +2291,19 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
 /* ================= Mi perfil ================= */
 .perfil { display: flex; flex-direction: column; gap: 16px; }
 .perfil-portada { border: 1px solid; border-radius: 16px; overflow: hidden; }
-.perfil-franja { height: 76px; }
+.perfil-franja { height: 76px; position: relative; transition: height .25s ease; }
+.perfil-franja.con-portada { height: 190px; background-size: cover; background-repeat: no-repeat; }
+.perfil-franja.con-portada::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,.28)); pointer-events: none; }
+.perfil-franja.acomodando { cursor: grab; touch-action: none; outline: none; }
+.perfil-franja.acomodando:active { cursor: grabbing; }
+.perfil-franja.acomodando::after { background: rgba(15, 23, 42, .18); }
+.portada-guia { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; background: rgba(15, 23, 42, .62); color: #fff; font-size: 13px; font-weight: 600; pointer-events: none; white-space: nowrap; }
+.portada-acciones { position: absolute; right: 14px; bottom: 12px; z-index: 2; display: flex; gap: 8px; }
+.perfil-franja:not(.con-portada) .portada-acciones { top: 50%; bottom: auto; transform: translateY(-50%); }
+.portada-boton { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid rgba(255,255,255,.35); background: rgba(15, 23, 42, .55); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; backdrop-filter: blur(4px); transition: background .15s ease, transform .15s ease; }
+.portada-boton:hover:not(:disabled) { background: rgba(15, 23, 42, .78); transform: translateY(-1px); }
+.portada-boton:disabled { opacity: .6; cursor: default; }
+.portada-boton.principal { border-color: transparent; }
 .perfil-portada-contenido { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(260px, 340px); gap: 20px; align-items: start; padding: 14px 24px 22px; }
 .perfil-portada-contenido .perfil-foto { margin-top: -62px; }
 .perfil-foto { position: relative; width: 112px; height: 112px; }
@@ -2370,6 +2382,8 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   .perfil-nombre { grid-column: 1 / -1; }
 }
 @media (max-width: 560px) {
+  .perfil-franja.con-portada { height: 140px; }
+  .portada-boton span { display: none; }
   .perfil-portada-contenido { grid-template-columns: minmax(0, 1fr); padding: 14px 16px 18px; }
   .perfil-nombre, .perfil-identidad { width: 100%; }
   .perfil-cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); }

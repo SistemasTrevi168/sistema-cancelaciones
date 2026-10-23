@@ -38,12 +38,31 @@ function entero(n, apocope = false) {
   return partes.join(' ');
 }
 
+// Lee montos escritos de muchas formas (igual que el servidor):
+// $1,250,300.00 · $1´250,300.00 · $1.800.000.00 · $1 250 300.00 · $170,869 02 · 250000
+export function leerMonto(texto) {
+  const t = String(texto ?? '').replace(/\$/g, ' ').replace(/M\.?\s?N\.?/gi, ' ').trim();
+  if (!t) return null;
+  const SEP = "[,.´'’`\\s]";
+  const agrupado = new RegExp(`^[0-9]{1,3}(?:${SEP}[0-9]{3})+(?:[.,\\s][0-9]{2})?$`);
+  const simple = /^[0-9]+(?:[.,][0-9]{1,2})?$/;
+  if (!agrupado.test(t) && !simple.test(t)) return null;
+  let crudo = t;
+  let centavos = '';
+  const mc = crudo.match(/[.,\s]([0-9]{2})$/);
+  const pareceMiles = new RegExp(`^[0-9]{1,3}${SEP}[0-9]{2}$`).test(crudo);
+  if (mc && (!pareceMiles || /^[0-9]+[.,][0-9]{2}$/.test(crudo))) { centavos = mc[1]; crudo = crudo.slice(0, mc.index); }
+  else if (/^[0-9]+[.,][0-9]$/.test(crudo)) { const [e, d] = crudo.split(/[.,]/); crudo = e; centavos = `${d}0`; }
+  const enteros = crudo.replace(/[^0-9]/g, '');
+  if (!enteros) return null;
+  const val = Number(`${Number(enteros)}.${centavos || '00'}`);
+  return Number.isFinite(val) ? val : null;
+}
+
 // Regresa el texto con letra, o null si el monto no es un número (entonces no se toca el campo)
 export function montoALetras(monto) {
-  const limpio = String(monto ?? '').replace(/[$,\s]/g, '').replace(/M\.?N\.?$/i, '');
-  if (!/^\d+(\.\d+)?$/.test(limpio)) return null;
-  const val = Number(limpio);
-  if (!Number.isFinite(val) || val > 999999999999) return null;
+  const val = leerMonto(monto);
+  if (val === null || val > 999999999999) return null;
   const enteros = Math.floor(val);
   const centavos = Math.round((val - enteros) * 100);
   let txt;

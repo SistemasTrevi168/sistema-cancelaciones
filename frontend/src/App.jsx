@@ -686,6 +686,9 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       setCartaSingle(null); setConstanciaSingle(null); setCarta2Single(null); setCoacManual(false);
       setCartasLote([]); setConstanciasLote([]); setSelectedBatchIndices([]); setOpenAccordion({});
       setExpedienteId(''); setLecturaSingle(null); setUnlockedFields({});
+      // Un expediente que se estaba editando (propio o compartido) no se queda abierto para la siguiente persona
+      setEdicionSingle(null); setVistaPrevia(null); setModalPassword(null); setGuardando({});
+      setNuevoUsuario({ username: '', password: '', role: 'operador', es_admin: false });
       setProgressSingle(0); setProgressBatch(0); setLoading(false); setBatchLoading(false);
       setSelectedPlantilla('CDMX_AP_H_SOLTERO');
       setFormData((f) => Object.fromEntries(Object.keys(f).map((k) => [k, ''])));

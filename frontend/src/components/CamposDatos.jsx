@@ -1,15 +1,42 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CheckCircle, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown, Lock, Pencil, Unlock } from 'lucide-react';
 import { useApp } from '../AppContext';
 import { CAMPOS_LARGOS, agruparDatos, esPuntoInmueble, etiquetaDe } from '../camposExpediente';
 import { esDatoVacio } from '../datosFaltantes';
+import { esFecha, formatoAlSalir } from '../ui/conversiones';
 
 // Lista de datos de un expediente, agrupada y editable.
 // prefijo: identifica los candados de este expediente (ej. 'single' o 'batch_3').
 // plegables: los grupos se pueden plegar y los que están completos empiezan plegados (espacio de trabajo).
 // enfocar: { clave, t } para abrir el grupo de ese dato y llevar la vista hasta él.
 export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, compacto = false, coac = false, plegables = false, enfocar = null }) {
-  const { theme, isDarkMode, unlockedFields, setUnlockedFields, handleToggleUnlock } = useApp();
+  const { theme, isDarkMode, unlockedFields, setUnlockedFields, handleToggleUnlock, normalizarCampo } = useApp();
+
+  // Al cambiar un número se rehacen sus letras dentro del mismo campo: el cursor se queda donde estaba
+  const cursor = useRef(null);
+  useLayoutEffect(() => {
+    const c = cursor.current;
+    if (!c) return;
+    cursor.current = null;
+    const el = document.getElementById(c.id);
+    if (el && document.activeElement === el && el.selectionStart !== c.pos) el.setSelectionRange(c.pos, c.pos);
+  });
+  const cambiar = (clave, e) => {
+    cursor.current = { id: e.target.id, pos: e.target.selectionStart };
+    onCambio(clave, e.target.value);
+  };
+  // Al salir del campo, un número escrito solo se pasa a su formato con letra (como lo hace la lectura de los PDF)
+  const alSalir = async (clave, e) => {
+    const valor = e.target.value;
+    if (!/\d/.test(valor)) return;
+    const local = formatoAlSalir(clave, valor);
+    if (local !== null) { onCambio(clave, local); return; }
+    if (esFecha(clave) && normalizarCampo) {
+      const { valor: nuevo } = await normalizarCampo(clave, valor);
+      // Solo si nadie lo cambió mientras se convertía
+      if (nuevo && nuevo !== valor && document.getElementById(e.target.id)?.value === valor) onCambio(clave, nuevo);
+    }
+  };
   const grupos = agruparDatos(datos, coac);
 
   const conConyuge = /^s[ií]/i.test(String(datos?.tiene_conyuge || '')) || !esDatoVacio(datos?.nombre_conyuge);
@@ -86,9 +113,9 @@ export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, 
         </label>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
           {largo ? (
-            <textarea id={`${prefijo}_${clave}`} rows={2} value={valor ?? ''} disabled={!editable} onChange={(e) => onCambio(clave, e.target.value)} style={estilo} />
+            <textarea id={`${prefijo}_${clave}`} rows={2} value={valor ?? ''} disabled={!editable} onChange={(e) => cambiar(clave, e)} onBlur={(e) => alSalir(clave, e)} style={estilo} />
           ) : (
-            <input id={`${prefijo}_${clave}`} type="text" value={valor ?? ''} disabled={!editable} onChange={(e) => onCambio(clave, e.target.value)} style={estilo} />
+            <input id={`${prefijo}_${clave}`} type="text" value={valor ?? ''} disabled={!editable} onChange={(e) => cambiar(clave, e)} onBlur={(e) => alSalir(clave, e)} style={estilo} />
           )}
           <button
             type="button"

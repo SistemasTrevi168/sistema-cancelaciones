@@ -17,7 +17,7 @@ const CAMPOS_PRINCIPALES = new Set([...GRUPOS_CAMPOS.flatMap((g) => g.campos), .
 import { sugerenciaActual } from './sugerenciaPlantilla';
 import { generoDeNombre } from './ui/generoNombre';
 import { nombrePlantilla } from './plantillasCatalogo';
-import { conMontoEnLetras } from './ui/montoLetras';
+import { conConversiones } from './ui/conversiones';
 import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla, revisarIncidencia } from './datosFaltantes';
 import Sidebar from './components/Sidebar';
 import TabExcel from './components/TabExcel';
@@ -1434,7 +1434,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
   };
 
   const handleInputChange = (field, value) => {
-    setDatos((prev) => conMontoEnLetras(prev, field, value));
+    setDatos((prev) => conConversiones(prev, field, value));
   };
 
   const handleBatchInputChange = (index, field, value) => {
@@ -1442,7 +1442,7 @@ const handleApplyTemplateToSelected = (plantillaElegida) => {
       const updated = [...prev];
       updated[index] = {
         ...updated[index],
-        datos_extraidos: conMontoEnLetras(updated[index].datos_extraidos, field, value),
+        datos_extraidos: conConversiones(updated[index].datos_extraidos, field, value),
       };
       return updated;
     });

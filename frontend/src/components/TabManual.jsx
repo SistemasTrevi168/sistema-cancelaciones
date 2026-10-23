@@ -12,6 +12,7 @@ import IconoArchivo from './IconoArchivo';
 import OpcionesPlantilla from './OpcionesPlantilla';
 import PanelVistaPrevia from './PanelVistaPrevia';
 import Selector from './Selector';
+import { conConversiones, formatoAlSalir } from '../ui/conversiones';
 
 // Secciones del formulario (mismo orden y nombres que en los datos extraídos)
 const SECCIONES = [
@@ -109,13 +110,15 @@ export default function TabManual() {
   const completos = requeridos.filter((c) => !esDatoVacio(formData[c])).length;
   const faltan = requeridos.filter((c) => esDatoVacio(formData[c]));
 
-  const cambiar = (clave, valor) => setFormData((prev) => ({ ...prev, [clave]: valor }));
+  const cambiar = (clave, valor) => setFormData((prev) => conConversiones(prev, clave, valor));
 
   // Al salir del campo se le da el formato de la plantilla (números y fechas con letra, etc.)
   const alSalir = async (campo) => {
     const valor = String(formData[campo.clave] || '').trim();
     if (!valor) return;
     if (campo.mayusculas) { cambiar(campo.clave, valor.toUpperCase()); return; }
+    const local = /\d/.test(valor) ? formatoAlSalir(campo.clave, valor) : null;
+    if (local !== null) { cambiar(campo.clave, local); return; }
     if (!campo.normalizar || (!/\d/.test(valor) && campo.clave !== 'notario_origen_completo')) return;
     setConvirtiendo((p) => ({ ...p, [campo.clave]: true }));
     const { valor: nuevo } = await normalizarCampo(campo.clave, valor);

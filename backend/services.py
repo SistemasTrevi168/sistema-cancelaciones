@@ -1285,7 +1285,8 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         credito_texto = ""
 
     monto_raw = str(datos.get("monto_credito", "")).strip()
-    monto_letras = str(datos.get("monto_credito_letras", "")).strip()
+    # El monto con letra que se ve en pantalla (el sistema lo calcula y se puede corregir a mano)
+    monto_letras = str(datos.get("monto_letras") or datos.get("monto_credito_letras") or "").strip()
     
     if monto_raw and monto_raw != "NO_ENCONTRADO":
         if not monto_letras or monto_letras == "NO_ENCONTRADO":

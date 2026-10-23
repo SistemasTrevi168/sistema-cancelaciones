@@ -650,7 +650,8 @@ def _fecha_con_letra(valor: str) -> str:
 def _numero_con_letra(valor: str) -> str:
     """Número de escritura con dígitos o romano -> con letra ('6411' -> 'seis mil cuatrocientos once')."""
     v = str(valor or "").strip()
-    limpio = v.replace(",", "").replace(".", "").strip()
+    n = _numero_de_campo(v)
+    limpio = (n if n else v).replace(",", "").replace(".", "").strip()
     if re.fullmatch(r"\d{1,7}", limpio):
         return services.numero_a_palabras_generico(int(limpio)).lower()
     if re.fullmatch(r"[MDCLXVI]{1,8}", limpio.upper()):
@@ -660,21 +661,57 @@ def _numero_con_letra(valor: str) -> str:
     return corregir_numeros_compuestos(v)
 
 
+# "0543910959 (cero cinco ...)", "\"321240\" (TRESCIENTOS ...)", "78.6457 (setenta ...)": al editar, manda el NÚMERO
+_NUMERO_CON_PARENTESIS = re.compile(r'^\s*["“”]?\s*(\d[\d,]*(?:\.\d+)?)\s*["“”]?\s*(?:\(.*\)?\s*)?$', re.S)
+
+
+def _numero_de_campo(valor: str) -> Optional[str]:
+    """El número con el que empieza un campo convertido (sin sus letras), o None si es texto."""
+    m = _NUMERO_CON_PARENTESIS.match(str(valor or ""))
+    return m.group(1) if m else None
+
+
+def _carta_con_letra(valor: str) -> str:
+    v = str(valor or "").strip()
+    n = _numero_de_campo(v)
+    if n and re.fullmatch(r"\d{3,}", n):
+        return services.credito_a_letras(n)
+    return corregir_numeros_compuestos(v)
+
+
+def _salario_con_letra(valor: str) -> str:
+    v = str(valor or "").strip()
+    n = _numero_de_campo(v)
+    if n:
+        return services.convertir_vsm_a_letras(n.replace(",", ""))
+    return corregir_numeros_compuestos(v)
+
+
+def _monto_letras_respetando(monto: str, letras_escritas: Any) -> str:
+    """El monto con letra se calcula del monto; si se corrigió a mano (y dice la misma cantidad), se respeta."""
+    calculadas = numero_a_letras(monto) if monto else ""
+    letras = " ".join(str(letras_escritas or "").split())
+    if not letras or letras.upper() in _SIN_DATO or not calculadas or calculadas == str(monto):
+        return calculadas
+    valor = services.normalizar_monto(monto)
+    pesos = re.split(r"\b(?:DE\s+)?PESOS?\b", letras, maxsplit=1, flags=re.I)[0]
+    pesos = re.sub(r"veinti[uú]n\b", "veintiuno", pesos, flags=re.I)
+    if valor is None or palabras_a_numero(pesos) != int(valor) or re.search(r"\d", pesos):
+        return calculadas  # las letras eran de otro monto: se recalculan
+    return letras
+
+
 CAMPOS_TRABAJADOR_DOS = ["nombre_acreditado_2", "numero_credito_2", "numero_carta_2", "fecha_expedicion_2",
                          "fecha_liquidacion_2", "credito_a_salario_2", "monto_credito_2"]
 
 
-def _datos_trabajador_dos(datos: Dict[str, Any]) -> Dict[str, Any]:
+def _datos_trabajador_dos(datos: Dict[str, Any], desde_pdf: bool = False) -> Dict[str, Any]:
     """Coacreditados: datos del "TRABAJADOR DOS" con el mismo formato que los del uno."""
     if not any(str(datos.get(c) or "").strip() for c in CAMPOS_TRABAJADOR_DOS):
         return {}
     v = lambda c: str(datos.get(c) or "").strip()
-    carta = v("numero_carta_2")
-    if re.fullmatch(r"\d{3,}", carta):
-        carta = services.credito_a_letras(carta)
-    salario = v("credito_a_salario_2")
-    if re.fullmatch(r"[\d,]+(?:\.\d+)?", salario):
-        salario = services.convertir_vsm_a_letras(salario.replace(",", ""))
+    carta = _carta_con_letra(v("numero_carta_2"))
+    salario = _salario_con_letra(v("credito_a_salario_2"))
     monto = v("monto_credito_2")
     if monto and services.normalizar_monto(monto) is not None:
         monto = services.formatear_monto(monto)
@@ -686,12 +723,14 @@ def _datos_trabajador_dos(datos: Dict[str, Any]) -> Dict[str, Any]:
         "fecha_liquidacion_2": _fecha_con_letra(v("fecha_liquidacion_2")),
         "credito_a_salario_2": corregir_numeros_compuestos(salario),
         "monto_credito_2": monto,
-        "monto_letras_2": numero_a_letras(monto) if monto else "",
+        "monto_letras_2": _monto_letras_respetando(monto, None if desde_pdf else datos.get("monto_letras_2")) if monto else "",
     }
 
 
-def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallback: str = "") -> Dict[str, Any]:
-    """Filtra y devuelve los campos requeridos aplicando conversiones de romanos y dígitos."""
+def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallback: str = "", desde_pdf: bool = False) -> Dict[str, Any]:
+    """Filtra y devuelve los campos requeridos aplicando conversiones de romanos y dígitos.
+    desde_pdf=True: datos recién leídos de los PDF (el inmueble se arma con la constancia).
+    Si no, son datos capturados o corregidos a mano: el inmueble se respeta tal como se escribió."""
     acreditado = corregir_numeros_compuestos(str(datos_origen.get("nombre_acreditado") or datos_origen.get("acreditado") or datos_origen.get("cliente") or ""))
     monto = datos_origen.get("monto_credito") or datos_origen.get("monto") or ""
     # "$1´250,300.00", "$1.800.000.00", "170,869 02"... -> "$1,250,300.00"
@@ -699,10 +738,8 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
         monto = services.formatear_monto(monto)
     num_credito = datos_origen.get("numero_credito") or num_credito_fallback or ""
     oficina = corregir_numeros_compuestos(str(datos_origen.get("oficina_registral") or datos_origen.get("oficina") or ""))
-    carta = corregir_numeros_compuestos(str(datos_origen.get("numero_carta") or datos_origen.get("carta") or ""))
-    # Número de carta: "0543910959" (cero cinco cuatro tres nueve uno cero nueve cinco nueve)
-    if re.fullmatch(r"\d{3,}", carta.strip()):
-        carta = services.credito_a_letras(carta.strip())
+    # Número de carta: "0543910959" (cero cinco cuatro tres nueve uno cero nueve cinco nueve); al editar el número, sus letras se rehacen
+    carta = _carta_con_letra(str(datos_origen.get("numero_carta") or datos_origen.get("carta") or ""))
     entidad = corregir_numeros_compuestos(str(datos_origen.get("entidad_financiera") or datos_origen.get("banco") or ""))
 
     fecha = _fecha_con_letra(str(datos_origen.get("fecha_liquidacion") or datos_origen.get("fecha") or ""))
@@ -721,9 +758,14 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     inmueble_raw = datos_origen.get("datos_inmueble") or datos_origen.get("inmueble") or ""
     texto_raw = datos_origen.get("texto_raw") or ""
     
+    texto_inmueble = " ".join(str(inmueble_raw or "").split())
     # Si el inmueble ya viene armado ("Lote: 2, Manzana: 10..."), se respeta (puede estar corregido a mano)
     if inmueble_raw and _inmueble_ya_armado(inmueble_raw):
         inmueble_str = services.expandir_abreviaturas(str(inmueble_raw))
+        puntos_inmueble = {}
+    elif not desde_pdf and texto_inmueble and texto_inmueble.upper() not in _SIN_DATO:
+        # Escrito o corregido a mano ("la vivienda marcada con el número dieciocho..."): se imprime tal cual
+        inmueble_str = texto_inmueble
         puntos_inmueble = {}
     else:
         puntos_inmueble = procesar_19_puntos_inmueble(str(inmueble_raw), str(texto_raw))
@@ -741,7 +783,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     if not credito_salario_str or credito_salario_str.lower() in ["none", "null", "n/a", "", "no_encontrado"]:
         credito_salario = "NO_ENCONTRADO"
     else:
-        credito_salario = corregir_numeros_compuestos(credito_salario_str)
+        credito_salario = _salario_con_letra(credito_salario_str)
     
     num_escritura = _numero_con_letra(str(datos_origen.get("numero_escritura") or ""))
     fecha_esc = _fecha_con_letra(str(datos_origen.get("fecha_escritura") or ""))
@@ -768,7 +810,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     if nombre_conyuge.strip().upper() == "NO_ENCONTRADO":
         nombre_conyuge = ""  # Si es soltero(a) no debe marcarse como dato faltante
 
-    monto_letras = numero_a_letras(monto)
+    monto_letras = _monto_letras_respetando(monto, None if desde_pdf else datos_origen.get("monto_letras"))
 
     resultado = {
         "nombre_acreditado": acreditado,
@@ -790,7 +832,10 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
         "nombre_conyuge": nombre_conyuge,
     }
     resultado.update(puntos_inmueble)
-    resultado.update(_datos_trabajador_dos(datos_origen))
+    if not puntos_inmueble:
+        # El desglose del inmueble que ya traía (se ve en pantalla como datos opcionales) se conserva
+        resultado.update({k: str(v) for k, v in datos_origen.items() if re.fullmatch(r"\d+_[a-z_]+", str(k)) and k in _PUNTOS_INMUEBLE and v})
+    resultado.update(_datos_trabajador_dos(datos_origen, desde_pdf))
     # Lo que no se encontró se deja vacío (en pantalla se marca en rojo para llenarlo)
     for clave, valor in resultado.items():
         if isinstance(valor, str) and valor.strip().upper() in ("NO_ENCONTRADO", "NONE", "NULL", "N/A"):
@@ -1068,7 +1113,7 @@ def procesar_documento(
         sugerencia = sugerir_plantilla_seguro(datos_combinados, actos, datos_extraidos_lista)
         num_credito = datos_combinados.get("numero_credito", "SIN_CREDITO")
         
-        datos_limpios = limpiar_datos_para_plantilla(datos_combinados, num_credito)
+        datos_limpios = limpiar_datos_para_plantilla(datos_combinados, num_credito, desde_pdf=True)
 
         if plantilla:
             datos_limpios["plantilla_seleccionada"] = plantilla
@@ -1191,7 +1236,7 @@ def procesar_masivo(
                     if not num_credito:
                         num_credito = prefijo
                 
-                datos_finales = limpiar_datos_para_plantilla(datos_raw, num_credito)
+                datos_finales = limpiar_datos_para_plantilla(datos_raw, num_credito, desde_pdf=True)
                 # Se recuerda la plantilla usada, para poder regenerar el Word igual después
                 datos_finales["plantilla_seleccionada"] = plantilla
 
@@ -1282,7 +1327,7 @@ def leer_grupo(lista_datos: List[Dict[str, Any]], nombres: List[str], respaldo_c
     if carta_dos is not None:
         datos_raw.update(datos_de_trabajador_dos(carta_dos, datos_raw))
         sugerencia = sugerencia_coacreditados(datos_raw, sugerencia)
-    datos_finales = limpiar_datos_para_plantilla(datos_raw, num_credito)
+    datos_finales = limpiar_datos_para_plantilla(datos_raw, num_credito, desde_pdf=True)
     if carta_dos is not None:
         datos_finales["_coacreditados"] = True
     return datos_finales, actos, sugerencia
@@ -1769,8 +1814,9 @@ def normalizar_campo(
         if campo in ("numero_escritura",) and re.fullmatch(r"[\d,\.\s]+|[MDCLXVImdclxvi]{1,8}", texto):
             valor = _numero_con_letra(texto)
         elif campo == "folio_real" and solo_digitos and re.fullmatch(r"[\d,\.\s\-]+", texto):
+            # Igual que se guarda: "321240" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CUARENTA)
             limpio = services.limpiar_ceros_izquierda(solo_digitos)
-            valor = services.numero_a_palabras_generico(limpio).lower() if limpio.isdigit() else limpio
+            valor = f'"{limpio}" ({numero_folio_a_letras(limpio)})' if limpio.isdigit() else limpio
         elif campo in ("fecha_escritura", "fecha_liquidacion", "fecha_expedicion"):
             convertida = services.fecha_estructurada_a_texto(texto)
             if convertida:

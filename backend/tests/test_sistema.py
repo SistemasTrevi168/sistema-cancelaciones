@@ -538,6 +538,42 @@ with cliente() as c_por:
     _r = c_por.delete("/api/perfil/portada", headers=_h)
     chk("portada: quitar", _r.status_code == 200 and _r.json()["portada"] == "" and _r.json()["portada_pos"] == 50, _r.text[:200])
 
+# --- Al editar, lo escrito a mano se imprime tal cual y las conversiones siguen al número ---
+_L = main.limpiar_datos_para_plantilla
+_INM = 'la vivienda habitacional marcada con el número dieciocho guion "a", construido sobre el lote dieciocho, manzana once, del lote condominal tres'
+_RAW = "DATOS DE IDENTIFICACIÓN: VIVIENDA: CASA 18-A LOTE: 18 MANZANA: 11 MUNICIPIO: TOLUCA SUPERFICIE: 60 M2"
+chk("inmueble escrito a mano: se respeta", _L({"datos_inmueble": _INM, "texto_raw": _RAW})["datos_inmueble"] == _INM)
+chk("inmueble escrito a mano: no se recorta a lote y manzana", _L({"datos_inmueble": _INM})["datos_inmueble"] == _INM)
+chk("inmueble leído del PDF: se arma con la constancia", _L({"datos_inmueble": "x", "texto_raw": _RAW}, desde_pdf=True)["datos_inmueble"].startswith("Vivienda CASA 18-A, Lote 18"))
+chk("folio: al cambiar el número cambian sus letras", _L({"folio_real": '"321250" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CUARENTA)'})["folio_real"] == '"321250" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CINCUENTA)')
+chk("carta: al cambiar el número cambian sus letras", _L({"numero_carta": '"0543910958" (cero cinco cuatro tres nueve uno cero nueve cinco nueve)'})["numero_carta"].endswith("cinco ocho)"))
+chk("carta 2: igual", _L({"numero_carta_2": "0543910958 (cero cinco)", "nombre_acreditado_2": "X"})["numero_carta_2"] == '"0543910958" (cero cinco cuatro tres nueve uno cero nueve cinco ocho)')
+chk("escritura: número con sus letras viejas", _L({"numero_escritura": "15813 (quince mil ochocientos doce)"})["numero_escritura"] == "quince mil ochocientos trece")
+chk("VSM con número: a letra", _L({"credito_a_salario": "78.6457"})["credito_a_salario"] == "setenta y ocho punto seis mil cuatrocientos cincuenta y siete")
+chk("VSM con letra: tal cual", _L({"credito_a_salario": "setenta y ocho punto cinco"})["credito_a_salario"] == "setenta y ocho punto cinco")
+chk("monto con letra corregido a mano (misma cantidad): se respeta",
+    _L({"monto_credito": "$125,733.76", "monto_letras": "CIENTO VEINTICINCO MIL SETECIENTOS TREINTA Y TRES PESOS 76/100 M.N."})["monto_letras"].endswith("76/100 M.N."))
+chk("monto con letra de otro monto: se recalcula",
+    _L({"monto_credito": "$125,733.76", "monto_letras": "CIEN PESOS CON CERO CENTAVOS, MONEDA NACIONAL"})["monto_letras"].startswith("CIENTO VEINTICINCO MIL"))
+chk("monto con letra: de los PDF siempre se calcula",
+    _L({"monto_credito": "$125,733.76", "monto_letras": "CIENTO VEINTICINCO MIL SETECIENTOS TREINTA Y TRES PESOS 76/100 M.N."}, desde_pdf=True)["monto_letras"].endswith("MONEDA NACIONAL"))
+chk("desglose del inmueble: se conserva", _L({"datos_inmueble": _INM, "4_lote": "18"}).get("4_lote") == "18")
+with cliente() as c_cv:
+    _h = {"Authorization": "Bearer " + c_cv.post("/api/auth/login", json={"username": f"ana_{SUF}", "password": "Prueba2026!"}).json()["token"]}
+    c_cv.cookies.clear()
+    _cred = "16" + str(uuid.uuid4().int)[:8]
+    _base = {**DATOS, "numero_credito": _cred}
+    _id = c_cv.post("/api/expedientes/guardar", json={"expedientes": [{"ref": "c", "datos": _base, "plantilla": PLANTILLA}]}, headers=_h).json()["resultados"][0]["expediente_id"]
+    _ed = {**_base, "datos_inmueble": _INM, "folio_real": '"321250" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CUARENTA)'}
+    r = c_cv.put(f"/api/expedientes/{_id}/editar", json={"datos": _ed, "plantilla": PLANTILLA}, headers=_h)
+    chk("editar inmueble a mano: se guarda", r.status_code == 200, r.text[:200])
+    r = c_cv.post(f"/api/expedientes/{_id}/generar-word", json={"datos": {}, "plantilla": PLANTILLA}, headers=_h)
+    _t = texto_word(r.content) if r.status_code == 200 else ""
+    chk("Word: el inmueble escrito a mano", "marcada con el número dieciocho guion" in _t and "del lote condominal tres" in _t, _t[:300])
+    chk("Word: el folio con sus letras nuevas", "321250" in _t and "DOSCIENTOS CINCUENTA" in _t.upper(), _t[:300])
+    r = c_cv.post("/api/expedientes/normalizar-campo", headers=_h, json={"campo": "folio_real", "texto": "00321240"}).json()
+    chk("normalizar folio: con su formato", r["valor"] == '"321240" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CUARENTA)', r)
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

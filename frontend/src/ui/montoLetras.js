@@ -25,7 +25,7 @@ function grupo(n, apocope = false) {
   return partes.join(' ');
 }
 
-function entero(n, apocope = false) {
+export function entero(n, apocope = false) {
   if (n === 0) return 'CERO';
   const millones = Math.floor(n / 1000000);
   const resto = n % 1000000;

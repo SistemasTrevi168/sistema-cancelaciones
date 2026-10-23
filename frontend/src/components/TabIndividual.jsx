@@ -1,5 +1,6 @@
 import { useRef } from 'react';
-import { AlertTriangle, ArrowLeft, CheckCircle, FilePlus, Hash, Loader2, PencilLine, Upload, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle, FileCheck2, FilePlus, Hash, Loader2, PencilLine, Trash2, Upload, Users, X } from 'lucide-react';
+import useYaGenerados from '../ui/usarYaGenerados';
 import { esPlantillaCoac } from '../camposExpediente';
 import { useApp } from '../AppContext';
 import ZonaArchivos from './ZonaArchivos';
@@ -45,6 +46,13 @@ export default function TabIndividual() {
     salirEdicionSingle,
     volverADocumentos,
   } = useApp();
+  // ¿El crédito de estos archivos ya está en Mi Historial? (al editar uno guardado no se avisa: es el mismo)
+  const yaGen = useYaGenerados([cartaSingle, carta2Single, constanciaSingle], !edicionSingle);
+  const creditosGen = Object.entries(yaGen.creditos);
+  const quitarGenerados = () => {
+    const ya = new Set(Object.keys(yaGen.porArchivo));
+    [['carta', cartaSingle], ['carta2', carta2Single], ['constancia', constanciaSingle]].forEach(([t, f]) => { if (f && ya.has(f.name)) quitarArchivoSingle(t); });
+  };
   const ESTADO_TXT = { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' };
   const carta2Ref = useRef(null);
 
@@ -143,6 +151,7 @@ export default function TabIndividual() {
           tipo="carta"
           titulo={coacSingle ? 'Carta de instrucción · trabajador uno' : ''}
           archivos={cartaSingle ? [cartaSingle] : []}
+          yaGenerados={yaGen.porArchivo}
           conflicto={!!conflictoSingle}
           onElegir={(fs) => elegirArchivoSingle('carta', fs)}
           onSoltar={(e) => soltarArchivoSingle('carta', e)}
@@ -153,6 +162,7 @@ export default function TabIndividual() {
           <ZonaArchivos
             tipo="carta2"
             archivos={carta2Single ? [carta2Single] : []}
+            yaGenerados={yaGen.porArchivo}
             conflicto={!!conflictoSingle}
             onElegir={(fs) => elegirArchivoSingle('carta2', fs)}
             onSoltar={(e) => soltarArchivoSingle('carta2', e)}
@@ -163,6 +173,7 @@ export default function TabIndividual() {
         <ZonaArchivos
           tipo="constancia"
           archivos={constanciaSingle ? [constanciaSingle] : []}
+          yaGenerados={yaGen.porArchivo}
           conflicto={!!conflictoSingle}
           onElegir={(fs) => elegirArchivoSingle('constancia', fs)}
           onSoltar={(e) => soltarArchivoSingle('constancia', e)}
@@ -170,6 +181,21 @@ export default function TabIndividual() {
           ayuda={coacSingle ? 'Acreditados, montos, inmueble, folio, escritura y notario' : 'Acreditado, cónyuge, monto, inmueble, folio, escritura y notario'}
         />
       </div>
+      {creditosGen.length > 0 && (
+        <div className="aviso-ya-generado slide-up" role="status">
+          <FileCheck2 size={18} style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <strong>{creditosGen.length === 1 ? `El crédito ${creditosGen[0][0]} ya se generó` : 'Estos créditos ya se generaron'}</strong> y está en Mi Historial:
+            <ul>
+              {creditosGen.map(([c]) => <li key={c}>{creditosGen.length > 1 ? `${c} · ` : ''}{yaGen.porArchivo[Object.keys(yaGen.porArchivo).find((n) => yaGen.porArchivo[n].credito === c)]?.texto || ''}</li>)}
+            </ul>
+            <span className="aviso-ya-generado-nota">Si lo vuelves a leer y guardar, el sistema te preguntará si actualizar el que ya existe o crear otro. Si solo quieres corregirlo, ábrelo desde Mi Historial con el lápiz.</span>
+          </div>
+          <button type="button" className="boton-barra boton-descartar" onClick={quitarGenerados}>
+            <Trash2 size={14} /> Quitar los archivos
+          </button>
+        </div>
+      )}
       <div className="coac-interruptor">
         {coacSingle ? (
           !esPlantillaCoac(selectedPlantilla) && !carta2Single && (

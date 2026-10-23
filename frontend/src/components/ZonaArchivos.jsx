@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { AlertTriangle, FileText, FolderOpen, ScrollText, Search, X } from 'lucide-react';
+import { AlertTriangle, FileCheck2, FileText, FolderOpen, ScrollText, Search, X } from 'lucide-react';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
 
@@ -12,7 +12,8 @@ const TIPOS = {
 // Recuadro para subir un tipo de documento (carta o constancia).
 // varios=false: un solo PDF (caso individual). varios=true: varios PDF o carpetas (carga masiva).
 // sinPareja: nombres de archivos de este recuadro que no tienen su pareja (mismo número) en el otro.
-export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir, onSoltar, onQuitar, ayuda, conflicto = false, titulo = '', sinPareja = null }) {
+// yaGenerados: { nombre: { credito, texto } } archivos cuyo crédito ya está en Mi Historial.
+export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir, onSoltar, onQuitar, ayuda, conflicto = false, titulo = '', sinPareja = null, yaGenerados = null }) {
   const { theme } = useApp();
   const [encima, setEncima] = useState(false);
   const archivoRef = useRef(null);
@@ -23,13 +24,20 @@ export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir,
   const hay = lista.length > 0;
   // Buscador (carga masiva): por nombre, y para ver solo los que no tienen pareja
   const [busca, setBusca] = useState('');
-  const [soloSinPareja, setSoloSinPareja] = useState(false);
+  // filtro: '' (todos), 'sinPareja' o 'generados'
+  const [filtroSel, setFiltro] = useState('');
   const huerfanos = sinPareja instanceof Set ? sinPareja : new Set(sinPareja || []);
+  const generados = yaGenerados || {};
   const nHuerfanos = lista.filter((f) => huerfanos.has(f.name)).length;
+  const nGenerados = lista.filter((f) => generados[f.name]).length;
+  // Si ya no hay archivos de ese tipo, el filtro se apaga solo
+  const filtro = (filtroSel === 'sinPareja' && nHuerfanos === 0) || (filtroSel === 'generados' && nGenerados === 0) ? '' : filtroSel;
+  const soloSinPareja = filtro === 'sinPareja';
   const conBuscador = varios && lista.length > 0;
   const normal = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
-  const filtroActivo = busca.trim() || (soloSinPareja && nHuerfanos > 0);
-  const visibles = !conBuscador ? lista : lista.filter((f) => (!soloSinPareja || nHuerfanos === 0 || huerfanos.has(f.name))
+  const filtroActivo = busca.trim() || filtro;
+  const visibles = !conBuscador ? lista : lista.filter((f) => (!soloSinPareja || huerfanos.has(f.name))
+    && (filtro !== 'generados' || generados[f.name])
     && (!busca.trim() || normal(f.name).includes(normal(busca))));
 
   const alElegir = (e) => {
@@ -71,9 +79,15 @@ export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir,
             {busca && <button type="button" className="quitar-archivo" onClick={() => setBusca('')} aria-label="Limpiar búsqueda"><X size={13} /></button>}
           </label>
           {nHuerfanos > 0 && (
-            <button type="button" className={`chip-sin-pareja ${soloSinPareja ? 'activo' : ''}`} onClick={() => setSoloSinPareja((v) => !v)}
+            <button type="button" className={`chip-sin-pareja ${soloSinPareja ? 'activo' : ''}`} onClick={() => setFiltro(soloSinPareja ? '' : 'sinPareja')}
               title="Ver solo los archivos que no tienen su pareja (mismo número) en el otro recuadro">
               <AlertTriangle size={12} /> Sin pareja ({nHuerfanos})
+            </button>
+          )}
+          {nGenerados > 0 && (
+            <button type="button" className={`chip-ya-generado ${filtro === 'generados' ? 'activo' : ''}`} onClick={() => setFiltro(filtro === 'generados' ? '' : 'generados')}
+              title="Ver solo los archivos cuyo número de crédito ya está en Mi Historial">
+              <FileCheck2 size={12} /> Ya generados ({nGenerados})
             </button>
           )}
         </div>
@@ -81,9 +95,9 @@ export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir,
       {conBuscador && filtroActivo && (
         <div className="zona-buscador-resumen" style={{ color: theme.textSecondary }}>
           {visibles.length === 0 ? 'Ningún archivo coincide.' : `Mostrando ${visibles.length} de ${lista.length}`}
-          {soloSinPareja && visibles.length > 1 && (
-            <button type="button" className="enlace-pequeno" onClick={() => { visibles.forEach((f) => onQuitar(f)); setSoloSinPareja(false); }}>
-              Quitar estos {visibles.length}
+          {filtro && visibles.length > 0 && (
+            <button type="button" className="enlace-pequeno" onClick={() => { visibles.forEach((f) => onQuitar(f)); setFiltro(''); }}>
+              Quitar {visibles.length === 1 ? 'este' : `estos ${visibles.length}`}
             </button>
           )}
         </div>
@@ -92,9 +106,10 @@ export default function ZonaArchivos({ tipo, archivos, varios = false, onElegir,
       {hay && visibles.length > 0 && (
         <ul className="zona-tipo-lista">
           {visibles.map((f, i) => (
-            <li key={`${f.name}-${i}`} className={huerfanos.has(f.name) ? 'sin-pareja' : ''} style={{ backgroundColor: theme.cardBg, borderColor: huerfanos.has(f.name) ? '#f59e0b' : theme.border, color: theme.textPrimary }}>
+            <li key={`${f.name}-${i}`} className={`${huerfanos.has(f.name) ? 'sin-pareja' : ''} ${generados[f.name] ? 'ya-generado' : ''}`} style={{ backgroundColor: theme.cardBg, borderColor: generados[f.name] ? '#6366f1' : (huerfanos.has(f.name) ? '#f59e0b' : theme.border), color: theme.textPrimary }}>
               <IconoArchivo tipo="pdf" size={16} />
               <span title={f.webkitRelativePath || f.name}>{f.name}</span>
+              {generados[f.name] && <em className="etiqueta-ya-generado" title={`El crédito ${generados[f.name].credito} ya está en Mi Historial: ${generados[f.name].texto}`}>ya generado</em>}
               {huerfanos.has(f.name) && <em className="etiqueta-sin-pareja" title="No hay un archivo con el mismo número en el otro recuadro">sin pareja</em>}
               <small style={{ color: theme.textSecondary }}>{Math.max(1, Math.round(f.size / 1024))} KB</small>
               <button type="button" className="quitar-archivo" title={`Quitar ${f.name}`} onClick={() => onQuitar(f)}><X size={13} /></button>

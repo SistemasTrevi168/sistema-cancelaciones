@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import {
-  AlertTriangle, ArrowLeft, CheckCircle, ChevronLeft, ChevronRight, Eye, FolderPlus, Layers, ListChecks, Loader2, PencilLine, Save, ShieldAlert, ShieldCheck, Sparkles, Trash2, Upload, X,
+  AlertTriangle, ArrowLeft, CheckCircle, ChevronLeft, ChevronRight, Eye, FolderPlus, Layers, ListChecks, Loader2, PencilLine, FileCheck2, Save, ShieldAlert, ShieldCheck, Sparkles, Trash2, Upload, X,
 } from 'lucide-react';
+import useYaGenerados from '../ui/usarYaGenerados';
 import { revisarIncidencia } from '../datosFaltantes';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
@@ -52,6 +53,11 @@ export default function TabMasivo() {
     quitarMarcadosLote,
     numeroEnNombre,
   } = useApp();
+  // Archivos cuyo número de crédito ya está en Mi Historial: se avisan y se pueden quitar del lote
+  const yaGen = useYaGenerados([...cartasLote, ...constanciasLote]);
+  const creditosGen = Object.keys(yaGen.creditos);
+  const archivosGen = [...cartasLote.map((f) => ['carta', f]), ...constanciasLote.map((f) => ['constancia', f])].filter(([, f]) => yaGen.porArchivo[f.name]);
+  const quitarGenerados = () => archivosGen.forEach(([t, f]) => quitarArchivoDeLote(t, f));
 
   // Archivos cuyo número (en el nombre) no tiene pareja idéntica en el otro recuadro
   const sinPareja = (() => {
@@ -155,6 +161,7 @@ export default function TabMasivo() {
               onSoltar={(e) => soltarArchivosLote('carta', e)}
               onQuitar={(f) => quitarArchivoDeLote('carta', f)}
               sinPareja={sinParejaSet}
+              yaGenerados={yaGen.porArchivo}
               ayuda="Arrastra aquí las cartas (PDF sueltos o una carpeta)"
             />
             <ZonaArchivos
@@ -165,9 +172,30 @@ export default function TabMasivo() {
               onSoltar={(e) => soltarArchivosLote('constancia', e)}
               onQuitar={(f) => quitarArchivoDeLote('constancia', f)}
               sinPareja={sinParejaSet}
+              yaGenerados={yaGen.porArchivo}
               ayuda="Arrastra aquí las constancias (PDF sueltos o una carpeta)"
             />
           </div>
+
+          {creditosGen.length > 0 && !batchLoading && (
+            <div className="aviso-ya-generado slide-up" role="status">
+              <FileCheck2 size={18} style={{ flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <strong>{creditosGen.length === 1 ? '1 crédito de este lote ya se generó' : `${creditosGen.length} créditos de este lote ya se generaron`}</strong> y {creditosGen.length === 1 ? 'está' : 'están'} en Mi Historial ({archivosGen.length} archivo{archivosGen.length === 1 ? '' : 's'}):
+                <ul>
+                  {creditosGen.slice(0, 5).map((c) => {
+                    const n = Object.keys(yaGen.porArchivo).find((k) => yaGen.porArchivo[k].credito === c);
+                    return <li key={c}>{c} · {yaGen.porArchivo[n]?.texto}</li>;
+                  })}
+                  {creditosGen.length > 5 && <li>y {creditosGen.length - 5} más (usa «Ya generados» en cada recuadro para verlos).</li>}
+                </ul>
+                <span className="aviso-ya-generado-nota">Quítalos para no volver a leerlos ni generarlos otra vez. Si los dejas, al guardar el sistema te preguntará si actualizar los que ya existen o crear otros.</span>
+              </div>
+              <button type="button" className="boton-barra boton-descartar" onClick={quitarGenerados}>
+                <Trash2 size={14} /> Quitarlos del lote ({archivosGen.length})
+              </button>
+            </div>
+          )}
 
           <div className="carga-acciones" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
             <div style={{ flex: 1, minWidth: '240px' }}>

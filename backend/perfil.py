@@ -4,6 +4,7 @@ Mi perfil: cada usuario edita sus propios datos.
 - Nombre para mostrar, foto (ya recortada en el navegador), color del sistema y tema (claro / oscuro / automático).
 - Mi resumen: sus expedientes de hoy, la semana y el mes.
 - Seguridad: sus sesiones abiertas (dispositivo, IP, último uso) y cerrar las de otros dispositivos.
+- El administrador puede ver el perfil de cualquier usuario (solo lectura) y cerrarle sesiones.
 """
 import re
 from datetime import datetime, timedelta, time
@@ -15,7 +16,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
-from auth import _a_utc, _ahora, anotar_cierre, require_user, session_id_de
+from auth import _a_utc, _ahora, anotar_cierre, require_admin, require_user, session_id_de
 from database import get_db
 
 router = APIRouter(prefix="/api/perfil", tags=["perfil"])
@@ -231,3 +232,62 @@ def cerrar_otras(request: Request, db: Session = Depends(get_db), sesion: dict =
     q.delete(synchronize_session=False)
     db.commit()
     return _perfil(db, _usuario(db, sesion), request)
+
+
+# ---------------- Perfil de otro usuario (solo el administrador) ----------------
+router_admin = APIRouter(prefix="/api/admin/usuarios", tags=["perfil"])
+
+
+def _usuario_por_id(db: Session, usuario_id: str) -> models.Usuario:
+    import uuid as _uuid
+    try:
+        uid = _uuid.UUID(str(usuario_id))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    user = db.query(models.Usuario).filter(models.Usuario.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return user
+
+
+def _perfil_para_admin(db: Session, user: models.Usuario, request: Request) -> Dict[str, Any]:
+    import compartir
+    datos = _perfil(db, user, request)
+    datos.update({
+        "id": str(user.id),
+        "rol": compartir.rol_de(user),
+        "activo": bool(getattr(user, "activo", True)),
+        "debe_cambiar_password": bool(getattr(user, "debe_cambiar_password", False)),
+    })
+    return datos
+
+
+@router_admin.get("/{usuario_id}/perfil")
+def ver_perfil(usuario_id: str, request: Request, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
+    return _perfil_para_admin(db, _usuario_por_id(db, usuario_id), request)
+
+
+@router_admin.delete("/{usuario_id}/sesiones/{prefijo}")
+def cerrar_sesion_de_usuario(usuario_id: str, prefijo: str, request: Request, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
+    user = _usuario_por_id(db, usuario_id)
+    actual = session_id_de(request)
+    filas = db.query(models.Sesion).filter(models.Sesion.username == user.username).all()
+    objetivo = [s for s in filas if s.id.startswith(prefijo) and s.id != actual]
+    if not objetivo:
+        raise HTTPException(status_code=404, detail="No se encontró esa sesión (o es tu sesión actual).")
+    anotar_cierre([s.id for s in objetivo], "admin")
+    for s in objetivo:
+        db.delete(s)
+    db.commit()
+    return _perfil_para_admin(db, user, request)
+
+
+@router_admin.post("/{usuario_id}/sesiones/cerrar-todas")
+def cerrar_todas_de_usuario(usuario_id: str, request: Request, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
+    user = _usuario_por_id(db, usuario_id)
+    actual = session_id_de(request)
+    q = db.query(models.Sesion).filter(models.Sesion.username == user.username, models.Sesion.id != actual)
+    anotar_cierre([s.id for s in q.all()], "admin")
+    q.delete(synchronize_session=False)
+    db.commit()
+    return _perfil_para_admin(db, user, request)

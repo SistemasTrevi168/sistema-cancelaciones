@@ -1,4 +1,4 @@
-import { Eye, EyeOff, KeyRound, LifeBuoy, Loader2, Plus, Power, Search, ShieldCheck, Trash2, UserCog, Users, X } from 'lucide-react';
+import { Eye, EyeOff, IdCard, KeyRound, LifeBuoy, Loader2, Plus, Power, Search, ShieldCheck, Trash2, UserCog, Users, X } from 'lucide-react';
 import { useState } from 'react';
 import Selector from './Selector';
 
@@ -12,6 +12,7 @@ import { useApp } from '../AppContext';
 import Avatar from './Avatar';
 import PanelRespaldos from './PanelRespaldos';
 import PanelPdfs from './PanelPdfs';
+import PerfilUsuario from './PerfilUsuario';
 
 export default function TabUsuarios() {
   const {
@@ -34,6 +35,9 @@ export default function TabUsuarios() {
   const [busca, setBusca] = useState('');
   const normal = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const visibles = usuariosLista.filter((u) => !busca.trim() || normal(`${u.nombre_mostrar || ''} ${u.username}`).includes(normal(busca.trim())));
+  // Perfil de un usuario abierto (como lo ve él en "Mi perfil")
+  const [perfilDe, setPerfilDe] = useState(null);
+  if (perfilDe) return <PerfilUsuario usuario={perfilDe} onVolver={() => setPerfilDe(null)} />;
 
   return (
 <>
@@ -49,6 +53,8 @@ export default function TabUsuarios() {
                     <input
                       type="text"
                       required
+                      autoComplete="off"
+                      name="nuevo-usuario"
                       value={nuevoUsuario.username}
                       onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, username: e.target.value })}
                       style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', boxSizing: 'border-box' }}
@@ -61,6 +67,8 @@ export default function TabUsuarios() {
                       <input
                         type={verPassword ? 'text' : 'password'}
                         required
+                        autoComplete="new-password"
+                        name="nuevo-usuario-password"
                         value={nuevoUsuario.password}
                         onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })}
                         style={{ width: '100%', padding: '10px 40px 10px 12px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', boxSizing: 'border-box' }}
@@ -140,9 +148,12 @@ export default function TabUsuarios() {
                           <tr key={u.id} className="fila-usuario" style={{ borderBottom: `1px solid ${theme.border}`, opacity: activo ? 1 : 0.6, animationDelay: `${Math.min(i, 12) * 35}ms` }}>
                             <td className="celda-titulo" style={{ padding: '10px', fontWeight: '600', color: theme.textPrimary, minWidth: '180px' }}>
                               <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <button type="button" className="usuario-abrir-perfil" onClick={() => setPerfilDe(u)} title={`Ver el perfil de ${u.nombre_mostrar || u.username}`} aria-label={`Ver el perfil de ${u.nombre_mostrar || u.username}`} data-sin-onda>
                                 <Avatar usuario={esYo ? { ...u, foto: currentUser?.foto ?? u.foto, nombre_mostrar: currentUser?.nombre_mostrar ?? u.nombre_mostrar } : u} tam={30} color={theme.accent} />
+                                </button>
                                 <span>
-                                  {u.nombre_mostrar || u.username}{esYo && <span style={{ fontWeight: 'normal', color: theme.textSecondary }}> (tú)</span>}
+                                  <button type="button" className="usuario-nombre-perfil" onClick={() => setPerfilDe(u)} data-sin-onda style={{ color: theme.textPrimary }}>
+                                  {u.nombre_mostrar || u.username}</button>{esYo && <span style={{ fontWeight: 'normal', color: theme.textSecondary }}> (tú)</span>}
                                   <span style={{ display: 'block', fontWeight: 'normal', fontSize: '11px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>
                                     {u.nombre_mostrar ? `@${u.username}` : ''}{u.nombre_mostrar && typeof u.expedientes === 'number' ? ' · ' : ''}{typeof u.expedientes === 'number' ? `${u.expedientes} expediente${u.expedientes === 1 ? '' : 's'}` : ''}
                                   </span>
@@ -169,6 +180,9 @@ export default function TabUsuarios() {
                               )}
                             </td>
                             <td className="celda-acciones" style={{ padding: '10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <button type="button" className="accion-usuario accion-perfil" onClick={() => setPerfilDe(u)} style={{ color: theme.textSecondary }} title="Ver perfil">
+                                <IdCard size={16} />
+                              </button>
                               {!esYo && (
                                 <button type="button" className="accion-usuario accion-llave" onClick={() => setModalPassword({ modo: 'reset', usuario: u })} style={{ ...btnIcono, color: theme.accent }} title="Cambiar contraseña (con la contraseña actual del usuario)">
                                   <KeyRound size={16} />

@@ -11,6 +11,11 @@ const MENSAJES = {
     titulo: 'Se cerró tu sesión',
     texto: 'Tu sesión se cerró desde otro dispositivo. Si no fuiste tú, cambia tu contraseña al entrar.',
   },
+  admin: {
+    icono: ShieldAlert,
+    titulo: 'Se cerró tu sesión',
+    texto: 'Un administrador cerró tu sesión. Vuelve a iniciar sesión para continuar.',
+  },
   contrasena: {
     icono: ShieldAlert,
     titulo: 'Tu contraseña cambió',

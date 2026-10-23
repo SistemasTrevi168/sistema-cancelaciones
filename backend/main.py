@@ -910,6 +910,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(kpis.router)
 app.include_router(perfil.router)
+app.include_router(perfil.router_admin)
 app.include_router(respaldos.router)
 app.include_router(compartir.router)
 app.include_router(documentos.router)

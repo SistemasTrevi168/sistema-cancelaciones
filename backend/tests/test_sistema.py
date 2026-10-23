@@ -574,6 +574,24 @@ with cliente() as c_cv:
     r = c_cv.post("/api/expedientes/normalizar-campo", headers=_h, json={"campo": "folio_real", "texto": "00321240"}).json()
     chk("normalizar folio: con su formato", r["valor"] == '"321240" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CUARENTA)', r)
 
+# --- El administrador ve el perfil de otro usuario y le cierra sesiones ---
+with cliente() as c_vp:
+    _ha = {"Authorization": "Bearer " + c_vp.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+    c_vp.cookies.clear()
+    _tok_ana = c_vp.post("/api/auth/login", json={"username": f"ana_{SUF}", "password": "Prueba2026!"}).json()["token"]
+    c_vp.cookies.clear()
+    _ho = {"Authorization": "Bearer " + _tok_ana}
+    _uid = next(u["id"] for u in c_vp.get("/api/admin/usuarios", headers=_ha).json() if u["username"] == f"ana_{SUF}")
+    r = c_vp.get(f"/api/admin/usuarios/{_uid}/perfil", headers=_ha)
+    _p = r.json() if r.status_code == 200 else {}
+    chk("perfil ajeno: el admin lo ve", r.status_code == 200 and _p.get("username") == f"ana_{SUF}" and "resumen" in _p and _p.get("rol") == "operador", r.text[:200])
+    chk("perfil ajeno: con sus sesiones", len(_p.get("sesiones") or []) >= 1, _p.get("sesiones"))
+    chk("perfil ajeno: un operador no puede", c_vp.get(f"/api/admin/usuarios/{_uid}/perfil", headers=_ho).status_code == 403)
+    chk("perfil ajeno: id inválido", c_vp.get("/api/admin/usuarios/no-existe/perfil", headers=_ha).status_code == 404)
+    r = c_vp.post(f"/api/admin/usuarios/{_uid}/sesiones/cerrar-todas", headers=_ha)
+    chk("perfil ajeno: cerrar todas sus sesiones", r.status_code == 200 and r.json()["sesiones"] == [], r.text[:200])
+    chk("perfil ajeno: su sesión ya no sirve", c_vp.get("/api/perfil", headers=_ho).status_code == 401)
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

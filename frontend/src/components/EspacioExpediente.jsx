@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import useCelular from '../usarCelular';
-import { AlertTriangle, CheckCircle, Eye, FileText, FileUp, Hash, ListChecks, Loader2, PencilLine, Save } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Eye, FileText, FileUp, Hash, ListChecks, Loader2, PencilLine, Save, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
+import { revisarIncidencia } from '../datosFaltantes';
+import { nombrePlantilla } from '../plantillasCatalogo';
 import { useApp } from '../AppContext';
 import CamposDatos from './CamposDatos';
 import { esPlantillaCoac } from '../camposExpediente';
@@ -21,12 +23,19 @@ export default function EspacioExpediente({
 }) {
   const { theme, isDarkMode, faltantesPara, etiquetaCampo, handleDownloadWord, descargandoId } = useApp();
   const faltan = faltantesPara(datos, plantilla);
+  // Incidencia: sin notario de origen, o sin número ni fecha de escritura -> no puede pasar a firma
+  const inc = revisarIncidencia(datos);
   const nombre = datos?.nombre_acreditado && datos.nombre_acreditado !== 'NO_ENCONTRADO' ? datos.nombre_acreditado : 'Acreditado no identificado';
   const credito = datos?.numero_credito && datos.numero_credito !== 'NO_ENCONTRADO' ? datos.numero_credito : '';
   const descargando = descargandoId === expedienteId;
   const guardado = !!expedienteId;
   // En celular se ve una cosa a la vez: los datos o el PDF
   const [vistaMovil, setVistaMovil] = useState('datos');
+  // Al dar clic en un semáforo: abre el grupo del dato y lo lleva a la vista
+  const [enfocar, setEnfocar] = useState(null);
+  const irADato = (clave) => { if (clave) { setVistaMovil('datos'); setEnfocar({ clave, t: Date.now() }); } };
+  const plantillaLimpia = String(plantilla || '').replace(/\.docx$/i, '');
+  const enUsoSugerida = !!sugerencia?.plantilla && sugerencia.plantilla === plantillaLimpia;
   const esCelular = useCelular();
 
   const botones = (
@@ -79,9 +88,7 @@ export default function EspacioExpediente({
                   : <span className="chip-dato chip-borrador" title="Todavía no se guarda en la base: revisa y corrige, y después guárdalo"><PencilLine size={12} /> Borrador · sin guardar</span>}
               {credito && <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><Hash size={12} /> Crédito {credito}</span>}
               <span className="chip-dato" style={{ borderColor: theme.border, color: theme.textSecondary, backgroundColor: theme.cardBg }}><FileText size={12} /> {archivos.length} PDF</span>
-              {faltan.length === 0
-                ? <span className="chip-dato chip-ok"><CheckCircle size={12} /> Datos completos</span>
-                : <span className="chip-dato chip-falta" title={`Faltan: ${faltan.map(etiquetaCampo).join(', ')}`}><AlertTriangle size={12} /> Faltan {faltan.length} dato(s)</span>}
+              {inc.incidencia && <span className="chip-dato chip-incidencia-grande" title={`${inc.motivo}. No puede pasar a firma.`}><ShieldAlert size={12} /> Incidencia</span>}
             </div>
           </div>
           {!esCelular && <div className="espacio-acciones">{botones}</div>}
@@ -133,27 +140,45 @@ export default function EspacioExpediente({
         </div>
 
         <div className="espacio-columna espacio-datos" style={{ borderColor: theme.border }}>
+          {/* PANEL DE ESTADO DEL PROYECTO: incidencia, datos faltantes y plantilla */}
+          <div className="panel-estado" role="group" aria-label="Estado del proyecto">
+            <button type="button" className={`semaforo ${inc.incidencia ? 'rojo' : 'verde'}`} onClick={() => irADato(inc.faltan[0])} aria-disabled={!inc.incidencia}
+              title={inc.incidencia ? 'Clic para ir al dato que falta' : 'Trae el notario de origen y el número o la fecha de la escritura'}>
+              <span className="semaforo-titulo">{inc.incidencia ? <ShieldAlert size={15} /> : <ShieldCheck size={15} />} {inc.incidencia ? 'Incidencia' : 'Sin incidencia'}</span>
+              <span className="semaforo-detalle">{inc.incidencia ? inc.motivo : 'Puede pasar a firma'}</span>
+            </button>
+            <button type="button" className={`semaforo ${faltan.length ? 'ambar' : 'verde'}`} onClick={() => irADato(faltan[0])} aria-disabled={!faltan.length}
+              title={faltan.length ? `Faltan: ${faltan.map(etiquetaCampo).join(', ')}. Clic para ir al primero.` : 'Están completos todos los datos que usa la plantilla'}>
+              <span className="semaforo-titulo">{faltan.length ? <AlertTriangle size={15} /> : <CheckCircle size={15} />} {faltan.length ? `Faltan ${faltan.length} dato(s)` : 'Datos completos'}</span>
+              <span className="semaforo-detalle">{faltan.length ? faltan.map(etiquetaCampo).join(', ') : 'Todo lo que usa la plantilla'}</span>
+            </button>
+            <div className={`semaforo ${!plantillaLimpia ? 'ambar' : (sugerencia?.plantilla && !enUsoSugerida ? 'morado' : 'verde')}`}>
+              <span className="semaforo-titulo">
+                {!plantillaLimpia ? <AlertTriangle size={15} /> : (sugerencia?.plantilla && !enUsoSugerida ? <Sparkles size={15} /> : <CheckCircle size={15} />)}
+                {!plantillaLimpia ? 'Sin plantilla' : (sugerencia?.plantilla ? (enUsoSugerida ? 'Plantilla sugerida' : 'Plantilla distinta') : 'Plantilla')}
+              </span>
+              <span className="semaforo-detalle">
+                {!plantillaLimpia ? 'Elige una arriba'
+                  : sugerencia?.plantilla && !enUsoSugerida
+                    ? <>Sugerida: {nombrePlantilla(sugerencia.plantilla)} {onUsarSugerida && <button type="button" className="semaforo-usar" onClick={() => onUsarSugerida(sugerencia.plantilla)}>Usar</button>}</>
+                    : enUsoSugerida ? 'Coincide con la sugerida' : nombrePlantilla(plantillaLimpia)}
+              </span>
+            </div>
+          </div>
+          {inc.incidencia && (
+            <p className="panel-estado-ayuda incidencia">Para pasar a firma necesita el <b>notario de origen</b> y, además, el <b>número</b> o la <b>fecha</b> de la escritura. Si están en la constancia, captúralos o revisa que el acto elegido sea el de la hipoteca.</p>
+          )}
+          {faltan.length > 0 && !inc.incidencia && (
+            <p className="panel-estado-ayuda">Captúralos con el candado, o selecciónalos en el PDF y elige «Usar como…».</p>
+          )}
           {avisos?.length > 0 && (
             <div className="aviso-datos" style={{ backgroundColor: isDarkMode ? '#422006' : '#fff7ed', color: isDarkMode ? '#fdba74' : '#9a3412', borderColor: isDarkMode ? '#9a3412' : '#fed7aa' }}>
               <AlertTriangle size={16} style={{ flexShrink: 0 }} />
               <div>{avisos.map((a) => <div key={a}>{a}</div>)}</div>
             </div>
           )}
-          {faltan.length > 0 ? (
-            <div className="aviso-datos" style={{ backgroundColor: isDarkMode ? '#422006' : '#fffbeb', color: isDarkMode ? '#fcd34d' : '#92400e', borderColor: isDarkMode ? '#a16207' : '#fcd34d' }}>
-              <AlertTriangle size={16} style={{ flexShrink: 0 }} />
-              <div>
-                <strong>Faltan {faltan.length} dato(s) que usa la plantilla:</strong> {faltan.map(etiquetaCampo).join(', ')}.
-                <div style={{ marginTop: '2px' }}>Captúralos con el candado, o selecciónalos en el PDF y elige “Usar como…”.</div>
-              </div>
-            </div>
-          ) : (
-            <div className="aviso-datos" style={{ backgroundColor: isDarkMode ? '#052e16' : '#ecfdf5', color: isDarkMode ? '#86efac' : '#065f46', borderColor: isDarkMode ? '#166534' : '#a7f3d0' }}>
-              <CheckCircle size={16} style={{ flexShrink: 0 }} /> Están completos todos los datos que usa la plantilla.
-            </div>
-          )}
           {avisoCoac}
-          <CamposDatos datos={datos} prefijo={prefijo} faltantes={faltan} onCambio={onCambio} coac={esPlantillaCoac(plantilla)} />
+          <CamposDatos datos={datos} prefijo={prefijo} faltantes={faltan} onCambio={onCambio} coac={esPlantillaCoac(plantilla)} plegables enfocar={enfocar} />
         </div>
       </div>
       {/* En celular los botones quedan fijos abajo de la pantalla */}

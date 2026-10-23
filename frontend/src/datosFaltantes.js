@@ -61,3 +61,22 @@ export function camposFaltantes(datos, campos) {
 export function mensajeFaltantes(faltantes, accion = 'generar el Word') {
   return `Faltan ${faltantes.length} dato(s) que usa la plantilla:\n\n• ${faltantes.map(etiquetaCampo).join('\n• ')}\n\n¿Quieres ${accion} de todas formas?`;
 }
+
+// INCIDENCIA: el proyecto solo puede pasar a firma si de la escritura de origen trae
+// el NOTARIO y, además, el NÚMERO o la FECHA de la escritura. Si no, es una incidencia.
+// Se calcula siempre con los datos actuales: si alguien edita el expediente, se actualiza sola.
+export function revisarIncidencia(datos) {
+  const d = datos || {};
+  const sinNotario = esDatoVacio(d.notario_origen_completo);
+  const sinNumero = esDatoVacio(d.numero_escritura);
+  const sinFecha = esDatoVacio(d.fecha_escritura);
+  const faltan = [];
+  if (sinNotario) faltan.push('notario_origen_completo');
+  if (sinNumero && sinFecha) faltan.push('numero_escritura', 'fecha_escritura');
+  const incidencia = faltan.length > 0;
+  let motivo = '';
+  if (sinNotario && sinNumero && sinFecha) motivo = 'No trae notario de origen, número ni fecha de escritura';
+  else if (sinNotario) motivo = 'No trae el notario de origen';
+  else if (sinNumero && sinFecha) motivo = 'No trae el número ni la fecha de la escritura';
+  return { incidencia, faltan, motivo };
+}

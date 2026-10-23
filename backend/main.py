@@ -612,12 +612,31 @@ def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "
     return puntos
 
 
+def _etiqueta_punto(clave: str) -> str:
+    return clave.split('_', 1)[1].replace('_', ' ').title()
+
+
 def _texto_inmueble(puntos: Dict[str, str]) -> str:
-    """'Vivienda: DEPARTAMENTO 2, Uso De Suelo: HABITACIONAL, ...' solo con los datos que sí vienen."""
-    return ", ".join(f"{k.split('_', 1)[1].replace('_', ' ').title()}: {v}" for k, v in puntos.items() if v)
+    """'Vivienda DEPARTAMENTO 2, Uso De Suelo HABITACIONAL, ...' solo con los datos que sí vienen (sin «:»)."""
+    return ", ".join(f"{_etiqueta_punto(k)} {v}" for k, v in puntos.items() if v)
 
 
+def _inmueble_sin_dos_puntos(texto: str) -> str:
+    """Quita los «:» de los datos del inmueble: 'Manzana: 15' -> 'Manzana 15'."""
+    t = re.sub(r"\s*:\s*", " ", str(texto or ""))
+    return re.sub(r"\s{2,}", " ", t).strip()
+
+
+# Inmueble ya armado por el sistema (o corregido a mano): con «Etiqueta:» (formato anterior)
+# o empezando con una de las etiquetas en formato Título ("Vivienda CASA 14, Lote 3, ...").
 _INMUEBLE_YA_ARMADO = re.compile(r"\b(?:Vivienda|Uso De Suelo|Lote|Manzana|Calle|Colonia|Municipio|Estado|Denominacion Del Inmueble|Sector|Condominio)\s*:", re.I)
+_INMUEBLE_ARMADO_SIN_DOS_PUNTOS = re.compile(
+    r"^\s*(?:" + "|".join(sorted({re.escape(_etiqueta_punto(k)) for k in _PUNTOS_INMUEBLE}, key=len, reverse=True)) + r")\s+\S")
+
+
+def _inmueble_ya_armado(texto: str) -> bool:
+    t = str(texto or "")
+    return bool(_INMUEBLE_YA_ARMADO.search(t) or _INMUEBLE_ARMADO_SIN_DOS_PUNTOS.match(t))
 
 
 def _fecha_con_letra(valor: str) -> str:
@@ -705,7 +724,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
     texto_raw = datos_origen.get("texto_raw") or ""
     
     # Si el inmueble ya viene armado ("Lote: 2, Manzana: 10..."), se respeta (puede estar corregido a mano)
-    if inmueble_raw and _INMUEBLE_YA_ARMADO.search(str(inmueble_raw)):
+    if inmueble_raw and _inmueble_ya_armado(inmueble_raw):
         inmueble_str = services.expandir_abreviaturas(str(inmueble_raw))
         puntos_inmueble = {}
     else:
@@ -715,6 +734,7 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
             texto_libre = str(inmueble_raw or "").strip()
             inmueble_str = "" if texto_libre.upper() in _SIN_DATO else corregir_numeros_compuestos(
                 services.expandir_abreviaturas(convertir_romanos_a_texto(texto_libre)))
+    inmueble_str = _inmueble_sin_dos_puntos(inmueble_str)
 
     fecha_exp = _fecha_con_letra(str(datos_origen.get("fecha_expedicion") or ""))
     

@@ -1247,6 +1247,8 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         return val
 
     datos_inmueble_val = convertir_inmueble_a_letras(obtener_valor("datos_inmueble"))
+    # Sin «:» en los datos del inmueble ("Manzana: 15" -> "Manzana 15"), también en expedientes guardados antes
+    datos_inmueble_val = re.sub(r"\s{2,}", " ", re.sub(r"\s*:\s*", " ", datos_inmueble_val)).strip()
 
     context = {
         "numero_carta": obtener_valor("numero_carta"),
@@ -1298,4 +1300,4 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         os.makedirs(directorio_salida, exist_ok=True)
         
     doc.save(ruta_salida)
-    return True
+    return True

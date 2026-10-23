@@ -1,15 +1,51 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronUp, Lock, Pencil, Unlock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CheckCircle, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown, Lock, Pencil, Unlock } from 'lucide-react';
 import { useApp } from '../AppContext';
 import { CAMPOS_LARGOS, agruparDatos, esPuntoInmueble, etiquetaDe } from '../camposExpediente';
 import { esDatoVacio } from '../datosFaltantes';
 
 // Lista de datos de un expediente, agrupada y editable.
 // prefijo: identifica los candados de este expediente (ej. 'single' o 'batch_3').
-export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, compacto = false, coac = false }) {
+// plegables: los grupos se pueden plegar y los que están completos empiezan plegados (espacio de trabajo).
+// enfocar: { clave, t } para abrir el grupo de ese dato y llevar la vista hasta él.
+export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, compacto = false, coac = false, plegables = false, enfocar = null }) {
   const { theme, isDarkMode, unlockedFields, setUnlockedFields, handleToggleUnlock } = useApp();
-  const [abiertos, setAbiertos] = useState({});
   const grupos = agruparDatos(datos, coac);
+
+  const conConyuge = /^s[ií]/i.test(String(datos?.tiene_conyuge || '')) || !esDatoVacio(datos?.nombre_conyuge);
+  const esOpcional = (clave) => esPuntoInmueble(clave) || clave === 'tiene_conyuge' || (clave === 'nombre_conyuge' && !conConyuge);
+  const esFalta = (clave) => faltantes.includes(clave) || (esDatoVacio(datos?.[clave]) && !esOpcional(clave));
+  const faltanDe = (g) => g.campos.filter(esFalta).length;
+
+  // Qué grupos están abiertos. Se decide UNA vez por expediente (no se cierran solos mientras escribes).
+  const inicial = () => Object.fromEntries(grupos.map((g) => [g.titulo, g.plegado ? false : (!plegables || faltanDe(g) > 0)]));
+  const [estado, setEstado] = useState(() => ({ prefijo, abiertos: inicial() }));
+  if (estado.prefijo !== prefijo) setEstado({ prefijo, abiertos: inicial() });
+  const abiertos = estado.abiertos;
+  const estaAbierto = (g) => (g.titulo in abiertos ? abiertos[g.titulo] : !g.plegado);
+  const alternarGrupo = (titulo, valor) => setEstado((e) => ({ ...e, abiertos: { ...e.abiertos, [titulo]: valor } }));
+  const todosAbiertos = grupos.every(estaAbierto);
+  const abrirTodos = (valor) => setEstado((e) => ({ ...e, abiertos: Object.fromEntries(grupos.map((g) => [g.titulo, valor || (!g.plegado && faltanDe(g) > 0)])) }));
+
+  // Pedido de ir a un dato: abre su grupo y lo lleva a la vista
+  const [ultimoPedido, setUltimoPedido] = useState(null);
+  if (enfocar && enfocar.t !== ultimoPedido) {
+    setUltimoPedido(enfocar.t);
+    const g = grupos.find((x) => x.campos.includes(enfocar.clave));
+    if (g && !estaAbierto(g)) alternarGrupo(g.titulo, true);
+  }
+  useEffect(() => {
+    if (!enfocar) return undefined;
+    const id = setTimeout(() => {
+      const el = document.getElementById(`${prefijo}_${enfocar.clave}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.remove('campo-destello');
+      void el.offsetWidth;
+      el.classList.add('campo-destello');
+    }, 60);
+    return () => clearTimeout(id);
+  }, [enfocar, prefijo]);
 
   const todasLasClaves = grupos.flatMap((g) => g.campos);
   const todoAbierto = todasLasClaves.length > 0 && todasLasClaves.every((k) => unlockedFields[`${prefijo}_${k}`]);
@@ -28,9 +64,7 @@ export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, 
     // "NO_ENCONTRADO" ya no se muestra: el campo queda vacío y marcado en rojo
     const valor = esDatoVacio(datos[clave]) ? '' : datos[clave];
     const editable = !!unlockedFields[`${prefijo}_${clave}`];
-    const conConyuge = /^s[ií]/i.test(String(datos.tiene_conyuge || '')) || !esDatoVacio(datos.nombre_conyuge);
-    const opcional = esPuntoInmueble(clave) || clave === 'tiene_conyuge' || (clave === 'nombre_conyuge' && !conConyuge);
-    const falta = faltantes.includes(clave) || (valor === '' && !opcional);
+    const falta = esFalta(clave);
     const largo = CAMPOS_LARGOS.has(clave);
     const estilo = {
       flex: 1,
@@ -72,10 +106,18 @@ export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, 
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+        {plegables && (
+          <button type="button" onClick={() => abrirTodos(!todosAbiertos)} className="boton-plegar"
+            title={todosAbiertos ? 'Deja abiertos solo los grupos donde falta algo' : 'Muestra todos los datos'}
+            style={{ backgroundColor: theme.subtleBg, color: theme.textPrimary, borderColor: theme.border }}>
+            {todosAbiertos ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
+            {todosAbiertos ? 'Ver solo lo que falta' : 'Ver todos los datos'}
+          </button>
+        )}
         <button
           type="button"
-          onClick={alternarTodos}
+          onClick={() => { alternarTodos(); if (plegables && !todoAbierto) abrirTodos(true); }}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: todoAbierto ? (isDarkMode ? '#422006' : '#fef3c7') : theme.subtleBg, color: todoAbierto ? (isDarkMode ? '#fcd34d' : '#92400e') : theme.textPrimary, border: `1px solid ${theme.border}`, padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
         >
           {todoAbierto ? <Lock size={14} /> : <Pencil size={14} />}
@@ -84,17 +126,32 @@ export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, 
       </div>
 
       {grupos.map((g) => {
-        const plegado = g.plegado && !abiertos[g.titulo];
+        const sePliega = plegables || g.plegado;
+        const plegado = sePliega && !estaAbierto(g);
+        const nFaltan = g.plegado ? 0 : faltanDe(g);
+        const titulo = (
+          <>
+            <span style={{ color: nFaltan > 0 ? '#ef4444' : undefined }}>{g.titulo}</span>
+            {g.plegado && <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>({g.campos.length})</span>}
+            {plegables && !g.plegado && (nFaltan > 0
+              ? <span className="grupo-faltan">{nFaltan} {nFaltan === 1 ? 'falta' : 'faltan'}</span>
+              : <CheckCircle size={13} color="#10b981" aria-label="Completo" />)}
+            {sePliega && <span style={{ marginLeft: 'auto', display: 'flex' }}>{plegado ? <ChevronDown size={15} /> : <ChevronUp size={15} />}</span>}
+          </>
+        );
+        const estiloTitulo = { margin: '0 0 10px 0', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', color: theme.textSecondary, display: 'flex', alignItems: 'center', gap: '6px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '6px', width: '100%' };
         return (
-          <section key={g.titulo} style={{ marginBottom: '18px' }}>
-            <h4
-              onClick={g.plegado ? () => setAbiertos((p) => ({ ...p, [g.titulo]: !p[g.titulo] })) : undefined}
-              style={{ margin: '0 0 10px 0', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', color: theme.textSecondary, display: 'flex', alignItems: 'center', gap: '6px', cursor: g.plegado ? 'pointer' : 'default', borderBottom: `1px solid ${theme.border}`, paddingBottom: '6px' }}
-            >
-              {g.titulo}
-              {g.plegado && <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>({g.campos.length})</span>}
-              {g.plegado && (plegado ? <ChevronDown size={14} /> : <ChevronUp size={14} />)}
-            </h4>
+          <section key={g.titulo} style={{ marginBottom: plegado ? '8px' : '18px' }}>
+            {sePliega ? (
+              <h4 style={{ margin: 0 }}>
+                <button type="button" className="grupo-plegable" aria-expanded={!plegado} onClick={() => alternarGrupo(g.titulo, plegado)}
+                  style={{ ...estiloTitulo, background: 'none', border: 'none', borderBottom: `1px solid ${theme.border}`, padding: '4px 0 6px', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                  {titulo}
+                </button>
+              </h4>
+            ) : (
+              <h4 style={estiloTitulo}>{titulo}</h4>
+            )}
             {g.nota && !plegado && <p style={{ fontSize: '11px', color: theme.textSecondary, margin: '-4px 0 10px 0' }}>{g.nota}</p>}
             {!plegado && (
               <div style={{ display: 'grid', gridTemplateColumns: compacto ? 'repeat(auto-fill, minmax(240px, 1fr))' : 'repeat(auto-fill, minmax(230px, 1fr))', gap: '12px' }}>

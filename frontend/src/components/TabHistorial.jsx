@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import {
-  ArrowUpDown, ChevronLeft, Pencil, ChevronRight, Download, Eye, Filter, History, Inbox, ListChecks, Loader2, RefreshCw, Search, Share2, Users, X,
+  ArrowUpDown, ChevronLeft, Pencil, ChevronRight, Download, Eye, Filter, History, Inbox, ListChecks, Loader2, RefreshCw, Search, Share2, ShieldAlert, Users, X,
 } from 'lucide-react';
+import { etiquetaCampo, revisarIncidencia } from '../datosFaltantes';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
 import EstadoExpediente from './EstadoExpediente';
@@ -58,7 +59,7 @@ export default function TabHistorial() {
   const visiblesIds = filteredHistorial.map(idDe);
   const marcadosIds = visiblesIds.filter((i) => marcados[i]);
   const todosMarcados = visiblesIds.length > 0 && marcadosIds.length === visiblesIds.length;
-  const totalEstados = Object.values(conteoEstados || {}).reduce((a, b) => a + b, 0);
+  const totalEstados = Object.entries(conteoEstados || {}).filter(([k]) => k !== 'INCIDENCIA').reduce((a, [, b]) => a + b, 0);
   const cerrarBitacora = useCallback(() => setBitacora(null), []);
 
   // Paginación: 15 expedientes por página; al cambiar la búsqueda o los filtros se regresa a la primera
@@ -197,6 +198,13 @@ export default function TabHistorial() {
                     </button>
                   );
                 })}
+                {(conteoEstados?.INCIDENCIA > 0 || filtroEstado === 'INCIDENCIA') && (
+                  <button type="button" role="tab" aria-selected={filtroEstado === 'INCIDENCIA'} onClick={() => { setFiltroEstado('INCIDENCIA'); setMarcados({}); }}
+                    className={`filtro-estado filtro-incidencia ${filtroEstado === 'INCIDENCIA' ? 'activo' : ''}`}
+                    title="Expedientes que no pueden pasar a firma: les falta el notario de origen, o el número y la fecha de la escritura">
+                    <ShieldAlert size={14} /> Incidencias <span className="filtro-estado-n">{conteoEstados?.INCIDENCIA || 0}</span>
+                  </button>
+                )}
               </div>
 
               {marcadosIds.length > 0 && (
@@ -323,6 +331,14 @@ export default function TabHistorial() {
                                   <Users size={11} /> Compartido ({item.compartido_con.length})
                                 </button>
                               )}
+                              {(() => {
+                                const inc = revisarIncidencia(dExtra);
+                                return inc.incidencia && (
+                                  <span className="chip-incidencia" title={`${inc.motivo}. No puede pasar a firma hasta completar: ${inc.faltan.map(etiquetaCampo).join(', ')}.`}>
+                                    <ShieldAlert size={11} /> Incidencia
+                                  </span>
+                                );
+                              })()}
                               {item.plantilla_cambio && (
                                 <span className="chip-plantilla-cambio" title="La plantilla cambió después de generar este Word. Se sigue descargando con la versión original; en el historial de cambios puedes descargarlo con la plantilla actual.">
                                   <RefreshCw size={11} /> Plantilla actualizada

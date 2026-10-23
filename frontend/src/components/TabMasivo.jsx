@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import {
-  AlertTriangle, ArrowLeft, CheckCircle, ChevronLeft, ChevronRight, Eye, FolderPlus, Layers, ListChecks, Loader2, PencilLine, Save, Sparkles, Trash2, Upload, X,
+  AlertTriangle, ArrowLeft, CheckCircle, ChevronLeft, ChevronRight, Eye, FolderPlus, Layers, ListChecks, Loader2, PencilLine, Save, ShieldAlert, ShieldCheck, Sparkles, Trash2, Upload, X,
 } from 'lucide-react';
+import { revisarIncidencia } from '../datosFaltantes';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
 import OpcionesPlantilla from './OpcionesPlantilla';
@@ -87,6 +88,8 @@ export default function TabMasivo() {
   const plantillaDe = (res) => res.plantilla_seleccionada || selectedPlantilla;
   const faltanDe = (res) => faltantesPara(res.datos_extraidos || {}, plantillaDe(res));
   const conFaltantes = validos.filter((i) => faltanDe(batchResults[i]).length > 0).length;
+  const incidenciaDe = (res) => (res.leyendo ? null : revisarIncidencia(res.datos_extraidos));
+  const conIncidencia = validos.filter((i) => incidenciaDe(batchResults[i])?.incidencia).length;
   const borradores = validos.filter((i) => !batchResults[i].expediente_id);
   const guardadosN = validos.length - borradores.length;
   const nombreDe = (r) => (r.datos_extraidos?.nombre_acreditado && r.datos_extraidos.nombre_acreditado !== 'NO_ENCONTRADO'
@@ -244,6 +247,7 @@ export default function TabMasivo() {
               {borradores.length > 0 && <span className="chip-dato chip-borrador"><PencilLine size={12} /> {borradores.length} sin guardar</span>}
               {guardadosN > 0 && <span className="chip-dato chip-ok"><Save size={12} /> {guardadosN} guardados</span>}
               {conFaltantes > 0 && <span className="chip-dato chip-falta"><AlertTriangle size={12} /> {conFaltantes} con faltantes</span>}
+              {conIncidencia > 0 && <span className="chip-dato chip-incidencia-grande" title="No pueden pasar a firma: les falta el notario de origen, o el número y la fecha de la escritura"><ShieldAlert size={12} /> {conIncidencia} con incidencia</span>}
             </div>
             <div className="resultados-acciones">
               <Selector
@@ -293,6 +297,7 @@ export default function TabMasivo() {
               }
               const d = res.datos_extraidos || {};
               const faltan = faltanDe(res);
+              const inc = incidenciaDe(res);
               const sug = sugerenciaDeLote(res);
               const enUsoSug = sug?.plantilla && sug.plantilla === res.plantilla_seleccionada;
               const marcado = selectedBatchIndices.includes(idx);
@@ -314,6 +319,9 @@ export default function TabMasivo() {
                         {guardado
                           ? <span className="estado-fila estado-guardado"><CheckCircle size={11} /> {res.actualizado ? 'Actualizado (ya existía)' : 'Guardado y procesado'}</span>
                           : <span className="estado-fila estado-borrador"><PencilLine size={11} /> Borrador</span>}
+                        {inc && (inc.incidencia
+                          ? <span className="estado-fila estado-incidencia" title={`${inc.motivo}. No puede pasar a firma.`}><ShieldAlert size={11} /> Incidencia</span>
+                          : <span className="estado-fila estado-firma" title="Trae notario de origen y número o fecha de escritura"><ShieldCheck size={11} /> Pasa a firma</span>)}
                         {' · '}{d.numero_credito ? `Crédito ${d.numero_credito}` : 'Sin número de crédito'}
                         {res.actos?.length > 1 ? ` · ${res.actos.length} actos` : ''}
                         {faltan.length > 0 ? ` · faltan: ${faltan.map(etiquetaCampo).join(', ')}` : ''}

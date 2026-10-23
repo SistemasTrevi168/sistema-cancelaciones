@@ -475,6 +475,14 @@ with cliente() as c_rp:
     r = entrar_rp(olv, "Propia2026!")
     chk("restablecer: ya no se le pide cambiarla", r.status_code == 200 and r.json()["user"]["debe_cambiar_password"] is False)
 
+# --- Datos del inmueble sin «:» ---
+_arm = main._texto_inmueble({"1_vivienda": "CASA 14", "4_lote": "14", "5_manzana": "15", "13_colonia": "LOS ALAMOS"})
+chk("inmueble: se arma sin dos puntos", ":" not in _arm and "Manzana 15" in _arm, _arm)
+_l1 = main.limpiar_datos_para_plantilla({"datos_inmueble": _arm, "numero_credito": "1"})["datos_inmueble"]
+chk("inmueble: al volver a limpiarlo no se pierde nada", _l1 == _arm, _l1)
+_l2 = main.limpiar_datos_para_plantilla({"datos_inmueble": "Vivienda: CASA 14, Manzana: 15", "numero_credito": "1"})["datos_inmueble"]
+chk("inmueble: guardado antes con dos puntos sale sin ellos", _l2 == "Vivienda CASA 14, Manzana 15", _l2)
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

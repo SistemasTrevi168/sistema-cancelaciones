@@ -17,7 +17,7 @@ const CAMPOS_PRINCIPALES = new Set([...GRUPOS_CAMPOS.flatMap((g) => g.campos), .
 import { sugerenciaActual } from './sugerenciaPlantilla';
 import { generoDeNombre } from './ui/generoNombre';
 import { nombrePlantilla } from './plantillasCatalogo';
-import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla } from './datosFaltantes';
+import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla, revisarIncidencia } from './datosFaltantes';
 import Sidebar from './components/Sidebar';
 import TabExcel from './components/TabExcel';
 import TabHistorial from './components/TabHistorial';
@@ -103,11 +103,12 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       fecha: p ? p.fechaTexto : (item.fecha || 'N/A'),
       hora: p ? p.horaTexto : (item.hora || ''),
       estado: { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' }[item.estado] || 'Generado',
+      incidencia: revisarIncidencia(dExtra).incidencia ? 'Sí' : 'No',
     };
   });
   const COLUMNAS_REPORTE = [
     ['numero', '#'], ['propietario', 'Propietario'], ['acreditado', 'Acreditado'], ['credito', 'No. Crédito'],
-    ['monto', 'Monto'], ['fecha', 'Fecha'], ['hora', 'Hora'], ['estado', 'Estado'],
+    ['monto', 'Monto'], ['fecha', 'Fecha'], ['hora', 'Hora'], ['estado', 'Estado'], ['incidencia', 'Incidencia'],
   ];
 
   const descargarBlob = (contenido, tipo, nombre) => {
@@ -2054,12 +2055,16 @@ const historialSinEstado = (historial || []).filter((item) => {
   
   return sortAscending ? nomA.localeCompare(nomB) : nomB.localeCompare(nomA);
 });
+const esIncidencia = (item) => revisarIncidencia(item.datos_extraidos).incidencia;
 const filteredHistorial = filtroEstado === 'todos'
   ? historialSinEstado
-  : historialSinEstado.filter((item) => (item.estado || 'GENERADO') === filtroEstado);
+  : filtroEstado === 'INCIDENCIA'
+    ? historialSinEstado.filter(esIncidencia)
+    : historialSinEstado.filter((item) => (item.estado || 'GENERADO') === filtroEstado);
 const conteoEstados = historialSinEstado.reduce((acc, item) => {
   const e = item.estado || 'GENERADO';
   acc[e] = (acc[e] || 0) + 1;
+  if (esIncidencia(item)) acc.INCIDENCIA = (acc.INCIDENCIA || 0) + 1;
   return acc;
 }, {});
 

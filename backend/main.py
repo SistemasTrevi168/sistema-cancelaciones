@@ -230,9 +230,9 @@ def aplicar_acto_elegido(datos: Dict[str, Any], actos: List[Dict[str, Any]]) -> 
     for acto in actos:
         acto["elegido"] = bool(elegido and acto["id"] == elegido["id"])
     if elegido:
-        # Veces salario: solo si los documentos no lo trajeron (la carta es la fuente principal)
+        # Veces salario: las del acto de la hipoteca de este crédito (nunca se calculan con el monto)
         vsm = elegido["datos"].get("credito_a_salario")
-        if vsm and str(datos.get("credito_a_salario") or "").strip() in ("", "NO_ENCONTRADO"):
+        if vsm:
             datos["credito_a_salario"] = vsm
         for campo in CAMPOS_DE_ACTO:
             valor = elegido["datos"].get(campo)

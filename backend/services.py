@@ -126,6 +126,42 @@ def convertir_vsm_a_letras(val_str):
         return str(val_str)
     return numero_a_palabras_generico(limpio).lower()
 
+_PALABRAS_DE_NUMERO = {
+    "cero", "un", "uno", "una", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce",
+    "trece", "catorce", "quince", "dieciseis", "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte", "veintiun",
+    "veintiún", "veintiuno", "veintidos", "veintidós", "veintitres", "veintitrés", "veinticuatro", "veinticinco", "veintiseis",
+    "veintiséis", "veintisiete", "veintiocho", "veintinueve", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta",
+    "ochenta", "noventa", "cien", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos",
+    "setecientos", "ochocientos", "novecientos", "mil", "millon", "millón", "millones", "y", "punto",
+}
+
+
+def vsm_de_texto(texto):
+    """
+    Veces el salario mínimo tal como vienen en el documento (con letra): "78.6457 VSMM", "162.9260 VECES EL SALARIO",
+    "setenta y ocho punto seis mil cuatrocientos cincuenta y siete veces el salario mínimo". None si no vienen.
+    """
+    t = str(texto or "")
+    m = re.search(r"([0-9][0-9,]*(?:\.[0-9]+)?)\s*(?:V\.?\s?S\.?\s?M\.?\s?M\.?|V\.?\s?S\.?\s?M\.?|VECES\s+(?:EL\s+)?(?:SALARIO|S\.\s?M))", t, re.I)
+    if m:
+        return convertir_vsm_a_letras(m.group(1).replace(",", ""))
+    m = re.search(r"((?:[A-Za-zÁÉÍÓÚáéíóúÑñ]+\s+){1,25}?)VECES\s+(?:EL\s+)?SALARIO", t, re.I)
+    if m:
+        palabras = m.group(1).split()
+        # Se toman las palabras de número justo antes de "veces el salario" (debe traer "punto" o ser un número)
+        numero = []
+        for p in reversed(palabras):
+            if p.lower() in _PALABRAS_DE_NUMERO:
+                numero.insert(0, p.lower())
+            else:
+                break
+        while numero and numero[0] in ("y", "punto"):
+            numero.pop(0)
+        if numero and any(p not in ("y", "punto") for p in numero):
+            return " ".join(numero)
+    return None
+
+
 # ---------------- Números con letra o romanos -> entero ----------------
 _PALABRAS_NUM = {
     "CERO": 0, "UN": 1, "UNO": 1, "UNA": 1, "PRIMER": 1, "PRIMERO": 1, "DOS": 2, "TRES": 3, "CUATRO": 4, "CINCO": 5,
@@ -965,10 +1001,9 @@ def extraer_datos_pdf(ruta_pdf):
     else:
         texto_credito = texto_limpio
 
-    match_vsm = re.search(r'([\d,]+\.?\d*)\s*(?:VECES\s+EL\s+SALARIO|V\.?S\.?M\.?|VSM)', texto_credito, re.IGNORECASE)
-    if match_vsm:
-        raw_vsm = match_vsm.group(1).replace(",", "").strip()
-        datos["credito_a_salario"] = convertir_vsm_a_letras(raw_vsm)
+    vsm = vsm_de_texto(texto_credito)
+    if vsm:
+        datos["credito_a_salario"] = vsm
 
     match_monto_cred = re.search(
         r'(?:IMPORTE\s+(?:DE\s+LA\s+OBLIGACI[OÓ]N\s+GARANTIZADA|DEL\s+CR[EÉ]DITO)?[:\s]*|CANTIDAD\s+DE\s*|CR[EÉ]DITO\s+HASTA\s+POR\s+LA\s+CANTIDAD\s+DE\s*)\$\s*(' + MONTO_NUMERO + ')',
@@ -989,10 +1024,7 @@ def extraer_datos_pdf(ruta_pdf):
             datos["monto_credito"] = f"${num:,.2f}"
             datos["monto_credito_letras"] = numero_a_letras(num)
             
-            if not datos["credito_a_salario"]:
-                veces_salario = num / SALARIO_MINIMO_MENSUAL_DF
-                veces_salario_str = f"{veces_salario:.4f}".rstrip('0').rstrip('.')
-                datos["credito_a_salario"] = convertir_vsm_a_letras(veces_salario_str)
+            # Las veces salario NO se calculan con el monto: solo se toman si el documento las trae
         except Exception:
             datos["monto_credito"] = monto_raw
             datos["monto_credito_letras"] = monto_raw
@@ -1139,8 +1171,8 @@ CAMPOS_DE_CONSTANCIA = {
     "fecha_escritura", "notario_origen_completo", "estado_civil",
     "texto_raw",  # el desglose del inmueble se arma con el texto de la constancia
 }
-# Las veces salario pueden venir en la carta o en la constancia
-CAMPOS_DE_CUALQUIERA = {"credito_a_salario"}
+# Datos que pueden venir en cualquiera de los dos documentos (por ahora ninguno: las veces salario son de la constancia)
+CAMPOS_DE_CUALQUIERA = set()
 # Si no vienen en su documento, se pueden tomar del otro (son el mismo dato en los dos)
 CAMPOS_CON_RESPALDO = {"numero_credito", "numero_credito_letras", "entidad_financiera", "nombre_acreditado"}
 
@@ -1150,7 +1182,7 @@ def combinar_datos_pareja(datos_lista):
     de la carta: fecha de expedición, número de carta, fecha de liquidación, número de crédito y entidad;
     de la constancia: todo lo demás (inmueble, folio, oficina, escritura, notario, monto, cónyuge…).
     Si falta uno de los documentos, sus datos NO se toman del otro (p. ej. el inmueble nunca sale de la carta),
-    salvo los que son el mismo dato en los dos (crédito, entidad, nombre) y las veces salario.
+    salvo los que son el mismo dato en los dos (crédito, entidad, nombre).
     """
     cartas = [d for d in datos_lista if d.get("_tipo_documento") == "carta"]
     constancias = [d for d in datos_lista if d.get("_tipo_documento") != "carta"]

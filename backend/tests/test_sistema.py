@@ -632,6 +632,15 @@ _c = services.combinar_datos_pareja([{"_tipo_documento": "constancia", "fecha_ex
 chk("solo constancia: la fecha de expedición no sale de la constancia", _c["fecha_expedicion"] == "NO_ENCONTRADO" and _c["datos_inmueble"] == "LOTE 5", _c)
 chk("solo constancia: el crédito sí (es el mismo dato)", _c["numero_credito"] == "1508007670")
 
+# --- Veces salario: solo las que trae el documento (nunca calculadas con el monto) ---
+chk("VSM con letra", services.vsm_de_texto("un crédito hasta por setenta y ocho punto seis mil cuatrocientos cincuenta y siete veces el salario mínimo mensual") == "setenta y ocho punto seis mil cuatrocientos cincuenta y siete")
+chk("VSM con número", services.vsm_de_texto("IMPORTE: 162.9260 VSMM") == "ciento sesenta y dos punto nueve mil doscientos sesenta")
+chk("VSM: sin número no se inventa", services.vsm_de_texto("expresado en veces el salario mínimo") is None)
+_d = actos_ifrem.datos_de_acto({"texto": "IMPORTE DE LA OBLIGACION GARANTIZADA: $125,733.76 M.N.", "clave": "A.C.S."}, services)
+chk("acto sin VSM: no se calcula con el monto", not _d.get("credito_a_salario"), _d.get("credito_a_salario"))
+_d = actos_ifrem.datos_de_acto({"texto": "CREDITO HASTA POR SETENTA Y OCHO PUNTO SEIS MIL CUATROCIENTOS CINCUENTA Y SIETE VECES EL SALARIO MINIMO, EQUIVALENTE A $125,733.76", "clave": "A.C.S."}, services)
+chk("acto con VSM con letra", _d.get("credito_a_salario") == "setenta y ocho punto seis mil cuatrocientos cincuenta y siete", _d.get("credito_a_salario"))
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

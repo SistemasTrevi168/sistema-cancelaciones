@@ -535,6 +535,11 @@ def datos_de_acto(acto, services):
             datos["credito_a_salario_digitos"] = vsm
         except Exception:
             pass
+    else:
+        # También con letra o sin etiqueta: "...hasta por setenta y ocho punto seis mil ... veces el salario mínimo"
+        vsm = services.vsm_de_texto(texto)
+        if vsm:
+            datos["credito_a_salario"] = vsm
 
     acreedor = re.search(r"ACREEDOR\s*:\s*([A-ZÁÉÍÓÚÑ\.\s]{3,60}?)(?:,|\s+DEUDOR)", texto, re.I)
     deudor = re.search(r"DEUDOR(?:ES)?\s*:\s*([A-ZÁÉÍÓÚÑ\.\s]{3,80}?)(?:,|\.\s|\s+MONTO|\s+PLAZO|\s+IMPORTE)", texto, re.I)

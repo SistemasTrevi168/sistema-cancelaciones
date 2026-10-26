@@ -1206,7 +1206,7 @@ const handlePreviewExcel = async (file) => {
           const leidosDe = new Set(archivosLeer.map(tipoDe));
           const DE_CARTA = new Set(['numero_carta', 'fecha_expedicion', 'fecha_liquidacion', 'numero_credito', 'entidad_financiera']);
           const DE_CARTA2 = new Set(['nombre_acreditado_2', 'numero_credito_2', 'numero_carta_2', 'fecha_expedicion_2', 'fecha_liquidacion_2']);
-          const DE_CUALQUIERA = new Set(['credito_a_salario']);
+          const DE_CUALQUIERA = new Set();
           const subido = (k) => (DE_CUALQUIERA.has(k) ? true : DE_CARTA2.has(k) ? leidosDe.has('carta2') : DE_CARTA.has(k) ? leidosDe.has('carta') : leidosDe.has('constancia'));
           const ignorar = (k) => k.startsWith('_') || ['plantilla_seleccionada', 'plantilla', 'texto_raw', 'monto_letras', 'monto_letras_2', 'observaciones'].includes(k)
             || typeof guardados[k] === 'object' || typeof rawDatos[k] === 'object';

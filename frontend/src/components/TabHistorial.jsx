@@ -1,12 +1,14 @@
 import { useCallback, useState } from 'react';
 import {
-  ArrowUpDown, ChevronLeft, Pencil, ChevronRight, Download, Eye, FileStack, Filter, History, Inbox, ListChecks, Loader2, RefreshCw, Search, Share2, ShieldAlert, Users, X,
+  ArrowUpDown, ChevronLeft, Pencil, ChevronRight, Download, Eye, FileStack, Filter, History, Inbox, ListChecks, Loader2, MessageSquareText, RefreshCw, Search, Share2, ShieldAlert, Users, X,
 } from 'lucide-react';
 import { etiquetaCampo, revisarIncidencia } from '../datosFaltantes';
 import { useApp } from '../AppContext';
 import IconoArchivo from './IconoArchivo';
 import EstadoExpediente from './EstadoExpediente';
 import BitacoraExpediente from './BitacoraExpediente';
+import { BotonObservaciones, ModalObservaciones } from './Observaciones';
+import { textoObservaciones } from '../ui/observaciones';
 import { ESTADOS, colorEstado } from '../estadosExpediente';
 import usePresencia from '../ui/usarPresencia';
 import Selector from './Selector';
@@ -50,8 +52,11 @@ export default function TabHistorial() {
     cambiarEstado,
     puedeServidor,
     setModalCompletarPdfs,
+    actualizarObservaciones,
     theme
   } = useApp();
+  const [observando, setObservando] = useState(null); // expediente con la ventana de observaciones abierta
+  const cerrarObservaciones = useCallback(() => setObservando(null), []);
   const exportar = usePresencia(showExportMenu, 150);
   const [bitacora, setBitacora] = useState(null); // { id, titulo, datos }
 
@@ -346,6 +351,13 @@ export default function TabHistorial() {
                                   </span>
                                 );
                               })()}
+                              {textoObservaciones(item) && (
+                                <button type="button" className="observacion-en-fila" onClick={() => setObservando(item)} title={`Observaciones:\n${textoObservaciones(item)}\n\nClic para verlas o cambiarlas`}
+                                  style={{ color: theme.textSecondary }}>
+                                  <MessageSquareText size={12} color="#a16207" />
+                                  <span>{textoObservaciones(item)}</span>
+                                </button>
+                              )}
                               {item.plantilla_cambio && (
                                 <span className="chip-plantilla-cambio" title="La plantilla cambió después de generar este Word. Se sigue descargando con la versión original; en el historial de cambios puedes descargarlo con la plantilla actual.">
                                   <RefreshCw size={11} /> Plantilla actualizada
@@ -386,6 +398,7 @@ export default function TabHistorial() {
                               >
                                 <Pencil size={15} />
                               </button>}
+                              {puedeServidor('observaciones') && <BotonObservaciones expediente={item} onAbrir={setObservando} className="accion-icono" />}
                               <button
                                 type="button"
                                 onClick={() => setBitacora({ id: idDe(item), titulo: nombre, datos: dExtra })}
@@ -431,6 +444,9 @@ export default function TabHistorial() {
                     </nav>
                   )}
                 </div>
+              )}
+              {observando && (
+                <ModalObservaciones expediente={observando} onCerrar={cerrarObservaciones} onGuardado={(id, obs) => actualizarObservaciones(id, obs)} />
               )}
               {bitacora && (
                 <BitacoraExpediente expedienteId={bitacora.id} titulo={bitacora.titulo} datos={bitacora.datos} onCerrar={cerrarBitacora} />

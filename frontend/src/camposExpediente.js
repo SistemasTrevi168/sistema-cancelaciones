@@ -42,7 +42,7 @@ export const ETIQUETAS_CAMPOS = {
 };
 
 // Campos internos que no se muestran (o que eran copias de otros campos)
-export const CAMPOS_OCULTOS = new Set(['plantilla_seleccionada', 'plantilla', 'texto_raw', 'error_extraccion', 'acreditado', 'monto', 'monto_letras_2', '_coacreditados', '_trabajador']);
+export const CAMPOS_OCULTOS = new Set(['observaciones', 'plantilla_seleccionada', 'plantilla', 'texto_raw', 'error_extraccion', 'acreditado', 'monto', 'monto_letras_2', '_coacreditados', '_trabajador']);
 
 // Campos de texto largo (se muestran en un cuadro más grande)
 export const CAMPOS_LARGOS = new Set(['datos_inmueble', 'notario_origen_completo', 'monto_letras']);

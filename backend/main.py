@@ -727,6 +727,17 @@ def _datos_trabajador_dos(datos: Dict[str, Any], desde_pdf: bool = False) -> Dic
     }
 
 
+MAX_OBSERVACIONES = 2000
+
+
+def limpiar_observaciones(valor: Any) -> str:
+    """Observaciones del expediente: texto libre (se conservan los saltos de línea)."""
+    t = str(valor or "").replace("\r\n", "\n").strip()
+    t = "\n".join(" ".join(r.split()) for r in t.split("\n"))
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t[:MAX_OBSERVACIONES]
+
+
 def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallback: str = "", desde_pdf: bool = False) -> Dict[str, Any]:
     """Filtra y devuelve los campos requeridos aplicando conversiones de romanos y dígitos.
     desde_pdf=True: datos recién leídos de los PDF (el inmueble se arma con la constancia).
@@ -830,6 +841,8 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
         "notario_origen_completo": notario_completo,
         "tiene_conyuge": conyuge,
         "nombre_conyuge": nombre_conyuge,
+        # Notas internas del expediente (no van en el Word)
+        "observaciones": limpiar_observaciones(datos_origen.get("observaciones")),
     }
     resultado.update(puntos_inmueble)
     if not puntos_inmueble:
@@ -1019,6 +1032,7 @@ def renglon_historial(exp) -> Dict[str, Any]:
         "hora": hora_sola,
         "manera": exp.manera,
         "estado": estado_de(exp),
+        "observaciones": datos.get("observaciones") or "",
         # Versión de plantilla con la que se generó, y si la plantilla cambió desde entonces
         "plantilla_version": datos_raw.get("_plantilla_version"),
         "plantilla_cambio": plantilla_cambio(datos_raw),
@@ -1763,6 +1777,10 @@ def aplicar_edicion(expediente, datos: Dict[str, Any], plantilla: Optional[str],
     detalle = {"plantilla": plantilla, "version": (expediente.datos_extraidos or {}).get("_plantilla_version"), "cambios": cambios}
     detalle.update(detalle_extra or {})
     kpis.registrar(usuario, tipo, expediente.id, expediente.numero_credito, **detalle)
+    obs_antes = limpiar_observaciones(anteriores.get("observaciones"))
+    obs_ahora = (expediente.datos_extraidos or {}).get("observaciones") or ""
+    if obs_antes != obs_ahora:
+        kpis.registrar(usuario, "observaciones", expediente.id, expediente.numero_credito, antes=obs_antes[:300], despues=obs_ahora[:300])
     if cambios and estado_antes != "GENERADO":
         expediente.estado = "GENERADO"
         kpis.registrar(usuario, "estado", expediente.id, expediente.numero_credito, de=estado_antes, a="GENERADO", motivo="Se editó el expediente")
@@ -1974,6 +1992,55 @@ def cambiar_estado_expediente(
     _cambiar_estado(db, expediente, estado, sesion["username"])
     db.commit()
     return {"expediente_id": str(expediente.id), "estado": estado_de(expediente)}
+
+
+@app.put("/api/expedientes/{expediente_id}/observaciones")
+def cambiar_observaciones(
+    expediente_id: str,
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user),
+):
+    """Observaciones del expediente (notas internas). No cambia su Word ni su estado."""
+    expediente = obtener_expediente_autorizado(db, expediente_id, sesion)
+    _poner_observaciones(db, expediente, payload.get("observaciones"), sesion["username"], agregar=bool(payload.get("agregar")))
+    db.commit()
+    db.refresh(expediente)
+    return {"expediente_id": str(expediente.id), "observaciones": (expediente.datos_extraidos or {}).get("observaciones") or "",
+            "expediente": renglon_historial(expediente)}
+
+
+@app.post("/api/expedientes/observaciones")
+def cambiar_observaciones_varios(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    sesion: dict = Depends(require_user),
+):
+    """La misma observación a varios expedientes (agregar=True la añade al final de lo que ya tenían)."""
+    resultado = {}
+    for exp_id in (payload.get("ids") or [])[:500]:
+        try:
+            expediente = obtener_expediente_autorizado(db, exp_id, sesion)
+        except HTTPException:
+            continue
+        resultado[str(expediente.id)] = _poner_observaciones(db, expediente, payload.get("observaciones"), sesion["username"],
+                                                             agregar=bool(payload.get("agregar")))
+    db.commit()
+    return {"observaciones": resultado}
+
+
+def _poner_observaciones(db: Session, expediente, texto: Any, usuario: str, agregar: bool = False) -> str:
+    datos = dict(expediente.datos_extraidos or {})
+    antes = limpiar_observaciones(datos.get("observaciones"))
+    nuevo = limpiar_observaciones(texto)
+    if agregar:
+        nuevo = limpiar_observaciones(f"{antes}\n{nuevo}" if antes and nuevo else (antes or nuevo))
+    if nuevo != antes:
+        datos["observaciones"] = nuevo
+        expediente.datos_extraidos = datos
+        flag_modified(expediente, "datos_extraidos")
+        kpis.registrar(usuario, "observaciones", expediente.id, expediente.numero_credito, antes=antes[:300], despues=nuevo[:300])
+    return nuevo
 
 
 @app.post("/api/expedientes/estado")
@@ -2473,6 +2540,7 @@ def procesar_excel(
                     "notario_origen_completo": notario,
                     "nombre_conyuge": conyuge,
                     "tiene_conyuge": "Sí" if conyuge else "No",
+                    "observaciones": str(fila_normalizada.get('observaciones') or fila_normalizada.get('observación') or fila_normalizada.get('observacion') or '').strip(),
                 }
 
                 datos_finales = limpiar_datos_para_plantilla(datos_brutos, num_credito)

@@ -13,6 +13,7 @@ import OpcionesPlantilla from './OpcionesPlantilla';
 import PanelVistaPrevia from './PanelVistaPrevia';
 import Selector from './Selector';
 import { conConversiones, formatoAlSalir } from '../ui/conversiones';
+import { CampoObservaciones } from './Observaciones';
 
 // Secciones del formulario (mismo orden y nombres que en los datos extraídos)
 const SECCIONES = [
@@ -94,6 +95,7 @@ export default function TabManual() {
     setSelectedPlantilla,
     theme,
     isDarkMode,
+    puedeServidor,
   } = useApp();
   const [generado, setGenerado] = useState(null); // último expediente generado
   const [convirtiendo, setConvirtiendo] = useState({});
@@ -127,8 +129,8 @@ export default function TabManual() {
   };
 
   const limpiar = async () => {
-    if (TODAS.some((c) => !esDatoVacio(formData[c])) && !(await confirmar('Se borrarán los datos capturados.', { titulo: '¿Limpiar el formulario?', textoConfirmar: 'Sí, limpiar' }))) return;
-    setFormData(Object.fromEntries(TODAS.map((c) => [c, ''])));
+    if ((TODAS.some((c) => !esDatoVacio(formData[c])) || String(formData.observaciones || '').trim()) && !(await confirmar('Se borrarán los datos capturados.', { titulo: '¿Limpiar el formulario?', textoConfirmar: 'Sí, limpiar' }))) return;
+    setFormData({ ...Object.fromEntries(TODAS.map((c) => [c, ''])), observaciones: '' });
     setGenerado(null);
   };
 
@@ -234,6 +236,10 @@ export default function TabManual() {
             </fieldset>
           );
         })}
+
+        {puedeServidor('observaciones') && (
+          <CampoObservaciones id="manual_observaciones" valor={formData.observaciones} onCambio={(v) => cambiar('observaciones', v)} />
+        )}
 
         {/* Resultado */}
         {generado && (

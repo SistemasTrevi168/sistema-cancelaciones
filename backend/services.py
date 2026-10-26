@@ -1139,6 +1139,8 @@ CAMPOS_DE_CONSTANCIA = {
     "fecha_escritura", "notario_origen_completo", "estado_civil",
     "texto_raw",  # el desglose del inmueble se arma con el texto de la constancia
 }
+# Las veces salario pueden venir en la carta o en la constancia
+CAMPOS_DE_CUALQUIERA = {"credito_a_salario"}
 # Si no vienen en su documento, se pueden tomar del otro (son el mismo dato en los dos)
 CAMPOS_CON_RESPALDO = {"numero_credito", "numero_credito_letras", "entidad_financiera", "nombre_acreditado"}
 
@@ -1146,15 +1148,17 @@ def combinar_datos_pareja(datos_lista):
     """
     Junta los datos de la carta y de la constancia. Cada dato se toma SOLO de su documento:
     de la carta: fecha de expedición, número de carta, fecha de liquidación, número de crédito y entidad;
-    de la constancia: todo lo demás. Si no hay un documento de ese tipo, se toma de cualquiera.
+    de la constancia: todo lo demás (inmueble, folio, oficina, escritura, notario, monto, cónyuge…).
+    Si falta uno de los documentos, sus datos NO se toman del otro (p. ej. el inmueble nunca sale de la carta),
+    salvo los que son el mismo dato en los dos (crédito, entidad, nombre) y las veces salario.
     """
     cartas = [d for d in datos_lista if d.get("_tipo_documento") == "carta"]
     constancias = [d for d in datos_lista if d.get("_tipo_documento") != "carta"]
 
     def fuentes(campo):
-        if campo in CAMPOS_DE_CARTA and cartas:
+        if campo in CAMPOS_DE_CARTA:
             return cartas
-        if campo in CAMPOS_DE_CONSTANCIA and constancias:
+        if campo in CAMPOS_DE_CONSTANCIA and campo not in CAMPOS_DE_CUALQUIERA:
             return constancias
         return datos_lista
 

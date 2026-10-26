@@ -592,6 +592,46 @@ with cliente() as c_vp:
     chk("perfil ajeno: cerrar todas sus sesiones", r.status_code == 200 and r.json()["sesiones"] == [], r.text[:200])
     chk("perfil ajeno: su sesión ya no sirve", c_vp.get("/api/perfil", headers=_ho).status_code == 401)
 
+# --- Observaciones del expediente ---
+chk("observaciones: se conservan al limpiar", main.limpiar_datos_para_plantilla({"observaciones": "  Falta   firma\r\n\n\n\nRevisar folio "})["observaciones"] == "Falta firma\n\nRevisar folio")
+with cliente() as c_ob:
+    _h = {"Authorization": "Bearer " + c_ob.post("/api/auth/login", json={"username": f"ana_{SUF}", "password": "Prueba2026!"}).json()["token"]}
+    c_ob.cookies.clear()
+    _hadm = {"Authorization": "Bearer " + c_ob.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+    c_ob.cookies.clear()
+    c_ob.post("/api/admin/usuarios", data={"username": f"obs_{SUF}", "password": "Prueba2026!", "rol": "operador"}, headers=_hadm)
+    _ho = {"Authorization": "Bearer " + c_ob.post("/api/auth/login", json={"username": f"obs_{SUF}", "password": "Prueba2026!"}).json()["token"]}
+    c_ob.cookies.clear()
+    _cred = "17" + str(uuid.uuid4().int)[:8]
+    r = c_ob.post("/api/expedientes/guardar", json={"expedientes": [{"ref": "o", "datos": {**DATOS, "numero_credito": _cred, "observaciones": "Nota al crear"}, "plantilla": PLANTILLA}]}, headers=_h)
+    _id = r.json()["resultados"][0]["expediente_id"]
+    _fila = lambda: next(x for x in c_ob.get("/api/expedientes", headers=_h).json() if x["id"] == _id)  # noqa: E731
+    chk("observaciones: se guardan al crear", _fila()["observaciones"] == "Nota al crear", _fila().get("observaciones"))
+    c_ob.put(f"/api/expedientes/{_id}/estado", json={"estado": "ENTREGADO"}, headers=_h)
+    r = c_ob.put(f"/api/expedientes/{_id}/observaciones", json={"observaciones": "Cambiada"}, headers=_h)
+    chk("observaciones: se cambian", r.status_code == 200 and r.json()["observaciones"] == "Cambiada", r.text[:200])
+    chk("observaciones: no cambian el estado", _fila()["estado"] == "ENTREGADO")
+    chk("observaciones: otro operador no puede", c_ob.put(f"/api/expedientes/{_id}/observaciones", json={"observaciones": "x"}, headers=_ho).status_code in (403, 404))
+    r = c_ob.post("/api/expedientes/observaciones", json={"ids": [_id], "observaciones": "Agregada", "agregar": True}, headers=_h)
+    chk("observaciones: agregar a varios", r.json()["observaciones"].get(_id) == "Cambiada\nAgregada", r.text[:200])
+    r = c_ob.put(f"/api/expedientes/{_id}/editar", json={"datos": {**DATOS, "numero_credito": _cred, "observaciones": "Cambiada\nAgregada"}, "plantilla": PLANTILLA}, headers=_h)
+    chk("observaciones: se conservan al editar", r.json()["expediente"]["observaciones"] == "Cambiada\nAgregada", r.text[:200])
+    _bit = c_ob.get(f"/api/expedientes/{_id}/bitacora", headers=_h).json()["eventos"]
+    chk("observaciones: quedan en el historial de cambios", any(e["tipo"] == "observaciones" for e in _bit))
+    r = c_ob.post(f"/api/expedientes/{_id}/generar-word", json={"datos": {}, "plantilla": PLANTILLA}, headers=_h)
+    chk("observaciones: no salen en el Word", r.status_code == 200 and "Agregada" not in texto_word(r.content))
+    r = c_ob.post("/api/expedientes/generar-manual", json={**DATOS, "numero_credito": "18" + str(uuid.uuid4().int)[:8], "observaciones": "Desde captura", "plantilla": PLANTILLA}, headers=_h)
+    chk("observaciones: captura manual", (r.json().get("datos_extraidos") or {}).get("observaciones") == "Desde captura", r.text[:300])
+
+# --- Cada dato sale de su documento (el inmueble nunca de la carta) ---
+_c = services.combinar_datos_pareja([{"_tipo_documento": "carta", "datos_inmueble": "AVENIDA VICENTE LOMBARDO TOLEDO VIV. 33", "numero_carta": "0543910959",
+                                       "numero_credito": "1508007670", "fecha_expedicion": "08/09/2025", "folio_real": "999"}])
+chk("solo carta: sus datos sí", _c["numero_carta"] == "0543910959" and _c["numero_credito"] == "1508007670" and _c["fecha_expedicion"] == "08/09/2025")
+chk("solo carta: el inmueble y el folio no salen de la carta", _c["datos_inmueble"] == "NO_ENCONTRADO" and _c["folio_real"] == "NO_ENCONTRADO", _c)
+_c = services.combinar_datos_pareja([{"_tipo_documento": "constancia", "fecha_expedicion": "01/01/2020", "numero_credito": "1508007670", "datos_inmueble": "LOTE 5"}])
+chk("solo constancia: la fecha de expedición no sale de la constancia", _c["fecha_expedicion"] == "NO_ENCONTRADO" and _c["datos_inmueble"] == "LOTE 5", _c)
+chk("solo constancia: el crédito sí (es el mismo dato)", _c["numero_credito"] == "1508007670")
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

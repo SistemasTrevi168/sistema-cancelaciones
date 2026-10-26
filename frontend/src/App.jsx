@@ -37,7 +37,7 @@ import useVigilanciaSesion from './vigilanciaSesion';
 import useCelular from './usarCelular';
 import { COLOR_ACENTO_DEFECTO, colorLegible } from './colores';
 import { renderAsync } from 'docx-preview';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, FileUp } from 'lucide-react';
 
 // Estado de los botones atrás/adelante del navegador (fuera de React: solo lo usan los eventos del navegador)
 const navegador = { guardia: false, auth: false, tab: 'single', alSalir: null, alExpirar: null, alVolverPestana: null, alRevisar: null };
@@ -106,11 +106,12 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
       hora: p ? p.horaTexto : (item.hora || ''),
       estado: { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' }[item.estado] || 'Generado',
       incidencia: revisarIncidencia(dExtra).incidencia ? 'Sí' : 'No',
+      observaciones: String(dExtra.observaciones || item.observaciones || '').replace(/\s+/g, ' ').trim(),
     };
   });
   const COLUMNAS_REPORTE = [
     ['numero', '#'], ['propietario', 'Propietario'], ['acreditado', 'Acreditado'], ['credito', 'No. Crédito'],
-    ['monto', 'Monto'], ['fecha', 'Fecha'], ['hora', 'Hora'], ['estado', 'Estado'], ['incidencia', 'Incidencia'],
+    ['monto', 'Monto'], ['fecha', 'Fecha'], ['hora', 'Hora'], ['estado', 'Estado'], ['incidencia', 'Incidencia'], ['observaciones', 'Observaciones'],
   ];
 
   const descargarBlob = (contenido, tipo, nombre) => {
@@ -735,6 +736,10 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     }
   };
 
+  // Observaciones guardadas de un expediente: se ven al momento en la tabla
+  const actualizarObservaciones = (id, obs) => setHistorial((prev) => prev.map((h) => (String(h.id || h.expediente_id) === String(id)
+    ? { ...h, observaciones: obs, datos_extraidos: { ...(h.datos_extraidos || {}), observaciones: obs } } : h)));
+
   // 1. Funciones para manejar el arrastre y soltado correctamente
 
 const handleDrop = (e) => {
@@ -1192,24 +1197,58 @@ const handlePreviewExcel = async (file) => {
         const leidos = { numero_credito: rawDatos.numero_credito || '', ...rawDatos };
         const avisosEdicion = [];
         if (edicionSingle) {
-          // Editando un expediente guardado: lo que no venga en los documentos se toma de lo guardado
+          // Editando un expediente guardado: cada dato se actualiza SOLO con su documento
+          // (la carta: número de carta, fechas, crédito y entidad; la constancia: inmueble, folio, escritura, notario, monto…).
+          // Lo que su documento no trae (o si ese documento no se subió) se queda como estaba guardado.
           const vacio = (v) => v == null || String(v).trim() === '' || /^NO_ENCONTRADO$/i.test(String(v).trim());
+          const igual = (a, b) => String(a ?? '').replace(/\s+/g, ' ').trim().toUpperCase() === String(b ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
           const guardados = edicionSingle.datos || {};
-          const tomados = [];
-          const distintos = [];
-          Object.keys(guardados).forEach((k) => {
-            if (k.startsWith('_') || k === 'plantilla_seleccionada' || k === 'plantilla' || typeof guardados[k] === 'object') return;
-            if (vacio(guardados[k])) return;
-            if (vacio(leidos[k])) { leidos[k] = guardados[k]; tomados.push(k); }
-            else if (String(leidos[k]).trim() !== String(guardados[k]).trim()) distintos.push(k);
+          const leidosDe = new Set(archivosLeer.map(tipoDe));
+          const DE_CARTA = new Set(['numero_carta', 'fecha_expedicion', 'fecha_liquidacion', 'numero_credito', 'entidad_financiera']);
+          const DE_CARTA2 = new Set(['nombre_acreditado_2', 'numero_credito_2', 'numero_carta_2', 'fecha_expedicion_2', 'fecha_liquidacion_2']);
+          const DE_CUALQUIERA = new Set(['credito_a_salario']);
+          const subido = (k) => (DE_CUALQUIERA.has(k) ? true : DE_CARTA2.has(k) ? leidosDe.has('carta2') : DE_CARTA.has(k) ? leidosDe.has('carta') : leidosDe.has('constancia'));
+          const ignorar = (k) => k.startsWith('_') || ['plantilla_seleccionada', 'plantilla', 'texto_raw', 'monto_letras', 'monto_letras_2', 'observaciones'].includes(k)
+            || typeof guardados[k] === 'object' || typeof rawDatos[k] === 'object';
+          const actualizados = [];
+          const conservados = [];
+          [...new Set([...Object.keys(guardados), ...Object.keys(rawDatos)])].forEach((k) => {
+            if (ignorar(k)) return;
+            const g = guardados[k];
+            const l = rawDatos[k];
+            if (subido(k) && !vacio(l)) {
+              leidos[k] = l;
+              if (!vacio(g) && !igual(l, g) && !esPuntoInmueble(k)) actualizados.push(k);
+            } else {
+              leidos[k] = vacio(g) ? '' : g;
+              if (!vacio(g) && !esPuntoInmueble(k)) conservados.push(k);
+            }
           });
-          if (tomados.length) avisosEdicion.push(`Se dejaron ${tomados.length} dato(s) que ya estaban guardados y no vienen en los documentos: ${tomados.map(etiquetaDe).join(', ')}.`);
-          if (distintos.length) avisosEdicion.push(`En los documentos vienen distintos ${distintos.length} dato(s) de lo guardado (se usan los de los documentos): ${distintos.map(etiquetaDe).join(', ')}.`);
+          // El monto con letra sigue al monto que quedó; las observaciones no vienen en los documentos
+          if ('observaciones' in guardados) leidos.observaciones = guardados.observaciones;
+          [['monto_credito', 'monto_letras'], ['monto_credito_2', 'monto_letras_2']].forEach(([m, letras]) => {
+            if (String(leidos[m] ?? '') !== String(guardados[m] ?? '')) Object.assign(leidos, conConversiones(leidos, m, leidos[m] ?? ''));
+            else if (letras in guardados) leidos[letras] = guardados[letras];
+          });
+          if (actualizados.length) avisosEdicion.push(`Se actualizaron con los documentos ${actualizados.length} dato(s) que estaban distintos: ${actualizados.map(etiquetaDe).join(', ')}.`);
+          if (conservados.length) avisosEdicion.push(`Se dejaron como estaban guardados ${conservados.length} dato(s) que no vienen en los documentos que subiste: ${conservados.map(etiquetaDe).join(', ')}.`);
         }
+        // «No se encontró la carta / constancia»: se puede subir desde aquí (y se guarda con el expediente)
+        const avisosLeidos = (borrador.avisos || []).map((a) => {
+          const falta = /^No se encontró la (carta de instrucción|constancia de folio)/.exec(String(a));
+          if (!falta) return a;
+          const tipo = falta[1].startsWith('carta') ? 'carta' : 'constancia';
+          return {
+            texto: `No se encontró la ${falta[1]} de este expediente.`,
+            etiqueta: tipo === 'carta' ? 'Subir la carta' : 'Subir la constancia',
+            icono: FileUp,
+            accion: () => elegirPdf().then((fs) => agregarDocumentoSingle(tipo, fs)),
+          };
+        });
         setDatos(leidos);
         setActosSingle(borrador.actos || []);
         setSugerenciaBase(borrador.plantilla_sugerida || null);
-        setAvisosSingle([...(borrador.avisos || []), ...avisosEdicion]);
+        setAvisosSingle([...avisosLeidos, ...avisosEdicion]);
         setLecturaSingle({ datos: { ...rawDatos }, leido_en: borrador.leido_en || null });
         setUnlockedFields({});
         // Con dos cartas se usa directamente la plantilla de coacreditados
@@ -1235,7 +1274,7 @@ const handlePreviewExcel = async (file) => {
   const camposCorregidos = (original, actual) => {
     if (!original || !actual) return [];
     const limpio = (v) => String(v ?? '').trim();
-    return Object.keys(actual).filter((k) => !k.startsWith('_') && k !== 'plantilla_seleccionada' && k !== 'texto_raw'
+    return Object.keys(actual).filter((k) => !k.startsWith('_') && k !== 'plantilla_seleccionada' && k !== 'texto_raw' && k !== 'observaciones'
       && typeof actual[k] !== 'object' && limpio(actual[k]) !== limpio(original[k]));
   };
   const metricasDe = (origen, lectura, actual, avisos) => {
@@ -1361,7 +1400,7 @@ const handlePreviewExcel = async (file) => {
     // Solo cuentan los datos que el expediente ya tenía (los detalles nuevos que traen los documentos,
     // como el desglose del inmueble, se guardan pero no son "cambios")
     const campos = Object.keys(datos).filter((k) => !k.startsWith('_') && !['plantilla_seleccionada', 'plantilla', 'texto_raw'].includes(k)
-      && typeof datos[k] !== 'object' && !esPuntoInmueble(k) && (k in g || CAMPOS_PRINCIPALES.has(k)) && limpio(datos[k]) !== limpio(g[k]));
+      && typeof datos[k] !== 'object' && !esPuntoInmueble(k) && (k in g || CAMPOS_PRINCIPALES.has(k) || k === 'observaciones') && limpio(datos[k]) !== limpio(g[k]));
     if (limpio(selectedPlantilla) !== limpio(edicionSingle.plantilla)) campos.push('plantilla_seleccionada');
     return campos;
   };
@@ -1376,8 +1415,25 @@ const handlePreviewExcel = async (file) => {
       avisar.aviso('No hay cambios por guardar.');
       return;
     }
+    // Solo cambiaron las observaciones: se guardan sin volver a generar el Word ni cambiar el estado
+    if (!conDocs && cambios.every((k) => k === 'observaciones')) {
+      setGuardando((g) => ({ ...g, single: true }));
+      try {
+        const res = await api.put(`/expedientes/${ed.id}/observaciones`, { observaciones: datos.observaciones || '' });
+        const obs = res.data?.observaciones ?? '';
+        setDatos((prev) => (prev ? { ...prev, observaciones: obs } : prev));
+        setEdicionSingle((prev) => (prev ? { ...prev, datos: { ...prev.datos, observaciones: obs } } : prev));
+        actualizarObservaciones(ed.id, obs);
+        avisar.exito(obs ? 'Se guardaron las observaciones.' : 'Se quitaron las observaciones.');
+      } catch (err) {
+        avisar.error(`No se pudieron guardar las observaciones: ${err.response?.data?.detail || err.message}`);
+      } finally {
+        setGuardando((g) => ({ ...g, single: false }));
+      }
+      return;
+    }
     const ESTADO_TXT = { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' };
-    const lista = cambios.map((k) => (k === 'plantilla_seleccionada' ? 'Plantilla' : etiquetaDe(k)));
+    const lista = cambios.map((k) => (k === 'plantilla_seleccionada' ? 'Plantilla' : k === 'observaciones' ? 'Observaciones' : etiquetaDe(k)));
     const aviso = ed.estado && ed.estado !== 'GENERADO'
       ? `\n\nEste expediente está «${ESTADO_TXT[ed.estado] || ed.estado}»: al guardar regresa a «Generado», porque su Word cambia.` : '';
     const texto = cambios.length
@@ -2039,7 +2095,7 @@ const historialSinEstado = (historial || []).filter((item) => {
     const q = sinAcentos(searchQuery.trim());
     const qDigitos = searchQuery.replace(/\D/g, '');
     const d = item.datos_extraidos || {};
-    const textos = [d.acreditado, d.nombre_acreditado, item.nombre_acreditado, d.nombre_conyuge, d.nombre_acreditado_2, item.acreditado].map(sinAcentos);
+    const textos = [d.acreditado, d.nombre_acreditado, item.nombre_acreditado, d.nombre_conyuge, d.nombre_acreditado_2, item.acreditado, d.observaciones, item.observaciones].map(sinAcentos);
     const numeros = [d.numero_credito, item.numero_credito, d.numero_credito_2, d.folio_real, d.numero_carta, d.numero_carta_2]
       .map((v) => String(v ?? ''));
     const porTexto = textos.some((t) => t.includes(q)) || numeros.some((n) => sinAcentos(n).includes(q));
@@ -2282,6 +2338,41 @@ const cambiarEstado = async (ids, estado) => {
   };
 
   // Coacreditados: ya leído el expediente, se agrega la carta del trabajador dos y se vuelve a leer
+  // Elegir un PDF desde un aviso (sin recuadro de archivos a la vista)
+  const elegirPdf = () => new Promise((resolve) => {
+    const entrada = document.createElement('input');
+    entrada.type = 'file';
+    entrada.accept = 'application/pdf,.pdf';
+    entrada.onchange = () => resolve(Array.from(entrada.files || []));
+    entrada.click();
+  });
+  // Ya leído el expediente, se sube la carta o la constancia que faltaba y se vuelve a leer
+  // (editando, lo guardado no cambia: solo se llena lo vacío). Al guardar, el PDF se guarda con el expediente.
+  const agregarDocumentoSingle = async (tipo, archivos) => {
+    const lista = Array.from(archivos || []);
+    if (!lista.length) return;
+    const pdf = lista.find((f) => /\.pdf$/i.test(f.name));
+    if (!pdf) { avisar.aviso('Elige un archivo PDF.'); return; }
+    const otro = tipo === 'carta' ? constanciaSingle : cartaSingle;
+    if (otro && pdf.name === otro.name && pdf.size === otro.size) {
+      avisar.error(`Es el mismo archivo que ya está como ${tipo === 'carta' ? 'constancia' : 'carta'}.`);
+      return;
+    }
+    const n = numeroEnNombre(pdf.name);
+    const m = numeroEnNombre(otro?.name) || soloDigitos(edicionSingle?.credito || datos?.numero_credito || '');
+    if (n && m && m.length >= 8 && n !== m && !(await confirmar(`El archivo es del crédito ${n}, pero el expediente es del ${m}.`, { titulo: '¿Es el documento correcto?', textoConfirmar: 'Sí, usarlo' }))) return;
+    const perdidos = edicionSingle ? cambiosEdicion().filter((k) => k !== 'observaciones').length : camposCorregidos(lecturaSingle?.datos, datos).filter((k) => k !== 'observaciones').length;
+    if (perdidos > 0 && !(await confirmar(`Se vuelven a leer los documentos y se pierden ${perdidos} dato(s) que cambiaste en pantalla.`, { titulo: '¿Volver a leer?', textoConfirmar: 'Sí, volver a leer' }))) return;
+    const obs = datos?.observaciones;
+    if (tipo === 'carta') setCartaSingle(pdf); else setConstanciaSingle(pdf);
+    const carta = tipo === 'carta' ? pdf : cartaSingle;
+    const constancia = tipo === 'constancia' ? pdf : constanciaSingle;
+    await leerSingle([carta, carta2Single, constancia].filter(Boolean),
+      (f) => (f === carta2Single ? 'carta2' : f === carta ? 'carta' : 'constancia'));
+    // Las observaciones que ya se habían escrito no se pierden
+    if (obs) setDatos((prev) => (prev ? { ...prev, observaciones: obs } : prev));
+  };
+
   const agregarCarta2Single = async (archivos) => {
     const pdf = Array.from(archivos || []).find((f) => f.name.toLowerCase().endsWith('.pdf'));
     if (!pdf) { avisar.aviso('Elige un archivo PDF.'); return; }
@@ -2427,6 +2518,7 @@ const cambiarEstado = async (ids, estado) => {
     setCoacManual,
     agregarCarta2Single,
     normalizarCampo,
+    actualizarObservaciones,
     camposDePlantilla: (plantilla) => camposPorPlantilla[normalizarPlantilla(plantilla)] || null,
     actosSingle,
     asignarCampoDesdeDocumento,
@@ -2468,6 +2560,7 @@ const cambiarEstado = async (ids, estado) => {
     filasSeleccionadas,
     filterPeriod,
     filteredHistorial,
+    historial,
     formData,
     formatLabel,
     handleApplyTemplateToSelected,

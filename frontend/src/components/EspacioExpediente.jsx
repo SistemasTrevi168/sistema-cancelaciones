@@ -6,6 +6,7 @@ import { revisarIncidencia } from '../datosFaltantes';
 import { nombrePlantilla } from '../plantillasCatalogo';
 import { useApp } from '../AppContext';
 import CamposDatos from './CamposDatos';
+import { CampoObservaciones } from './Observaciones';
 import { esPlantillaCoac } from '../camposExpediente';
 import IconoArchivo from './IconoArchivo';
 import OpcionesPlantilla from './OpcionesPlantilla';
@@ -21,7 +22,7 @@ export default function EspacioExpediente({
   onCambio, expedienteId, navegacion = null, accionesExtra = null, previaActiva = false, onPrevia,
   onGuardar, guardandoAhora = false, avisos = [], avisoCoac = null, edicion = null, onSubirDocumentos = null,
 }) {
-  const { theme, isDarkMode, faltantesPara, etiquetaCampo, handleDownloadWord, descargandoId } = useApp();
+  const { theme, isDarkMode, faltantesPara, etiquetaCampo, handleDownloadWord, descargandoId, puedeServidor } = useApp();
   const faltan = faltantesPara(datos, plantilla);
   // Incidencia: sin notario de origen, o sin número ni fecha de escritura -> no puede pasar a firma
   const inc = revisarIncidencia(datos);
@@ -174,11 +175,21 @@ export default function EspacioExpediente({
           {avisos?.length > 0 && (
             <div className="aviso-datos" style={{ backgroundColor: isDarkMode ? '#422006' : '#fff7ed', color: isDarkMode ? '#fdba74' : '#9a3412', borderColor: isDarkMode ? '#9a3412' : '#fed7aa' }}>
               <AlertTriangle size={16} style={{ flexShrink: 0 }} />
-              <div>{avisos.map((a) => <div key={a}>{a}</div>)}</div>
+              <div>{avisos.map((a, i) => (typeof a === 'string' ? <div key={a}>{a}</div> : (
+                <div key={a.texto || i} className="aviso-con-accion">
+                  <span>{a.texto}</span>
+                  {a.etiqueta && (
+                    <button type="button" className="boton-barra" onClick={a.accion} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+                      {a.icono ? <a.icono size={14} color={theme.accent} /> : null} {a.etiqueta}
+                    </button>
+                  )}
+                </div>
+              )))}</div>
             </div>
           )}
           {avisoCoac}
           <CamposDatos datos={datos} prefijo={prefijo} faltantes={faltan} onCambio={onCambio} coac={esPlantillaCoac(plantilla)} plegables enfocar={enfocar} />
+          {puedeServidor('observaciones') && <CampoObservaciones id={`${prefijo}_observaciones`} valor={datos?.observaciones} onCambio={(v) => onCambio('observaciones', v)} />}
         </div>
       </div>
       {/* En celular los botones quedan fijos abajo de la pantalla */}

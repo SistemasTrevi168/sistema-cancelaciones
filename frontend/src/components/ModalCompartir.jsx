@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Loader2, Search, Share2, UserCheck, Users, X } from 'lucide-react';
+import { Check, Loader2, MessageSquareText, Search, Share2, UserCheck, Users, X } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
+import { MAX_OBSERVACIONES, textoObservaciones } from '../ui/observaciones';
 import { avisar, confirmar } from '../ui/notificaciones';
 
 const ROL = { revisor: 'Revisor', operador: 'Operador', admin: 'Administrador' };
@@ -12,7 +13,11 @@ const ROL = { revisor: 'Revisor', operador: 'Operador', admin: 'Administrador' }
 //  - { ids: [varios] }: dar acceso a varios a la vez
 //  - { todos: true }  : todos mis expedientes, también los que haga después
 export default function ModalCompartir({ ids = [], todos = false, titulo = '', onCerrar, onListo }) {
-  const { theme, isDarkMode } = useApp();
+  const { theme, isDarkMode, historial, actualizarObservaciones, puedeServidor } = useApp();
+  // Observaciones: con un expediente se ven y se cambian; con varios, se agrega una nota a todos
+  const conObservaciones = !todos && ids.length > 0 && puedeServidor('observaciones');
+  const obsOriginal = !todos && ids.length === 1 ? textoObservaciones((historial || []).find((h) => String(h.id || h.expediente_id) === String(ids[0]))) : '';
+  const [obs, setObs] = useState(obsOriginal);
   const [gente, setGente] = useState(null);
   const [actuales, setActuales] = useState({}); // usuario -> { directo, todos }
   const [elegidos, setElegidos] = useState({});
@@ -61,7 +66,8 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
   const visibles = useMemo(() => (gente || []).filter((p) => !busca.trim() || normal(`${p.nombre} ${p.usuario}`).includes(normal(busca))), [gente, busca]);
   const agregar = Object.keys(elegidos).filter((u) => elegidos[u] && !actuales[u]?.directo);
   const quitar = gestiona ? Object.keys(actuales).filter((u) => actuales[u]?.directo && !elegidos[u]) : [];
-  const hayCambios = agregar.length > 0 || quitar.length > 0;
+  const obsCambio = conObservaciones && obs.trim() !== obsOriginal.trim() && (uno || obs.trim() !== '');
+  const hayCambios = agregar.length > 0 || quitar.length > 0 || obsCambio;
   const alternar = (u) => setElegidos((e) => ({ ...e, [u]: !e[u] }));
   const nombreDe = (u) => (gente || []).find((p) => p.usuario === u)?.nombre || u;
 
@@ -77,6 +83,16 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
       if (agregar.length) await api.post('/compartir', { ...base, usuarios: agregar });
       if (quitar.length) await api.post('/compartir/quitar', { ...base, usuarios: quitar });
       const partes = [];
+      if (obsCambio) {
+        if (uno) {
+          const r = await api.put(`/expedientes/${ids[0]}/observaciones`, { observaciones: obs });
+          actualizarObservaciones(ids[0], r.data?.observaciones ?? obs);
+        } else {
+          const r = await api.post('/expedientes/observaciones', { ids, observaciones: obs, agregar: true });
+          Object.entries(r.data?.observaciones || {}).forEach(([id, o]) => actualizarObservaciones(id, o));
+        }
+        partes.push(uno ? 'se guardaron las observaciones' : `se agregó la observación a ${ids.length} expedientes`);
+      }
       if (agregar.length) partes.push(`se dio acceso a ${agregar.map(nombreDe).join(', ')}`);
       if (quitar.length) partes.push(`se quitó el acceso a ${quitar.map(nombreDe).join(', ')}`);
       const que = todos ? 'Todos tus expedientes' : (uno ? 'Expediente' : `${ids.length} expediente(s)`);
@@ -146,9 +162,21 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
           })}
         </div>
 
+        {conObservaciones && (
+          <div className="modal-compartir-observaciones" style={{ borderColor: theme.border }}>
+            <label htmlFor="compartir-observaciones" style={{ color: theme.textPrimary }}>
+              <MessageSquareText size={14} color="#a16207" /> {uno ? 'Observaciones' : `Agregar una observación a los ${ids.length} expedientes`}
+              <span style={{ color: theme.textSecondary }}>(opcional · las verán quienes tengan acceso)</span>
+            </label>
+            <textarea id="compartir-observaciones" rows={2} maxLength={MAX_OBSERVACIONES} value={obs} onChange={(e) => setObs(e.target.value)}
+              placeholder={uno ? 'Ej.: revisar el folio, falta la firma…' : 'Se agrega al final de las observaciones de cada uno'}
+              style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }} />
+          </div>
+        )}
+
         <footer className="modal-compartir-pie" style={{ borderColor: theme.border }}>
           <small style={{ color: isDarkMode ? '#a5b4fc' : theme.textSecondary }}>
-            {hayCambios ? [agregar.length ? `+${agregar.length} con acceso` : '', quitar.length ? `−${quitar.length} sin acceso` : ''].filter(Boolean).join(' · ') : 'Marca o desmarca personas'}
+            {hayCambios ? [agregar.length ? `+${agregar.length} con acceso` : '', quitar.length ? `−${quitar.length} sin acceso` : '', obsCambio ? 'observaciones' : ''].filter(Boolean).join(' · ') : 'Marca o desmarca personas'}
           </small>
           <button type="button" className="boton-barra" onClick={cerrar} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>Cancelar</button>
           <button type="button" className="boton-barra boton-guardar" onClick={guardar} disabled={guardando || !hayCambios}>

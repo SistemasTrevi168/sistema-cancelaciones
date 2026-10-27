@@ -24,6 +24,7 @@ import nombres
 import plantilla_sugerida
 import kpis
 import perfil
+import notificaciones
 import versiones
 import respaldos
 import reparaciones
@@ -924,6 +925,7 @@ app.include_router(auth.router)
 app.include_router(kpis.router)
 app.include_router(perfil.router)
 app.include_router(perfil.router_admin)
+app.include_router(notificaciones.router)
 app.include_router(respaldos.router)
 app.include_router(compartir.router)
 app.include_router(documentos.router)
@@ -2212,6 +2214,7 @@ def eliminar_usuario(
         # Su actividad (inicios de sesión, lecturas…) también se va, para que no cuente en los reportes
         db.query(models.Actividad).filter(models.Actividad.username == nombre_usuario).delete(synchronize_session=False)
         db.query(models.Sesion).filter(models.Sesion.username == nombre_usuario).delete(synchronize_session=False)
+        db.query(models.Notificacion).filter(models.Notificacion.username == nombre_usuario).delete(synchronize_session=False)
         db.query(models.Compartido).filter((models.Compartido.propietario == nombre_usuario) | (models.Compartido.con_usuario == nombre_usuario)).delete(synchronize_session=False)
         db.delete(usuario)
         db.commit()

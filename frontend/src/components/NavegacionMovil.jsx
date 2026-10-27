@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
+import CampanaNotificaciones from './CampanaNotificaciones';
 import usePresencia from '../ui/usarPresencia';
 
 // Navegación del celular:
@@ -39,7 +40,7 @@ const TITULOS_PESTANA = {
 };
 
 export default function NavegacionMovil() {
-  const { theme, isDarkMode, toggleTheme, activeTab, setActiveTab, currentUser, esAdmin, esRevisor, verCompartidos, setShowLogoutModal } = useApp();
+  const { theme, isDarkMode, toggleTheme, activeTab, setActiveTab, currentUser, esAdmin, esRevisor, verCompartidos, setShowLogoutModal, puedeServidor } = useApp();
   const [cuenta, setCuenta] = useState(false);
   const [mas, setMas] = useState(false);
   const botonCuenta = useRef(null);
@@ -109,6 +110,7 @@ export default function NavegacionMovil() {
           <strong>{TITULOS_PESTANA[activeTab] || 'Cancelación de Hipotecas'}</strong>
           <small style={{ color: theme.textSecondary }}>Cancelación de Hipotecas</small>
         </div>
+        {puedeServidor?.('notificaciones') && <CampanaNotificaciones className="campana-movil" tam={19} />}
         <button
           ref={botonCuenta}
           type="button"

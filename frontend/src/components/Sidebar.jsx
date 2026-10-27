@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
+import CampanaNotificaciones from './CampanaNotificaciones';
 
 export default function Sidebar() {
   const navRef = useRef(null);
@@ -18,7 +19,9 @@ export default function Sidebar() {
     setActiveTab,
     setShowLogoutModal,
     theme,
-    toggleTheme
+    toggleTheme,
+    puedeServidor,
+    notificaciones,
   } = useApp();
 
   // Mide la pestaña activa para mover el indicador
@@ -235,6 +238,7 @@ export default function Sidebar() {
                   }}
                 >
                   <Inbox size={18} /> Compartidos conmigo
+                  {(notificaciones?.lista || []).some((x) => !x.leida && String(x.tipo).startsWith('compartir')) && <span className="punto-nuevo" title="Te compartieron expedientes nuevos" />}
                 </button>
 
                   </>
@@ -329,13 +333,16 @@ export default function Sidebar() {
                 </button>
               </div>
 
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
               <button
                 onClick={() => setActiveTab('perfil')}
                 className="pulse-hover"
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: activeTab === 'perfil' ? `${theme.accent}1f` : theme.subtleBg, color: activeTab === 'perfil' ? theme.accent : theme.textPrimary, border: `1px solid ${activeTab === 'perfil' ? theme.accent : theme.border}`, padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '13px', marginBottom: '8px' }}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: activeTab === 'perfil' ? `${theme.accent}1f` : theme.subtleBg, color: activeTab === 'perfil' ? theme.accent : theme.textPrimary, border: `1px solid ${activeTab === 'perfil' ? theme.accent : theme.border}`, padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' }}
               >
                 <UserCog size={16} /> Mi perfil
               </button>
+              {puedeServidor?.('notificaciones') && <CampanaNotificaciones className="campana-lateral" />}
+              </div>
 
               <button
                 onClick={() => setShowLogoutModal(true)}

@@ -641,6 +641,37 @@ chk("acto sin VSM: no se calcula con el monto", not _d.get("credito_a_salario"),
 _d = actos_ifrem.datos_de_acto({"texto": "CREDITO HASTA POR SETENTA Y OCHO PUNTO SEIS MIL CUATROCIENTOS CINCUENTA Y SIETE VECES EL SALARIO MINIMO, EQUIVALENTE A $125,733.76", "clave": "A.C.S."}, services)
 chk("acto con VSM con letra", _d.get("credito_a_salario") == "setenta y ocho punto seis mil cuatrocientos cincuenta y siete", _d.get("credito_a_salario"))
 
+# --- Notificaciones: a quien le comparten expedientes le llega un aviso ---
+with cliente() as c_nt:
+    _hadm = {"Authorization": "Bearer " + c_nt.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+    c_nt.cookies.clear()
+    for _u in (f"ntA_{SUF}", f"ntB_{SUF}"):
+        c_nt.post("/api/admin/usuarios", data={"username": _u, "password": "Prueba2026!", "rol": "operador"}, headers=_hadm)
+    _ha = {"Authorization": "Bearer " + c_nt.post("/api/auth/login", json={"username": f"ntA_{SUF}", "password": "Prueba2026!"}).json()["token"]}
+    c_nt.cookies.clear()
+    _hb = {"Authorization": "Bearer " + c_nt.post("/api/auth/login", json={"username": f"ntB_{SUF}", "password": "Prueba2026!"}).json()["token"]}
+    c_nt.cookies.clear()
+    _ids = []
+    for _n in range(2):
+        r = c_nt.post("/api/expedientes/guardar", json={"expedientes": [{"ref": "n", "datos": {**DATOS, "numero_credito": "19" + str(uuid.uuid4().int)[:8], "nombre_acreditado": f"PERSONA NOTIF {_n}"}, "plantilla": PLANTILLA}]}, headers=_ha)
+        _ids.append(r.json()["resultados"][0]["expediente_id"])
+    chk("notificaciones: al inicio no hay", c_nt.get("/api/notificaciones", headers=_hb).json()["no_leidas"] == 0)
+    c_nt.post("/api/compartir", json={"ids": _ids, "usuarios": [f"ntB_{SUF}"]}, headers=_ha)
+    _n = c_nt.get("/api/notificaciones", headers=_hb).json()
+    chk("notificaciones: le llega una por compartir varios", _n["no_leidas"] == 1 and "2 expedientes" in _n["notificaciones"][0]["titulo"]
+        and "PERSONA NOTIF" in _n["notificaciones"][0]["mensaje"], _n)
+    c_nt.post("/api/compartir", json={"ids": _ids, "usuarios": [f"ntB_{SUF}"]}, headers=_ha)
+    chk("notificaciones: volver a compartir lo mismo no avisa otra vez", c_nt.get("/api/notificaciones", headers=_hb).json()["no_leidas"] == 1)
+    chk("notificaciones: quien compartió no recibe", c_nt.get("/api/notificaciones", headers=_ha).json()["no_leidas"] == 0)
+    c_nt.post("/api/compartir", json={"todos": True, "usuarios": [f"ntB_{SUF}"]}, headers=_ha)
+    _n = c_nt.get("/api/notificaciones", headers=_hb).json()
+    chk("notificaciones: compartir todos", _n["no_leidas"] == 2 and "todos sus expedientes" in _n["notificaciones"][0]["titulo"], _n)
+    c_nt.post("/api/notificaciones/leer", json={"ids": [_n["notificaciones"][0]["id"]]}, headers=_hb)
+    chk("notificaciones: marcar una", c_nt.get("/api/notificaciones", headers=_hb).json()["no_leidas"] == 1)
+    c_nt.post("/api/notificaciones/leer", json={"todas": True}, headers=_hb)
+    chk("notificaciones: marcar todas", c_nt.get("/api/notificaciones", headers=_hb).json()["no_leidas"] == 0)
+    chk("notificaciones: sin sesión no", c_nt.get("/api/notificaciones").status_code == 401)
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

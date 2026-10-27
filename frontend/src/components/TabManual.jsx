@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import useCelular from '../usarCelular';
-import { BookOpen, CheckCircle, CreditCard, Eraser, Eye, House, Loader2, PenLine, User, Users, X } from 'lucide-react';
+import { BookOpen, CheckCircle, CreditCard, Eraser, Eye, FileText, House, Loader2, PenLine, User, Users, X } from 'lucide-react';
 import { API_BASE, encabezadosSesion } from '../api';
 import { useApp } from '../AppContext';
 import { avisar, confirmar } from '../ui/notificaciones';
@@ -26,34 +26,41 @@ const SECCIONES = [
     ],
   },
   {
-    titulo: 'Crédito (carta de instrucción)',
-    icono: CreditCard,
-    campos: [
-      { clave: 'numero_credito', etiqueta: 'Número de crédito', ejemplo: '1505068636', obligatorio: true },
-      { clave: 'numero_carta', etiqueta: 'Número de carta', ejemplo: '0543910959' },
-      { clave: 'monto_credito', etiqueta: 'Monto del crédito', ejemplo: '167880.96', ayuda: 'Con número; se da formato de pesos y se escribe con letra.', normalizar: true },
-      { clave: 'credito_a_salario', etiqueta: 'Crédito en VSM', ejemplo: '45.2095', ayuda: 'Veces salario mínimo, con número.', normalizar: true },
-      { clave: 'entidad_financiera', etiqueta: 'Entidad financiera', ejemplo: 'INFONAVIT', mayusculas: true },
-      { clave: 'fecha_expedicion', etiqueta: 'Fecha de expedición', ejemplo: '11/08/2026', ayuda: 'Puedes escribirla como 11/08/2026.', normalizar: true },
-      { clave: 'fecha_liquidacion', etiqueta: 'Fecha de liquidación', ejemplo: '20/06/2024', normalizar: true },
-    ],
-  },
-  {
-    titulo: 'Inmueble (constancia de folio)',
-    icono: House,
-    campos: [
-      { clave: 'folio_real', etiqueta: 'Folio real electrónico', ejemplo: '37509' },
-      { clave: 'oficina_registral', etiqueta: 'Oficina registral', ejemplo: 'Toluca' },
-      { clave: 'datos_inmueble', etiqueta: 'Datos del inmueble', ejemplo: 'Departamento 2, lote 2, manzana 10, colonia San José la Pilita, Metepec, Estado de México', ancho: true, largo: true },
-    ],
-  },
-  {
     titulo: 'Escritura de origen',
     icono: BookOpen,
     campos: [
       { clave: 'numero_escritura', etiqueta: 'Número de escritura', ejemplo: '6411', ayuda: 'Con número; se escribe con letra.', normalizar: true },
       { clave: 'fecha_escritura', etiqueta: 'Fecha de escritura', ejemplo: '10/09/2018', normalizar: true },
       { clave: 'notario_origen_completo', etiqueta: 'Notario de origen', ejemplo: 'LIC. JORGE VALDES RAMIREZ, NOTARIO PÚBLICO NO. 24 DEL ESTADO DE MÉXICO', ayuda: 'Nombre, número y de dónde es; se le da el formato de la plantilla.', ancho: true, largo: true, normalizar: true },
+    ],
+  },
+  {
+    titulo: 'Crédito',
+    icono: CreditCard,
+    campos: [
+      { clave: 'credito_a_salario', etiqueta: 'VSMM (veces el salario mínimo mensual)', ejemplo: '45.2095', ayuda: 'Con número; se escribe con letra.', normalizar: true },
+      { clave: 'monto_credito', etiqueta: 'Monto del crédito', ejemplo: '167880.96', ayuda: 'Con número; se da formato de pesos y se escribe con letra.', normalizar: true },
+      { clave: 'monto_letras', etiqueta: 'Monto del crédito en letras', ejemplo: 'Se escribe solo al poner el monto', ayuda: 'Se llena solo con el monto; puedes corregir la redacción.', ancho: true, largo: true },
+    ],
+  },
+  {
+    titulo: 'Inmueble (constancia de folio)',
+    icono: House,
+    campos: [
+      { clave: 'oficina_registral', etiqueta: 'Oficina registral', ejemplo: 'Toluca' },
+      { clave: 'folio_real', etiqueta: 'Folio real electrónico', ejemplo: '37509' },
+      { clave: 'datos_inmueble', etiqueta: 'Datos del inmueble', ejemplo: 'Departamento 2, lote 2, manzana 10, colonia San José la Pilita, Metepec, Estado de México', ancho: true, largo: true },
+    ],
+  },
+  {
+    titulo: 'Carta de instrucción',
+    icono: FileText,
+    campos: [
+      { clave: 'fecha_expedicion', etiqueta: 'Fecha de expedición', ejemplo: '11/08/2026', ayuda: 'Puedes escribirla como 11/08/2026.', normalizar: true },
+      { clave: 'numero_carta', etiqueta: 'Número de carta', ejemplo: '0543910959' },
+      { clave: 'fecha_liquidacion', etiqueta: 'Fecha de liquidación', ejemplo: '20/06/2024', normalizar: true },
+      { clave: 'numero_credito', etiqueta: 'Número de crédito', ejemplo: '1505068636', obligatorio: true },
+      { clave: 'entidad_financiera', etiqueta: 'Entidad financiera', ejemplo: 'INFONAVIT', mayusculas: true },
     ],
   },
   {
@@ -66,7 +73,7 @@ const SECCIONES = [
       { clave: 'numero_credito_2', etiqueta: 'Número de crédito', ejemplo: '0900203137' },
       { clave: 'numero_carta_2', etiqueta: 'Número de carta', ejemplo: '0524486193' },
       { clave: 'monto_credito_2', etiqueta: 'Monto del crédito', ejemplo: '150000.00', ayuda: 'Con número; se da formato de pesos y se escribe con letra.', normalizar: true },
-      { clave: 'credito_a_salario_2', etiqueta: 'Crédito en VSM', ejemplo: '40.5', ayuda: 'Veces salario mínimo, con número.', normalizar: true },
+      { clave: 'credito_a_salario_2', etiqueta: 'VSMM (veces el salario mínimo mensual)', ejemplo: '40.5', ayuda: 'Veces salario mínimo, con número.', normalizar: true },
       { clave: 'fecha_expedicion_2', etiqueta: 'Fecha de expedición', ejemplo: '11/08/2026', normalizar: true },
       { clave: 'fecha_liquidacion_2', etiqueta: 'Fecha de liquidación', ejemplo: '20/06/2024', normalizar: true },
     ],

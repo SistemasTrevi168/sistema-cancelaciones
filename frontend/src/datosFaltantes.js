@@ -18,10 +18,10 @@ const ETIQUETAS = {
   monto_credito: 'Monto del crédito',
   numero_carta: 'Número de carta',
   fecha_liquidacion: 'Fecha de liquidación',
-  folio_real: 'Folio real',
+  folio_real: 'Folio real electrónico',
   datos_inmueble: 'Datos del inmueble',
   fecha_expedicion: 'Fecha de expedición',
-  credito_a_salario: 'Crédito a salario',
+  credito_a_salario: 'VSMM (veces el salario mínimo)',
   numero_escritura: 'Número de escritura',
   fecha_escritura: 'Fecha de escritura',
   notario_origen_completo: 'Notario de origen',
@@ -33,7 +33,7 @@ const ETIQUETAS = {
   numero_carta_2: 'Número de carta (trabajador dos)',
   fecha_expedicion_2: 'Fecha de expedición (trabajador dos)',
   fecha_liquidacion_2: 'Fecha de liquidación (trabajador dos)',
-  credito_a_salario_2: 'Crédito a salario (trabajador dos)',
+  credito_a_salario_2: 'VSMM (trabajador dos)',
   monto_credito_2: 'Monto del crédito (trabajador dos)',
 };
 

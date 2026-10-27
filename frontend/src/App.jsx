@@ -33,6 +33,7 @@ import TabPerfil from './components/TabPerfil';
 import NavegacionMovil from './components/NavegacionMovil';
 import { AvisoInactividad, AvisoSesionCerrada, AvisoVersionNueva } from './components/AvisosSesion';
 import useVersionNueva from './ui/versionNueva';
+import useNotificaciones from './ui/usarNotificaciones';
 import useVigilanciaSesion from './vigilanciaSesion';
 import useCelular from './usarCelular';
 import { COLOR_ACENTO_DEFECTO, colorLegible } from './colores';
@@ -306,12 +307,13 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   const [historial, setHistorial] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('todos'); // todos / GENERADO / REVISADO / ENTREGADO
-  const [filterPeriod, setFilterPeriod] = useState('all'); // 'all', 'day', 'week', 'month', 'year'
+  const [filterPeriod, setFilterPeriod] = useState('all'); // 'all', 'hoy', 'semana', 'mes', 'anio', 'elegir'
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()); // 0 - 11
   const [selectedWeek, setSelectedWeek] = useState('all'); // 'all', 1, 2, 3, 4, 5
   const [selectedDay, setSelectedDay] = useState('all'); // 'all', 1 .. 31
   const [sortAscending, setSortAscending] = useState(true);
+  const [ordenHistorial, setOrdenHistorial] = useState('az'); // az / za / reciente / antiguo
 
   // --- 9. ESTADOS - Panel de Administración y Usuarios ---
   const [usuariosLista, setUsuariosLista] = useState([]);
@@ -2111,35 +2113,35 @@ const historialSinEstado = (historial || []).filter((item) => {
   // Si no se pudo procesar la fecha del registro, se omite de los filtros por fecha
   if (!parsed) return false;
 
+  const fecha = new Date(parsed.year, parsed.month, parsed.day);
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  if (filterPeriod === 'hoy') return fecha.getTime() === hoy.getTime();
+  if (filterPeriod === 'semana') {
+    // Desde el lunes de esta semana
+    const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
+    return fecha >= lunes && fecha <= hoy;
+  }
+  if (filterPeriod === 'mes') return parsed.year === hoy.getFullYear() && parsed.month === hoy.getMonth();
+  if (filterPeriod === 'anio') return parsed.year === hoy.getFullYear();
+
+  // «Elegir fecha»: año, y si se eligió, mes y día
   const targetYear = parseInt(selectedYear, 10);
-  const targetMonth = parseInt(selectedMonth, 10); // 0 = Enero, 8 = Septiembre
-
-  // Filtro por Año
-  if (filterPeriod === 'year') {
-    return parsed.year === targetYear;
-  }
-
-  // Filtro por Mes
-  if (filterPeriod === 'month') {
-    return parsed.year === targetYear && parsed.month === targetMonth;
-  }
-
-  // Filtro por Día
-  if (filterPeriod === 'day') {
-    const matchesYearMonth = parsed.year === targetYear && parsed.month === targetMonth;
-    if (!matchesYearMonth) return false;
-    if (selectedDay === 'all') return true;
-    return parsed.day === parseInt(selectedDay, 10);
-  }
-
-  return true;
+  if (parsed.year !== targetYear) return false;
+  if (selectedMonth === 'all' || selectedMonth === '' || selectedMonth == null) return true;
+  if (parsed.month !== parseInt(selectedMonth, 10)) return false;
+  if (selectedDay === 'all') return true;
+  return parsed.day === parseInt(selectedDay, 10);
 }).sort((a, b) => {
+  if (ordenHistorial === 'reciente' || ordenHistorial === 'antiguo') {
+    const ta = Date.parse(a.fecha_creacion || '') || 0;
+    const tb = Date.parse(b.fecha_creacion || '') || 0;
+    return ordenHistorial === 'reciente' ? tb - ta : ta - tb;
+  }
   const dExtraA = a.datos_extraidos || {};
   const dExtraB = b.datos_extraidos || {};
   const nomA = (dExtraA.acreditado || dExtraA.nombre_acreditado || a.nombre_acreditado || '').toLowerCase();
   const nomB = (dExtraB.acreditado || dExtraB.nombre_acreditado || b.nombre_acreditado || '').toLowerCase();
-  
-  return sortAscending ? nomA.localeCompare(nomB) : nomB.localeCompare(nomA);
+  return ordenHistorial === 'za' ? nomB.localeCompare(nomA) : nomA.localeCompare(nomB);
 });
 const esIncidencia = (item) => revisarIncidencia(item.datos_extraidos).incidencia;
 const filteredHistorial = filtroEstado === 'todos'
@@ -2446,6 +2448,13 @@ const cambiarEstado = async (ids, estado) => {
       + (faltan.length ? ` No trae ${faltan.join(', ').toLowerCase()}; se dejó lo que ya tenías.` : ''));
   };
 
+  // Notificaciones (campana): p. ej. cuando alguien te comparte expedientes
+  const notificaciones = useNotificaciones(isAuthenticated && puedeServidor('notificaciones'), (nuevas) => {
+    if (!nuevas.some((x) => String(x.tipo).startsWith('compartir'))) return;
+    setHayCompartidos(true);
+    if (activeTab === 'compartidos') cargarHistorialUsuario('compartidos');
+  });
+
   // Aviso del navegador si se cierra o recarga la página con expedientes sin guardar
   const hayBorradores = pendienteSingle() || batchResults.some((r) => !r.error && !r.expediente_id);
   const hayVersionNueva = useVersionNueva();
@@ -2625,6 +2634,9 @@ const cambiarEstado = async (ids, estado) => {
     selectedPlantilla,
     selectedYear,
     setActiveTab: cambiarPestana,
+    cambiarPestana,
+    notificaciones,
+    marcarNotificaciones: notificaciones.marcarLeidas,
     setArchivoExcel,
     setCargando,
     setExpedientes,
@@ -2648,6 +2660,8 @@ const cambiarEstado = async (ids, estado) => {
     showExportMenu,
     singleFiles,
     sortAscending,
+    ordenHistorial,
+    setOrdenHistorial,
     textoProgreso,
     theme,
     toggleAccordion,

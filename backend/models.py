@@ -139,3 +139,17 @@ class Documento(Base):
     respaldado_en = Column(DateTime(timezone=True), nullable=True)  # se incluyó en un respaldo antes de borrarse
     borrado_en = Column(DateTime(timezone=True), nullable=True)     # ya no está en el bucket
     motivo_borrado = Column(String, nullable=True)
+
+
+class Notificacion(Base):
+    """Aviso para un usuario (p. ej. «Ana te compartió 3 expedientes»). Se ve en la campana del menú."""
+    __tablename__ = "notificaciones"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    username = Column(String, index=True, nullable=False)   # para quién es
+    tipo = Column(String, nullable=False)                   # compartir / compartir_todo
+    titulo = Column(String, nullable=False)
+    mensaje = Column(Text, nullable=True)
+    datos = Column(JSON, nullable=True)                      # {de, ids, ...}
+    creada_en = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    leida_en = Column(DateTime(timezone=True), nullable=True)

@@ -1,6 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowUpDown, ChevronLeft, Pencil, ChevronRight, Download, Eye, FileStack, Filter, History, Inbox, ListChecks, Loader2, MessageSquareText, RefreshCw, Search, Share2, ShieldAlert, Users, X,
+  ArrowUpDown, CalendarDays, ChevronLeft, Pencil, ChevronRight, Download, Eye, FileStack, Filter, History, Inbox, ListChecks, Loader2, MessageSquareText, RefreshCw, RotateCcw, Search, Share2, ShieldAlert, Users, X,
 } from 'lucide-react';
 import { etiquetaCampo, revisarIncidencia } from '../datosFaltantes';
 import { useApp } from '../AppContext';
@@ -12,6 +12,8 @@ import { textoObservaciones } from '../ui/observaciones';
 import { ESTADOS, colorEstado } from '../estadosExpediente';
 import usePresencia from '../ui/usarPresencia';
 import Selector from './Selector';
+
+const PERIODOS = [['all', 'Todo'], ['hoy', 'Hoy'], ['semana', 'Esta semana'], ['mes', 'Este mes'], ['anio', 'Este año'], ['elegir', 'Elegir fecha…']];
 
 export default function TabHistorial() {
   const {
@@ -43,9 +45,10 @@ export default function TabHistorial() {
     setSelectedMonth,
     setSelectedYear,
     setShowExportMenu,
-    setSortAscending,
+    ordenHistorial,
+    setOrdenHistorial,
+    historial,
     showExportMenu,
-    sortAscending,
     filtroEstado,
     setFiltroEstado,
     conteoEstados,
@@ -60,23 +63,42 @@ export default function TabHistorial() {
   const exportar = usePresencia(showExportMenu, 150);
   const [bitacora, setBitacora] = useState(null); // { id, titulo, datos }
 
+  // Marcados: se conservan al buscar, filtrar o cambiar de página (solo cuentan los que siguen en la lista)
   const [marcados, setMarcados] = useState({});    // id -> true
+  const [verMarcados, setVerMarcados] = useState(false);
   const idDe = (item) => String(item.id || item.expediente_id);
-  const visiblesIds = filteredHistorial.map(idDe);
-  const marcadosIds = visiblesIds.filter((i) => marcados[i]);
-  const todosMarcados = visiblesIds.length > 0 && marcadosIds.length === visiblesIds.length;
+  const existentes = new Set((historial || []).map(idDe));
+  const marcadosIds = Object.keys(marcados).filter((i) => marcados[i] && existentes.has(i));
+  const lista = verMarcados && marcadosIds.length ? (historial || []).filter((h) => marcados[idDe(h)]) : filteredHistorial;
+  const visiblesIds = lista.map(idDe);
+  const visiblesMarcados = visiblesIds.filter((i) => marcados[i]).length;
+  const todosMarcados = visiblesIds.length > 0 && visiblesMarcados === visiblesIds.length;
+  const fueraDeVista = marcadosIds.length - visiblesMarcados;
+  const casilla = useRef(null);
+  useEffect(() => { if (casilla.current) casilla.current.indeterminate = visiblesMarcados > 0 && !todosMarcados; });
+  const alternarVisibles = () => setMarcados((m) => {
+    const nuevo = { ...m };
+    visiblesIds.forEach((i) => { if (todosMarcados) delete nuevo[i]; else nuevo[i] = true; });
+    return nuevo;
+  });
+  const quitarMarcas = () => { setMarcados({}); setVerMarcados(false); };
+  // Años con expedientes (para «Elegir fecha»)
+  const anios = [...new Set([new Date().getFullYear(), ...(historial || []).map((h) => parsearFechaExpediente(h)?.year).filter(Boolean)])].sort((a, b) => b - a);
+  const hayFiltros = !!searchQuery || filterPeriod !== 'all' || filtroEstado !== 'todos';
+  const limpiarFiltros = () => { setSearchQuery(''); setFilterPeriod('all'); setFiltroEstado('todos'); setSelectedMonth('all'); setSelectedDay('all'); };
+  if (verMarcados && marcadosIds.length === 0) setVerMarcados(false);
   const totalEstados = Object.entries(conteoEstados || {}).filter(([k]) => k !== 'INCIDENCIA').reduce((a, [, b]) => a + b, 0);
   const cerrarBitacora = useCallback(() => setBitacora(null), []);
 
   // Paginación: 15 expedientes por página; al cambiar la búsqueda o los filtros se regresa a la primera
   const POR_PAGINA = 15;
   const [pagina, setPagina] = useState(1);
-  const claveFiltros = JSON.stringify([searchQuery, filterPeriod, selectedYear, selectedMonth, selectedDay, filtroEstado, sortAscending]);
+  const claveFiltros = JSON.stringify([searchQuery, filterPeriod, selectedYear, selectedMonth, selectedDay, filtroEstado, ordenHistorial, verMarcados]);
   const [filtrosAnteriores, setFiltrosAnteriores] = useState(claveFiltros);
   if (claveFiltros !== filtrosAnteriores) { setFiltrosAnteriores(claveFiltros); setPagina(1); }
-  const totalPaginas = Math.max(1, Math.ceil(filteredHistorial.length / POR_PAGINA));
+  const totalPaginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
   const paginaVista = Math.min(pagina, totalPaginas);
-  const filasPagina = filteredHistorial.slice((paginaVista - 1) * POR_PAGINA, paginaVista * POR_PAGINA);
+  const filasPagina = lista.slice((paginaVista - 1) * POR_PAGINA, paginaVista * POR_PAGINA);
   const irAPagina = (n) => {
     setPagina(Math.min(Math.max(1, n), totalPaginas));
     document.getElementById('tabla-historial-export')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -85,7 +107,7 @@ export default function TabHistorial() {
   const enCompartidos = activeTab === 'compartidos';
   const nombresDe = (lista) => (lista || []).map((g) => g.nombre || g.usuario).join(', ');
   const marcarVarios = async (estado) => {
-    if (await cambiarEstado(marcadosIds, estado)) setMarcados({});
+    if (await cambiarEstado(marcadosIds, estado)) quitarMarcas();
   };
 
   return (
@@ -109,113 +131,106 @@ export default function TabHistorial() {
                   </button>
                 )}
                 
-                <div className="historial-filtros" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                  {/* Búsqueda por texto */}
-                  <div className="historial-buscar" style={{ display: 'flex', alignItems: 'center', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '0 10px', backgroundColor: theme.inputBg }}>
+              </div>
+
+              {/* FILTROS: búsqueda y orden · periodo · estado */}
+              <div className="historial-filtros-panel" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg }}>
+                <div className="hf-fila hf-principal">
+                  <label className="hf-buscar" style={{ borderColor: theme.border, backgroundColor: theme.inputBg }}>
                     <Search size={16} color={theme.textSecondary} />
                     <input
                       type="text"
-                      placeholder="Buscar nombre, crédito, folio o carta…"
-                      aria-label="Buscar en el historial por nombre, crédito, folio o número de carta"
+                      placeholder="Buscar por nombre, crédito, folio, carta u observaciones…"
+                      aria-label="Buscar en el historial"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      style={{ padding: '8px', border: 'none', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '13px', width: '250px', outline: 'none' }}
+                      style={{ color: theme.textPrimary }}
                     />
                     {searchQuery && (
                       <button type="button" onClick={() => setSearchQuery('')} aria-label="Limpiar búsqueda" className="buscar-limpiar" style={{ color: theme.textSecondary }}><X size={14} /></button>
                     )}
-                  </div>
-
-                  {/* Selector de Periodo */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', border: `1px solid ${theme.border}`, borderRadius: '8px', padding: '0 8px', backgroundColor: theme.inputBg }}>
-                    <Filter size={14} color={theme.textSecondary} />
-                    <Selector
-                      value={filterPeriod}
-                      onChange={(e) => setFilterPeriod(e.target.value)}
-                      style={{ border: 'none', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '13px', padding: '8px 0', cursor: 'pointer' }}
-                    >
-                      <option value="all">Todo el historial</option>
-                      <option value="day">Por Día</option>
-                      <option value="month">Por Mes</option>
-                      <option value="year">Por Año</option>
+                  </label>
+                  <label className="hf-orden" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }}>
+                    <ArrowUpDown size={14} color={theme.textSecondary} />
+                    <span className="hf-orden-texto" style={{ color: theme.textSecondary }}>Ordenar:</span>
+                    <Selector value={ordenHistorial} onChange={(e) => setOrdenHistorial(e.target.value)} aria-label="Ordenar"
+                      style={{ border: 'none', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '13px', fontWeight: 600, padding: '8px 0', cursor: 'pointer' }}>
+                      <option value="az">Nombre A-Z</option>
+                      <option value="za">Nombre Z-A</option>
+                      <option value="reciente">Más recientes</option>
+                      <option value="antiguo">Más antiguos</option>
                     </Selector>
-                  </div>
-
-                  {/* Filtro Dinámico: Año */}
-                  {filterPeriod !== 'all' && (
-                    <Selector
-                      value={selectedYear}
-                      onChange={(e) => setSelectedYear(e.target.value)}
-                      style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', padding: '8px', cursor: 'pointer' }}
-                    >
-                      {[2024, 2025, 2026, 2027].map((y) => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </Selector>
-                  )}
-
-                  {/* Filtro Dinámico: Mes */}
-                  {(filterPeriod === 'day' || filterPeriod === 'month') && (
-                    <Selector
-                      value={selectedMonth}
-                      onChange={(e) => setSelectedMonth(e.target.value)}
-                      style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', padding: '8px', cursor: 'pointer' }}
-                    >
-                      {mesesNombres.map((m, idx) => (
-                        <option key={idx} value={idx}>{m}</option>
-                      ))}
-                    </Selector>
-                  )}
-
-                  {/* Filtro Dinámico: Día */}
-                  {filterPeriod === 'day' && (
-                    <Selector
-                      value={selectedDay}
-                      onChange={(e) => setSelectedDay(e.target.value)}
-                      style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', padding: '8px', cursor: 'pointer' }}
-                    >
-                      <option value="all">Todos los días</option>
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                        <option key={d} value={d}>Día {d}</option>
-                      ))}
-                    </Selector>
-                  )}
-
-                  {/* Orden A-Z / Z-A */}
-                  <button
-                    onClick={() => setSortAscending(!sortAscending)}
-                    title={sortAscending ? 'Orden A-Z' : 'Orden Z-A'}
-                    style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
-                  >
-                    <ArrowUpDown size={14} />
-                    {sortAscending ? 'A-Z' : 'Z-A'}
-                  </button>
+                  </label>
                 </div>
-              </div>
 
-              {/* FILTRO POR ESTADO */}
-              <div className="filtro-estados" role="tablist" aria-label="Filtrar por estado">
-                {[{ id: 'todos', nombre: 'Todos' }, ...ESTADOS].map((e) => {
-                  const activo = filtroEstado === e.id;
-                  const n = e.id === 'todos' ? totalEstados : (conteoEstados?.[e.id] || 0);
-                  const c = e.id === 'todos' ? null : colorEstado(e.id, isDarkMode);
-                  const Icono = e.icono;
-                  return (
-                    <button key={e.id} type="button" role="tab" aria-selected={activo} onClick={() => { setFiltroEstado(e.id); setMarcados({}); }}
-                      className={`filtro-estado ${activo ? 'activo' : ''}`}
-                      style={activo
-                        ? (c ? { ...c, boxShadow: `0 0 0 2px ${c.borderColor}` } : { backgroundColor: theme.accent, color: '#fff', borderColor: theme.accent })
-                        : { backgroundColor: theme.cardBg, color: theme.textSecondary, borderColor: theme.border }}>
-                      {Icono && <Icono size={14} />} {e.nombre} <span className="filtro-estado-n">{n}</span>
-                    </button>
-                  );
-                })}
-                {(conteoEstados?.INCIDENCIA > 0 || filtroEstado === 'INCIDENCIA') && (
-                  <button type="button" role="tab" aria-selected={filtroEstado === 'INCIDENCIA'} onClick={() => { setFiltroEstado('INCIDENCIA'); setMarcados({}); }}
-                    className={`filtro-estado filtro-incidencia ${filtroEstado === 'INCIDENCIA' ? 'activo' : ''}`}
-                    title="Expedientes que no pueden pasar a firma: les falta el notario de origen, o el número y la fecha de la escritura">
-                    <ShieldAlert size={14} /> Incidencias <span className="filtro-estado-n">{conteoEstados?.INCIDENCIA || 0}</span>
-                  </button>
+                <div className="hf-fila">
+                  <span className="hf-etiqueta" style={{ color: theme.textSecondary }}><CalendarDays size={14} /> Periodo</span>
+                  <div className="hf-segmentos" role="radiogroup" aria-label="Periodo" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
+                    {PERIODOS.map(([id, nombre]) => (
+                      <button key={id} type="button" role="radio" aria-checked={filterPeriod === id}
+                        className={`hf-segmento ${filterPeriod === id ? 'activo' : ''}`}
+                        onClick={() => setFilterPeriod(id)}
+                        style={filterPeriod === id ? { backgroundColor: theme.accent, color: '#fff' } : { color: theme.textSecondary }}>
+                        {nombre}
+                      </button>
+                    ))}
+                  </div>
+                  {filterPeriod === 'elegir' && (
+                    <div className="hf-fecha">
+                      <Selector value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} aria-label="Año"
+                        style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', padding: '7px 8px', cursor: 'pointer' }}>
+                        {anios.map((y) => <option key={y} value={y}>{y}</option>)}
+                      </Selector>
+                      <Selector value={selectedMonth} onChange={(e) => { setSelectedMonth(e.target.value); if (e.target.value === 'all') setSelectedDay('all'); }} aria-label="Mes"
+                        style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', padding: '7px 8px', cursor: 'pointer' }}>
+                        <option value="all">Todo el año</option>
+                        {mesesNombres.map((m, idx) => <option key={idx} value={idx}>{m}</option>)}
+                      </Selector>
+                      {selectedMonth !== 'all' && (
+                        <Selector value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} aria-label="Día"
+                          style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px', padding: '7px 8px', cursor: 'pointer' }}>
+                          <option value="all">Todo el mes</option>
+                          {Array.from({ length: new Date(Number(selectedYear), Number(selectedMonth) + 1, 0).getDate() }, (_, i) => i + 1).map((d) => (
+                            <option key={d} value={d}>Día {d}</option>
+                          ))}
+                        </Selector>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="hf-fila">
+                  <span className="hf-etiqueta" style={{ color: theme.textSecondary }}><Filter size={14} /> Estado</span>
+                  <div className="filtro-estados hf-estados" role="tablist" aria-label="Filtrar por estado">
+                    {[{ id: 'todos', nombre: 'Todos' }, ...ESTADOS].map((e) => {
+                      const activo = filtroEstado === e.id;
+                      const n = e.id === 'todos' ? totalEstados : (conteoEstados?.[e.id] || 0);
+                      const c = e.id === 'todos' ? null : colorEstado(e.id, isDarkMode);
+                      const Icono = e.icono;
+                      return (
+                        <button key={e.id} type="button" role="tab" aria-selected={activo} onClick={() => setFiltroEstado(e.id)}
+                          className={`filtro-estado ${activo ? 'activo' : ''}`}
+                          style={activo
+                            ? (c ? { ...c, boxShadow: `0 0 0 2px ${c.borderColor}` } : { backgroundColor: theme.accent, color: '#fff', borderColor: theme.accent })
+                            : { backgroundColor: theme.cardBg, color: theme.textSecondary, borderColor: theme.border }}>
+                          {Icono && <Icono size={14} />} {e.nombre} <span className="filtro-estado-n">{n}</span>
+                        </button>
+                      );
+                    })}
+                    {(conteoEstados?.INCIDENCIA > 0 || filtroEstado === 'INCIDENCIA') && (
+                      <button type="button" role="tab" aria-selected={filtroEstado === 'INCIDENCIA'} onClick={() => setFiltroEstado('INCIDENCIA')}
+                        className={`filtro-estado filtro-incidencia ${filtroEstado === 'INCIDENCIA' ? 'activo' : ''}`}
+                        title="Expedientes que no pueden pasar a firma: les falta el notario de origen, o el número y la fecha de la escritura">
+                        <ShieldAlert size={14} /> Incidencias <span className="filtro-estado-n">{conteoEstados?.INCIDENCIA || 0}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {hayFiltros && (
+                  <div className="hf-activos" style={{ borderColor: theme.border, color: theme.textSecondary }}>
+                    <span>Mostrando <strong style={{ color: theme.textPrimary }}>{filteredHistorial.length}</strong> de {(historial || []).length} expedientes</span>
+                    <button type="button" className="enlace-pequeno" onClick={limpiarFiltros} style={{ color: theme.accent }}><RotateCcw size={13} /> Limpiar filtros</button>
+                  </div>
                 )}
               </div>
 
@@ -223,6 +238,15 @@ export default function TabHistorial() {
                 <div className="barra-marcados" style={{ borderColor: theme.accent, backgroundColor: `${theme.accent}12`, color: theme.textPrimary }}>
                   <ListChecks size={16} color={theme.accent} />
                   <strong>{marcadosIds.length} marcado(s)</strong>
+                  {fueraDeVista > 0 && !verMarcados && (
+                    <span className="marcados-fuera" style={{ color: theme.textSecondary }} title="Se conservan aunque no se vean con esta búsqueda o filtro">
+                      ({fueraDeVista} fuera de esta búsqueda)
+                    </span>
+                  )}
+                  <button type="button" className={`chip-ver-marcados ${verMarcados ? 'activo' : ''}`} onClick={() => setVerMarcados((v) => !v)}
+                    style={verMarcados ? { backgroundColor: theme.accent, color: '#fff', borderColor: theme.accent } : { backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+                    <Eye size={13} /> {verMarcados ? 'Ver toda la lista' : 'Ver solo marcados'}
+                  </button>
                   <span style={{ color: theme.textSecondary }}>Marcar como:</span>
                   {ESTADOS.map((e) => {
                     const Icono = e.icono;
@@ -233,18 +257,18 @@ export default function TabHistorial() {
                     );
                   })}
                   {!enCompartidos && puedeCompartir && (
-                    <button type="button" className="boton-barra boton-compartir" onClick={() => abrirCompartir({ ids: marcadosIds, onListo: () => setMarcados({}) })}>
+                    <button type="button" className="boton-barra boton-compartir" onClick={() => abrirCompartir({ ids: marcadosIds, onListo: quitarMarcas })}>
                       <Share2 size={14} /> Compartir ({marcadosIds.length})
                     </button>
                   )}
-                  <button type="button" className="enlace-pequeno" onClick={() => setMarcados({})} style={{ marginLeft: 'auto' }}>Quitar marcas</button>
+                  <button type="button" className="enlace-pequeno" onClick={quitarMarcas} style={{ marginLeft: 'auto' }}>Quitar marcas</button>
                 </div>
               )}
 
               {/* BARRA DE CONTEO Y BOTÓN GLOBAL DE EXPORTACIÓN */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: theme.subtleBg, borderRadius: '8px', marginBottom: '16px', border: `1px solid ${theme.border}`, flexWrap: 'wrap', gap: '12px' }}>
                 <div style={{ fontSize: '13px', color: theme.textPrimary, fontWeight: '600' }}>
-                  Total encontrados: <span style={{ color: theme.accent, fontSize: '15px', fontWeight: '700' }}>{filteredHistorial.length}</span> expedientes
+                  {verMarcados ? 'Marcados' : 'Total encontrados'}: <span style={{ color: theme.accent, fontSize: '15px', fontWeight: '700' }}>{lista.length}</span> expedientes
                 </div>
 
                 {/* MENÚ DESPLEGABLE GLOBAL DE EXPORTACIÓN */}
@@ -283,13 +307,13 @@ export default function TabHistorial() {
                 </div>
               </div>
               
-              {cargandoHistorial && filteredHistorial.length === 0 ? (
+              {cargandoHistorial && lista.length === 0 ? (
                 <div aria-busy="true" style={{ padding: '8px' }}>
                   {[0, 1, 2, 3, 4].map((n) => (
                     <div key={n} className="esqueleto" style={{ height: '44px', borderRadius: '8px', marginBottom: '10px', opacity: 1 - n * 0.15 }} />
                   ))}
                 </div>
-              ) : filteredHistorial.length === 0 ? (
+              ) : lista.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: theme.textSecondary, fontSize: '14px' }}>
                   {enCompartidos && totalEstados === 0 && !searchQuery
                     ? <><Inbox size={28} color={theme.accent} style={{ display: 'block', margin: '0 auto 8px' }} />Todavía nadie te ha compartido expedientes. Cuando te den acceso, aparecerán aquí.</>
@@ -301,8 +325,8 @@ export default function TabHistorial() {
                     <thead>
                       <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textSecondary }}>
                         <th style={{ padding: '12px 4px 12px 12px', width: '28px' }} className="celda-marca">
-                          <input type="checkbox" aria-label="Marcar todos" checked={todosMarcados}
-                            onChange={() => setMarcados(todosMarcados ? {} : Object.fromEntries(visiblesIds.map((i) => [i, true])))} />
+                          <input ref={casilla} type="checkbox" aria-label="Marcar todos los de esta lista" title="Marcar o desmarcar todos los de esta lista" checked={todosMarcados}
+                            onChange={alternarVisibles} />
                         </th>
                         <th style={{ padding: '12px' }}>Acreditado</th>
                         <th style={{ padding: '12px' }}>No. Crédito</th>
@@ -422,9 +446,9 @@ export default function TabHistorial() {
                       })}
                     </tbody>
                   </table>
-                  {filteredHistorial.length > POR_PAGINA && (
+                  {lista.length > POR_PAGINA && (
                     <nav className="paginacion-lote" aria-label="Páginas del historial" style={{ borderColor: theme.border, color: theme.textSecondary }}>
-                      <span>{(paginaVista - 1) * POR_PAGINA + 1}–{Math.min(paginaVista * POR_PAGINA, filteredHistorial.length)} de {filteredHistorial.length} expedientes</span>
+                      <span>{(paginaVista - 1) * POR_PAGINA + 1}–{Math.min(paginaVista * POR_PAGINA, lista.length)} de {lista.length} expedientes</span>
                       <div className="paginacion-botones">
                         <button type="button" onClick={() => irAPagina(paginaVista - 1)} disabled={paginaVista === 1} aria-label="Página anterior" style={{ borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.textPrimary }}><ChevronLeft size={15} /></button>
                         {Array.from({ length: totalPaginas }, (_, i) => i + 1)

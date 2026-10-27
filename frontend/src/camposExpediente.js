@@ -2,12 +2,13 @@
 
 export const GRUPOS_CAMPOS = [
   { titulo: 'Acreditado', campos: ['nombre_acreditado', 'tiene_conyuge', 'nombre_conyuge'] },
-  {
-    titulo: 'Crédito',
-    campos: ['numero_credito', 'monto_credito', 'monto_letras', 'credito_a_salario', 'entidad_financiera', 'numero_carta', 'fecha_expedicion', 'fecha_liquidacion'],
-  },
-  { titulo: 'Inmueble', campos: ['folio_real', 'oficina_registral', 'datos_inmueble'] },
   { titulo: 'Escritura de origen', campos: ['numero_escritura', 'fecha_escritura', 'notario_origen_completo'] },
+  { titulo: 'Crédito', campos: ['credito_a_salario', 'monto_credito', 'monto_letras'] },
+  { titulo: 'Inmueble', campos: ['oficina_registral', 'folio_real', 'datos_inmueble'] },
+  {
+    titulo: 'Carta de instrucción',
+    campos: ['fecha_expedicion', 'numero_carta', 'fecha_liquidacion', 'numero_credito', 'entidad_financiera'],
+  },
 ];
 
 // Coacreditados: datos del "TRABAJADOR DOS" (los del uno son los de siempre)
@@ -20,13 +21,13 @@ export const ETIQUETAS_CAMPOS = {
   nombre_conyuge: 'Nombre del cónyuge',
   numero_credito: 'Número de crédito',
   monto_credito: 'Monto del crédito',
-  monto_letras: 'Monto en letras',
-  credito_a_salario: 'Crédito a salario',
+  monto_letras: 'Monto del crédito en letras',
+  credito_a_salario: 'VSMM (veces el salario mínimo mensual)',
   entidad_financiera: 'Entidad financiera',
   numero_carta: 'Número de carta',
   fecha_expedicion: 'Fecha de expedición',
   fecha_liquidacion: 'Fecha de liquidación',
-  folio_real: 'Folio real',
+  folio_real: 'Folio real electrónico',
   oficina_registral: 'Oficina registral',
   datos_inmueble: 'Datos del inmueble',
   numero_escritura: 'Número de escritura',
@@ -37,7 +38,7 @@ export const ETIQUETAS_CAMPOS = {
   numero_carta_2: 'Número de carta (dos)',
   fecha_expedicion_2: 'Fecha de expedición (dos)',
   fecha_liquidacion_2: 'Fecha de liquidación (dos)',
-  credito_a_salario_2: 'Crédito a salario (dos)',
+  credito_a_salario_2: 'VSMM (dos)',
   monto_credito_2: 'Monto del crédito (dos)',
 };
 
@@ -82,15 +83,18 @@ export function agruparDatos(datos, coac = false) {
     .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
   puntos.forEach((k) => usados.add(k));
   const otros = claves.filter((k) => !usados.has(k));
-  if (otros.length) grupos.push({ titulo: 'Otros datos', campos: otros });
+  // El desglose del inmueble va justo después de «Inmueble»
   if (puntos.length) {
-    grupos.push({
+    const desglose = {
       titulo: 'Desglose del inmueble',
       nota: 'Referencia del PDF. El Word usa el campo "Datos del inmueble".',
       campos: puntos,
       plegado: true,
-    });
+    };
+    const i = grupos.findIndex((g) => g.titulo === 'Inmueble');
+    grupos.splice(i >= 0 ? i + 1 : grupos.length, 0, desglose);
   }
+  if (otros.length) grupos.push({ titulo: 'Otros datos', campos: otros });
   return grupos.filter((g) => g.campos.length > 0);
 }
 

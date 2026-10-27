@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 import kpis
 import models
+import notificaciones
 from auth import require_user
 from database import get_db
 
@@ -160,11 +161,15 @@ def compartir(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)
         raise HTTPException(status_code=400, detail="Elige al menos a una persona para compartir.")
     C = models.Compartido
     nuevos = 0
+    nombres = _nombres(db)
+    quien = nombres.get(yo, yo)
     if payload.get("todos"):
         for u in para:
             if not db.query(C.id).filter(C.propietario == yo, C.con_usuario == u, C.todos.is_(True)).first():
                 db.add(C(propietario=yo, con_usuario=u, todos=True, creado_por=yo))
                 nuevos += 1
+                notificaciones.notificar(db, u, "compartir_todo", f"{quien} te dio acceso a todos sus expedientes",
+                                         "También verás los que haga después. Están en «Compartidos conmigo».", {"de": yo, "de_nombre": quien})
         db.commit()
         kpis.registrar(yo, "compartir_todo", con=para)
         return {"status": "exito", "nuevos": nuevos}
@@ -172,6 +177,7 @@ def compartir(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)
     exps = _mis_expedientes(db, payload.get("ids") or [], usuario)
     if not exps:
         raise HTTPException(status_code=400, detail="No hay expedientes tuyos para compartir en la selección.")
+    por_persona: Dict[str, list] = {}
     for e in exps:
         agregados = []
         for u in para:
@@ -180,10 +186,24 @@ def compartir(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)
             if not db.query(C.id).filter(C.expediente_id == str(e.id), C.con_usuario == u).first():
                 db.add(C(propietario=e.usuario_propietario, con_usuario=u, expediente_id=str(e.id), todos=False, creado_por=yo))
                 agregados.append(u)
+                por_persona.setdefault(u, []).append(e)
                 nuevos += 1
         if agregados:
             db.add(models.Actividad(username=yo, tipo="compartir", expediente_id=str(e.id), numero_credito=e.numero_credito,
                                     detalle={"con": agregados}))
+    # Aviso a cada persona: un solo aviso por vez que se comparte (aunque sean varios expedientes)
+    for u, lista in por_persona.items():
+        acreditados = [str((e.datos_extraidos or {}).get("nombre_acreditado") or e.numero_credito or "").strip() for e in lista]
+        acreditados = [a for a in acreditados if a]
+        if len(lista) == 1:
+            titulo = f"{quien} te compartió un expediente"
+            mensaje = f"{acreditados[0] if acreditados else 'Expediente'} · crédito {lista[0].numero_credito}"
+        else:
+            titulo = f"{quien} te compartió {len(lista)} expedientes"
+            mensaje = ", ".join(acreditados[:3]) + (f" y {len(lista) - 3} más" if len(lista) > 3 else "")
+        notificaciones.notificar(db, u, "compartir", titulo, mensaje,
+                                 {"de": yo, "de_nombre": quien, "ids": [str(e.id) for e in lista][:200],
+                                  "creditos": [e.numero_credito for e in lista][:200]})
     db.commit()
     return {"status": "exito", "expedientes": len(exps), "nuevos": nuevos}
 

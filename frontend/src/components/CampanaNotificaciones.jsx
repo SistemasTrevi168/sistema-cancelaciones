@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArchiveRestore, Bell, BellRing, Check, History, Inbox, Share2, Trash2, UserMinus, UserX, Users, X } from 'lucide-react';
 import { useApp } from '../AppContext';
+import ErrorBoundary from './ErrorBoundary';
 
 const hace = (iso) => {
   const d = iso ? new Date(iso) : null;
@@ -19,67 +20,102 @@ const tactil = () => typeof window !== 'undefined' && window.matchMedia?.('(hove
 
 // Un aviso. En celular se desliza: a la derecha = leída (o regresarla), a la izquierda = quitar (o borrarla).
 // En computadora: palomita para marcarla leída y equis para quitarla (pasa a «Anteriores»).
+// El deslizado mueve el elemento directo (sin volver a dibujar React en cada movimiento) para que sea fluido.
+const UMBRAL = 72;
 function Aviso({ x, anterior, theme, onAbrir, onLeer, onQuitar, onRestaurar, onBorrar }) {
-  const [dx, setDx] = useState(0);
-  const [saliendo, setSaliendo] = useState(0); // -1 / 1 mientras se va
-  const [arrastrando, setArrastrando] = useState(false);
-  const inicio = useRef(null);
+  const cuerpo = useRef(null);
+  const fondo = useRef(null);
+  const caja = useRef(null);
+  const gesto = useRef(null); // { x, y, dx, activo, paso }
   const deslizo = useRef(false);
-  const dxRef = useRef(0);
   const I = ICONOS[x.tipo] || Bell;
   const rojo = esQuitar(x.tipo);
   const color = rojo ? '#dc2626' : theme.accent;
-  const UMBRAL = 80;
-  const derecha = anterior ? { texto: 'Regresar', icono: ArchiveRestore, fondo: '#2563eb' } : { texto: x.leida ? 'Leída' : 'Marcar leída', icono: Check, fondo: '#16a34a' };
+  const derecha = anterior ? { texto: 'Regresar', icono: ArchiveRestore, fondo: '#2563eb' } : { texto: x.leida ? 'Leída' : 'Leída', icono: Check, fondo: '#16a34a' };
   const izquierda = anterior ? { texto: 'Borrar', icono: Trash2, fondo: '#dc2626' } : { texto: 'Quitar', icono: X, fondo: '#64748b' };
+
+  const pintar = (dx) => {
+    const c = cuerpo.current;
+    const f = fondo.current;
+    if (!c || !f) return;
+    c.style.transform = `translate3d(${dx}px, 0, 0)`;
+    f.style.opacity = dx === 0 ? '0' : '1';
+    f.dataset.lado = dx > 0 ? 'derecha' : 'izquierda';
+    f.dataset.listo = Math.abs(dx) > UMBRAL ? 'si' : 'no';
+  };
+  const animar = (destino, alTerminar) => {
+    const c = cuerpo.current;
+    if (!c) return;
+    c.style.transition = 'transform .22s cubic-bezier(.2, .8, .2, 1)';
+    pintar(destino);
+    const fin = () => { c.removeEventListener('transitionend', fin); c.style.transition = ''; alTerminar?.(); };
+    c.addEventListener('transitionend', fin);
+    setTimeout(fin, 260);
+  };
+  const irse = (lado, accion) => {
+    const ancho = caja.current?.offsetWidth || 320;
+    animar(lado * (ancho + 20), () => {
+      const k = caja.current;
+      if (k) { k.style.height = `${k.offsetHeight}px`; requestAnimationFrame(() => { k.classList.add('saliendo'); k.style.height = '0px'; }); }
+      setTimeout(accion, 200);
+    });
+  };
 
   const empezar = (e) => {
     if (e.pointerType === 'mouse') return;
-    inicio.current = { x: e.clientX, y: e.clientY };
+    gesto.current = { x: e.clientX, y: e.clientY, dx: 0, activo: false, paso: false };
     deslizo.current = false;
-    dxRef.current = 0;
-    setArrastrando(true);
+    if (cuerpo.current) cuerpo.current.style.transition = '';
   };
   const mover = (e) => {
-    const i = inicio.current;
-    if (!i) return;
-    const mx = e.clientX - i.x;
-    if (!deslizo.current && Math.abs(e.clientY - i.y) > Math.abs(mx) && Math.abs(e.clientY - i.y) > 6) { inicio.current = null; setArrastrando(false); return; } // es scroll
-    if (Math.abs(mx) > 8) deslizo.current = true;
-    if (deslizo.current) { dxRef.current = Math.max(-160, Math.min(160, mx)); setDx(dxRef.current); }
+    const g = gesto.current;
+    if (!g) return;
+    const mx = e.clientX - g.x;
+    const my = e.clientY - g.y;
+    if (!g.activo) {
+      if (Math.abs(my) > 8 && Math.abs(my) > Math.abs(mx)) { gesto.current = null; return; } // es scroll de la lista
+      if (Math.abs(mx) < 8) return;
+      g.activo = true;
+      deslizo.current = true;
+      try { cuerpo.current?.setPointerCapture?.(e.pointerId); } catch { /* sin captura */ }
+    }
+    // Más allá del umbral cuesta un poco más (se siente como resorte)
+    const extra = Math.max(0, Math.abs(mx) - UMBRAL);
+    g.dx = Math.sign(mx) * (Math.min(Math.abs(mx), UMBRAL) + extra * 0.55);
+    const paso = Math.abs(g.dx) > UMBRAL;
+    if (paso !== g.paso) { g.paso = paso; if (paso) navigator.vibrate?.(8); }
+    requestAnimationFrame(() => pintar(g.dx));
   };
   const soltar = () => {
-    setArrastrando(false);
-    if (!inicio.current) return;
-    inicio.current = null;
-    const dx = dxRef.current;
-    dxRef.current = 0;
-    if (dx > UMBRAL) {
-      if (anterior) { setSaliendo(1); setTimeout(() => onRestaurar(x), 180); } else { onLeer(x); }
-    } else if (dx < -UMBRAL) {
-      setSaliendo(-1);
-      setTimeout(() => (anterior ? onBorrar(x) : onQuitar(x)), 180);
+    const g = gesto.current;
+    gesto.current = null;
+    if (!g || !g.activo) return;
+    if (g.dx > UMBRAL) {
+      if (anterior) irse(1, () => onRestaurar(x));
+      else animar(0, () => onLeer(x));
+    } else if (g.dx < -UMBRAL) {
+      irse(-1, () => (anterior ? onBorrar(x) : onQuitar(x)));
+    } else {
+      animar(0);
     }
-    setDx(0);
   };
-  const fondo = dx > 0 ? derecha : izquierda;
-  const IF = fondo.icono;
-  const desplazamiento = saliendo ? `${saliendo * 110}%` : `${dx}px`;
+  const ID = derecha.icono;
+  const II = izquierda.icono;
 
   return (
-    <div className={`aviso ${saliendo ? 'saliendo' : ''}`}>
-      {dx !== 0 && (
-        <div className={`aviso-fondo ${dx > 0 ? 'derecha' : 'izquierda'} ${Math.abs(dx) > UMBRAL ? 'listo' : ''}`} style={{ backgroundColor: fondo.fondo }}>
-          <IF size={16} /> {fondo.texto}
-        </div>
-      )}
+    <div ref={caja} className="aviso">
+      <div ref={fondo} className="aviso-fondo" data-lado="izquierda" data-listo="no" style={{ opacity: 0 }}>
+        <span className="aviso-fondo-der" style={{ backgroundColor: derecha.fondo }}><ID size={16} /> {derecha.texto}</span>
+        <span className="aviso-fondo-izq" style={{ backgroundColor: izquierda.fondo }}>{izquierda.texto} <II size={16} /></span>
+      </div>
       <div
+        ref={cuerpo}
         className={`aviso-cuerpo ${x.leida ? '' : 'nuevo'} ${rojo ? '' : 'con-enlace'}`}
         role={rojo ? undefined : 'button'} tabIndex={0}
         onPointerDown={empezar} onPointerMove={mover} onPointerUp={soltar} onPointerCancel={soltar}
         onClick={() => { if (deslizo.current) { deslizo.current = false; return; } onAbrir(x); }}
         onKeyDown={(e) => { if (e.key === 'Enter') onAbrir(x); }}
-        style={{ transform: `translateX(${desplazamiento})`, transition: arrastrando ? 'none' : 'transform .2s ease', backgroundColor: theme.cardBg }}
+        style={{ backgroundColor: theme.cardBg }}
       >
         {!x.leida && <span className="aviso-punto" style={{ backgroundColor: theme.accent }} aria-label="Sin leer" />}
         <span className="aviso-icono" style={{ backgroundColor: `${color}17`, color }}><I size={14} /></span>
@@ -90,13 +126,13 @@ function Aviso({ x, anterior, theme, onAbrir, onLeer, onQuitar, onRestaurar, onB
         <span className="aviso-botones">
           {anterior ? (
             <>
-              <button type="button" title="Regresar a Recientes" aria-label="Regresar a Recientes" onClick={(e) => { e.stopPropagation(); onRestaurar(x); }} style={{ color: theme.textSecondary }}><ArchiveRestore size={14} /></button>
-              <button type="button" title="Borrar" aria-label="Borrar" onClick={(e) => { e.stopPropagation(); onBorrar(x); }} style={{ color: '#dc2626' }}><Trash2 size={14} /></button>
+              <button type="button" title="Regresar a Recientes" aria-label="Regresar a Recientes" onClick={(e) => { e.stopPropagation(); irse(1, () => onRestaurar(x)); }} style={{ color: theme.textSecondary }}><ArchiveRestore size={14} /></button>
+              <button type="button" title="Borrar" aria-label="Borrar" onClick={(e) => { e.stopPropagation(); irse(-1, () => onBorrar(x)); }} style={{ color: '#dc2626' }}><Trash2 size={14} /></button>
             </>
           ) : (
             <>
               {!x.leida && <button type="button" title="Marcar como leída" aria-label="Marcar como leída" onClick={(e) => { e.stopPropagation(); onLeer(x); }} style={{ color: '#16a34a' }}><Check size={15} /></button>}
-              <button type="button" title="Quitar (pasa a Anteriores)" aria-label="Quitar" onClick={(e) => { e.stopPropagation(); onQuitar(x); }} style={{ color: theme.textSecondary }}><X size={15} /></button>
+              <button type="button" title="Quitar (pasa a Anteriores)" aria-label="Quitar" onClick={(e) => { e.stopPropagation(); irse(-1, () => onQuitar(x)); }} style={{ color: theme.textSecondary }}><X size={15} /></button>
             </>
           )}
         </span>
@@ -162,6 +198,7 @@ export default function CampanaNotificaciones({ className = '', tam = 18, estilo
         {n > 0 && <span className="campana-numero">{n > 9 ? '9+' : n}</span>}
       </button>
       {abierta && pos && createPortal(
+        <ErrorBoundary nombre="notificaciones" silencioso>
         <div ref={panel} className={`panel-notificaciones ${isDarkMode ? 'tema-oscuro' : ''}`} role="dialog" aria-label="Notificaciones"
           style={{ ...pos, backgroundColor: theme.cardBg, borderColor: theme.border, color: theme.textPrimary }}>
           <header style={{ borderColor: theme.border }}>
@@ -205,7 +242,8 @@ export default function CampanaNotificaciones({ className = '', tam = 18, estilo
               {vista === 'nuevas' ? 'Desliza → para marcar leída · ← para quitar' : 'Desliza → para regresar · ← para borrar'}
             </p>
           )}
-        </div>,
+        </div>
+        </ErrorBoundary>,
         document.body,
       )}
     </>

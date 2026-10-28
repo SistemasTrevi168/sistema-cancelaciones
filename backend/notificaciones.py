@@ -21,6 +21,8 @@ MAXIMO = 40
 def notificar(db: Session, username: str, tipo: str, titulo: str, mensaje: str = "", datos: Optional[Dict[str, Any]] = None):
     """Agrega una notificación (sin commit: se guarda con lo demás)."""
     db.add(models.Notificacion(username=username, tipo=tipo, titulo=titulo[:250], mensaje=(mensaje or "")[:1000], datos=datos or {}))
+    import tiempo_real
+    tiempo_real.avisar_al_guardar(db, username)  # le llega al instante al navegador de esa persona
 
 
 def _json(n: models.Notificacion) -> Dict[str, Any]:
@@ -66,6 +68,8 @@ def archivar(payload: Dict[str, Any] = Body(default={}), db: Session = Depends(g
         fila.archivada_en = ahora
         fila.leida_en = fila.leida_en or ahora
         n += 1
+    import tiempo_real
+    tiempo_real.avisar_al_guardar(db, sesion["username"])  # sus otros dispositivos se actualizan
     db.commit()
     return {"archivadas": n}
 
@@ -76,6 +80,8 @@ def restaurar(payload: Dict[str, Any] = Body(default={}), db: Session = Depends(
     N = models.Notificacion
     ids = [str(i) for i in (payload.get("ids") or [])]
     n = db.query(N).filter(N.username == sesion["username"], N.id.in_(ids)).update({N.archivada_en: None}, synchronize_session=False) if ids else 0
+    import tiempo_real
+    tiempo_real.avisar_al_guardar(db, sesion["username"])  # sus otros dispositivos se actualizan
     db.commit()
     return {"restauradas": n}
 
@@ -91,6 +97,8 @@ def borrar(payload: Dict[str, Any] = Body(default={}), db: Session = Depends(get
             return {"borradas": 0}
         q = q.filter(N.id.in_(ids))
     n = q.delete(synchronize_session=False)
+    import tiempo_real
+    tiempo_real.avisar_al_guardar(db, sesion["username"])  # sus otros dispositivos se actualizan
     db.commit()
     return {"borradas": n}
 
@@ -106,5 +114,7 @@ def marcar_leidas(payload: Dict[str, Any] = Body(default={}), db: Session = Depe
             return {"marcadas": 0}
         q = q.filter(N.id.in_(ids))
     n = q.update({N.leida_en: _ahora()}, synchronize_session=False)
+    import tiempo_real
+    tiempo_real.avisar_al_guardar(db, sesion["username"])  # sus otros dispositivos se actualizan
     db.commit()
     return {"marcadas": n}

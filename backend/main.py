@@ -25,6 +25,7 @@ import plantilla_sugerida
 import kpis
 import perfil
 import notificaciones
+import tiempo_real
 import versiones
 import respaldos
 import reparaciones
@@ -927,6 +928,7 @@ app.include_router(kpis.router)
 app.include_router(perfil.router)
 app.include_router(perfil.router_admin)
 app.include_router(notificaciones.router)
+app.include_router(tiempo_real.router)
 app.include_router(respaldos.router)
 app.include_router(compartir.router)
 app.include_router(documentos.router)
@@ -1995,6 +1997,19 @@ def cambiar_estado_expediente(
     _cambiar_estado(db, expediente, estado, sesion["username"])
     db.commit()
     return {"expediente_id": str(expediente.id), "estado": estado_de(expediente)}
+
+
+@app.post("/api/errores-cliente")
+def error_del_navegador(payload: Dict[str, Any] = Body(default={}), request: Request = None):
+    """Errores que pasaron en el navegador (pantalla en blanco, etc.): quedan en el registro para corregirlos."""
+    try:
+        sid = auth.session_id_de(request) if request else None
+        print(f"--> ERROR EN NAVEGADOR [{str(payload.get('donde') or '')[:200]}] {str(payload.get('mensaje') or '')[:500]} "
+              f"| {str(payload.get('pagina') or '')[:200]} | {str(payload.get('navegador') or '')[:200]} | sesion {str(sid or '')[:8]}\n"
+              f"{str(payload.get('pila') or '')[:2000]}")
+    except Exception:
+        pass
+    return {"ok": True}
 
 
 @app.put("/api/expedientes/{expediente_id}/observaciones")

@@ -25,7 +25,7 @@ DURACION_SESION = timedelta(hours=24)
 INACTIVIDAD_SEGUNDOS = int(os.getenv("INACTIVIDAD_SEGUNDOS", "900"))  # 15 minutos
 # Funciones que tiene esta versión del servidor: la pantalla solo muestra las que el servidor ya sabe hacer
 # (así, si la pantalla se publica antes que el servidor, no aparecen botones que todavía no funcionarían)
-FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir", "restablecer_password", "observaciones", "notificaciones", "registro_compartidos"]
+FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir", "restablecer_password", "observaciones", "notificaciones", "registro_compartidos", "tiempo_real"]
 GRACIA_SEGUNDOS = int(os.getenv("GRACIA_SEGUNDOS", "45"))
 
 # Por qué se cerró una sesión (para avisarle al otro dispositivo). Se guarda en memoria unas horas.
@@ -36,6 +36,13 @@ def anotar_cierre(ids, motivo: str):
     ahora = time.time()
     for sid in ids:
         _MOTIVOS_CIERRE[sid] = (motivo, ahora)
+    # Se avisa al instante al navegador de esa sesión (si está conectado)
+    try:
+        import tiempo_real
+        for sid in ids:
+            tiempo_real.publicar_cierre(sid, motivo)
+    except Exception as e:
+        print(f"Aviso en tiempo real no enviado: {e}")
     for sid, (_, t) in list(_MOTIVOS_CIERRE.items()):
         if ahora - t > 6 * 3600:
             _MOTIVOS_CIERRE.pop(sid, None)

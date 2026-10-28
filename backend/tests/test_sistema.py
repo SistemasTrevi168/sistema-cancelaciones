@@ -701,6 +701,12 @@ with cliente() as c_nt:
     chk("registro: el admin ve qué, de quién, con quién y cuándo", len(_mios) == 2 and all(x["con_usuario"] == f"ntB_{SUF}" and x["compartio"] == f"ntA_{SUF}"
         and x["acreditado"].startswith("PERSONA NOTIF") and x["creado_en"] for x in _mios), _mios[:1])
 
+# --- Tiempo real: con una sesión que ya no existe, el flujo avisa que se cerró ---
+with cliente() as c_tr:
+    r = c_tr.get("/api/eventos", headers={"Authorization": "Bearer no-existe"})
+    chk("tiempo real: sesión cerrada se avisa", r.status_code == 200 and "event: sesion_cerrada" in r.text, r.text[:200])
+    chk("errores del navegador: se registran", c_tr.post("/api/errores-cliente", json={"mensaje": "prueba", "donde": "test"}).status_code == 200)
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

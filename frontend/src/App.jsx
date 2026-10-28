@@ -35,6 +35,7 @@ import NavegacionMovil from './components/NavegacionMovil';
 import { AvisoInactividad, AvisoSesionCerrada, AvisoVersionNueva } from './components/AvisosSesion';
 import useVersionNueva from './ui/versionNueva';
 import useNotificaciones from './ui/usarNotificaciones';
+import useTiempoReal from './ui/tiempoReal';
 import useVigilanciaSesion from './vigilanciaSesion';
 import useCelular from './usarCelular';
 import { COLOR_ACENTO_DEFECTO, colorLegible } from './colores';
@@ -2454,6 +2455,12 @@ const cambiarEstado = async (ids, estado) => {
     if (!nuevas.some((x) => /^(compartir|quitar)/.test(String(x.tipo)))) return;
     if (nuevas.some((x) => String(x.tipo).startsWith('compartir'))) setHayCompartidos(true);
     if (activeTab === 'compartidos') cargarHistorialUsuario('compartidos');
+  });
+
+  // Tiempo real: las notificaciones llegan al instante y, si cierran esta sesión en otro dispositivo, se sale al momento
+  useTiempoReal(isAuthenticated && puedeServidor('tiempo_real'), {
+    onNotificaciones: () => notificaciones.recargar(),
+    onSesionCerrada: (motivo) => navegador.alExpirar?.(motivo),
   });
 
   // Aviso del navegador si se cierra o recarga la página con expedientes sin guardar

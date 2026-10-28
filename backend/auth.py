@@ -82,6 +82,8 @@ def validar_password_nueva(password: str):
 
 def cerrar_sesiones_de(db: Session, username: str, excepto: str = None, motivo: str = "cerrada"):
     """Cierra todas las sesiones abiertas de un usuario (opcionalmente menos una)."""
+    import tiempo_real
+    tiempo_real.avisar_al_guardar(db, username, "sesiones")
     q = db.query(Sesion).filter(Sesion.username == username)
     if excepto:
         q = q.filter(Sesion.id != excepto)
@@ -380,7 +382,9 @@ def ping(request: Request, activo: int = 0, db: Session = Depends(get_db)):
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     session_id = session_id_de(request)
     if session_id:
-        db.query(Sesion).filter(Sesion.id == session_id).delete(synchronize_session=False)
+        actual = db.query(Sesion).filter(Sesion.id == session_id).first()
+        if actual:
+            db.delete(actual)  # (así se avisa a sus otros dispositivos que esta sesión ya no está)
         db.commit()
 
     response.delete_cookie("session_id", samesite="none", secure=True)

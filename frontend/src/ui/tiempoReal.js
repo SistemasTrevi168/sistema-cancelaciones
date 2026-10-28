@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { API_BASE, encabezadosSesion } from '../api';
+import { emitir } from './eventosTiempoReal';
 
 // Conexión en tiempo real con el servidor (Server-Sent Events leídos con fetch, para mandar la sesión
 // también en el encabezado, como lo necesita Safari/iPhone).
@@ -26,6 +27,7 @@ export default function useTiempoReal(activo, { onNotificaciones, onSesionCerrad
       });
       let d;
       try { d = JSON.parse(datos || '{}'); } catch { d = {}; }
+      emitir(tipo, d);
       if (tipo === 'notificaciones') cb.current.onNotificaciones?.(d);
       if (tipo === 'sesion_cerrada') {
         vivo = false;

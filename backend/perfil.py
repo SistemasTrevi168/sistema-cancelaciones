@@ -227,6 +227,8 @@ def cerrar_sesion(prefijo: str, request: Request, db: Session = Depends(get_db),
 @router.post("/sesiones/cerrar-otras")
 def cerrar_otras(request: Request, db: Session = Depends(get_db), sesion: dict = Depends(require_user)):
     actual = session_id_de(request)
+    import tiempo_real
+    tiempo_real.avisar_al_guardar(db, sesion["username"], "sesiones")
     q = db.query(models.Sesion).filter(models.Sesion.username == sesion["username"], models.Sesion.id != actual)
     anotar_cierre([s.id for s in q.all()], "otro_dispositivo")
     q.delete(synchronize_session=False)
@@ -286,6 +288,8 @@ def cerrar_sesion_de_usuario(usuario_id: str, prefijo: str, request: Request, db
 def cerrar_todas_de_usuario(usuario_id: str, request: Request, db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
     user = _usuario_por_id(db, usuario_id)
     actual = session_id_de(request)
+    import tiempo_real
+    tiempo_real.avisar_al_guardar(db, user.username, "sesiones")
     q = db.query(models.Sesion).filter(models.Sesion.username == user.username, models.Sesion.id != actual)
     anotar_cierre([s.id for s in q.all()], "admin")
     q.delete(synchronize_session=False)

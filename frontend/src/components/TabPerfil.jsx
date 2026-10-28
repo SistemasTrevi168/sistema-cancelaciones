@@ -5,6 +5,7 @@ import {
 import { api } from '../api';
 import { useApp } from '../AppContext';
 import { avisar, confirmar } from '../ui/notificaciones';
+import { escuchar } from '../ui/eventosTiempoReal';
 import { COLORES_ACENTO, colorLegible } from '../colores';
 import Avatar from './Avatar';
 import RecortarFoto from './RecortarFoto';
@@ -56,6 +57,17 @@ export default function TabPerfil() {
     setPerfil(p);
     setCurrentUser((u) => (u ? { ...u, nombre_mostrar: p.nombre_mostrar, foto: p.foto, color_acento: p.color_acento, tema: p.tema } : u));
   };
+
+  // Si se abre o se cierra una de sus sesiones (en este u otro dispositivo), la lista se actualiza sola
+  useEffect(() => {
+    let espera = null;
+    const quitar = escuchar('sesiones', (d) => {
+      if (d?.usuario && d.usuario !== currentUser?.username) return;
+      clearTimeout(espera);
+      espera = setTimeout(() => { api.get('/perfil').then((res) => setPerfil(res.data)).catch(() => {}); }, 250);
+    });
+    return () => { quitar(); clearTimeout(espera); };
+  }, [currentUser?.username]);
 
   useEffect(() => {
     let vigente = true;

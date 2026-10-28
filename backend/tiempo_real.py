@@ -52,21 +52,40 @@ def publicar_cierre(sesion_id: str, motivo: str):
     _enviar(lambda c: c[1] == sesion_id, {"tipo": "sesion_cerrada", "motivo": motivo})
 
 
-# Las notificaciones se avisan cuando ya quedaron guardadas (después del commit)
-def avisar_al_guardar(db, username: str):
-    db.info.setdefault("tr_notificar", set()).add(username)
+def publicar_todos(tipo: str, datos: Optional[Dict[str, Any]] = None):
+    _enviar(lambda c: True, {"tipo": tipo, **(datos or {})})
+
+
+# Se avisa cuando lo que cambió ya quedó guardado (después del commit):
+#  - «notificaciones» solo a esa persona;
+#  - «sesiones» (se abrió o cerró una sesión) a todos los conectados con el usuario que cambió:
+#    así se actualizan «Mi perfil → Sesiones» y el perfil que esté viendo un administrador.
+def avisar_al_guardar(db, username: str, tipo: str = "notificaciones"):
+    if username:
+        db.info.setdefault("tr_pendientes", set()).add((username, tipo))
+
+
+@event.listens_for(SesionBD, "after_flush")
+def _tras_flush(db, _contexto):
+    import models
+    for obj in list(db.new) + list(db.deleted):
+        if isinstance(obj, models.Sesion):
+            avisar_al_guardar(db, obj.username, "sesiones")
 
 
 @event.listens_for(SesionBD, "after_commit")
 def _tras_commit(db):
-    pendientes = db.info.pop("tr_notificar", None)
-    for u in pendientes or ():
-        publicar_usuario(u, "notificaciones")
+    pendientes = db.info.pop("tr_pendientes", None)
+    for u, tipo in pendientes or ():
+        if tipo == "sesiones":
+            publicar_todos("sesiones", {"usuario": u})
+        else:
+            publicar_usuario(u, tipo)
 
 
 @event.listens_for(SesionBD, "after_rollback")
 def _tras_rollback(db):
-    db.info.pop("tr_notificar", None)
+    db.info.pop("tr_pendientes", None)
 
 
 def _formato(evento: Dict[str, Any]) -> str:

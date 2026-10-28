@@ -5,6 +5,7 @@ import {
 import { api } from '../api';
 import { useApp } from '../AppContext';
 import { avisar, confirmar } from '../ui/notificaciones';
+import { escuchar } from '../ui/eventosTiempoReal';
 import { COLORES_ACENTO, COLOR_ACENTO_DEFECTO, colorLegible } from '../colores';
 import Avatar from './Avatar';
 
@@ -56,6 +57,16 @@ export default function PerfilUsuario({ usuario, onVolver }) {
     return () => { vivo = false; };
   }, [usuario.id, version]);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [usuario.id]);
+  // Sus sesiones se actualizan solas cuando entra o sale de algún dispositivo
+  useEffect(() => {
+    let espera = null;
+    const quitar = escuchar('sesiones', (d) => {
+      if (d?.usuario && d.usuario !== usuario.username) return;
+      clearTimeout(espera);
+      espera = setTimeout(() => setVersion((v) => v + 1), 250);
+    });
+    return () => { quitar(); clearTimeout(espera); };
+  }, [usuario.username]);
 
   const nombre = perfil?.nombre_mostrar || fila.nombre_mostrar || fila.username;
   const color = colorLegible(perfil?.color_acento || COLOR_ACENTO_DEFECTO);

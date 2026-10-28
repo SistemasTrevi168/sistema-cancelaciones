@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Loader2, RotateCw, Undo2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useApp } from '../AppContext';
 
@@ -110,7 +111,8 @@ export default function RecortarFoto({ archivo, onCancelar, onListo }) {
   };
 
   const boton = { backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border };
-  return (
+  // Se dibuja directo en <body> para que siempre quede a la vista (también en celular)
+  return createPortal(
     <div className="fondo-modal" role="dialog" aria-modal="true" aria-label="Recortar foto" onKeyDown={alTeclear}>
       <div className="recortar-foto" style={{ backgroundColor: theme.cardBg, borderColor: theme.border, color: theme.textPrimary }}>
         <header>
@@ -147,6 +149,7 @@ export default function RecortarFoto({ archivo, onCancelar, onListo }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

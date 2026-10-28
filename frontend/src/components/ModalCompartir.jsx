@@ -16,7 +16,10 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
   const { theme, isDarkMode, historial, actualizarObservaciones, puedeServidor } = useApp();
   // Observaciones: con un expediente se ven y se cambian; con varios, se agrega una nota a todos
   const conObservaciones = !todos && ids.length > 0 && puedeServidor('observaciones');
-  const obsOriginal = !todos && ids.length === 1 ? textoObservaciones((historial || []).find((h) => String(h.id || h.expediente_id) === String(ids[0]))) : '';
+  const filaUno = !todos && ids.length === 1 ? (historial || []).find((h) => String(h.id || h.expediente_id) === String(ids[0])) : null;
+  // Con un expediente que está en la lista se editan sus observaciones; si no (o con varios) la nota se agrega al final
+  const editaObs = !!filaUno;
+  const obsOriginal = filaUno ? textoObservaciones(filaUno) : '';
   const [obs, setObs] = useState(obsOriginal);
   const [gente, setGente] = useState(null);
   const [actuales, setActuales] = useState({}); // usuario -> { directo, todos }
@@ -66,7 +69,7 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
   const visibles = useMemo(() => (gente || []).filter((p) => !busca.trim() || normal(`${p.nombre} ${p.usuario}`).includes(normal(busca))), [gente, busca]);
   const agregar = Object.keys(elegidos).filter((u) => elegidos[u] && !actuales[u]?.directo);
   const quitar = gestiona ? Object.keys(actuales).filter((u) => actuales[u]?.directo && !elegidos[u]) : [];
-  const obsCambio = conObservaciones && obs.trim() !== obsOriginal.trim() && (uno || obs.trim() !== '');
+  const obsCambio = conObservaciones && obs.trim() !== obsOriginal.trim() && (editaObs || obs.trim() !== '');
   const hayCambios = agregar.length > 0 || quitar.length > 0 || obsCambio;
   const alternar = (u) => setElegidos((e) => ({ ...e, [u]: !e[u] }));
   const nombreDe = (u) => (gente || []).find((p) => p.usuario === u)?.nombre || u;
@@ -84,14 +87,14 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
       if (quitar.length) await api.post('/compartir/quitar', { ...base, usuarios: quitar });
       const partes = [];
       if (obsCambio) {
-        if (uno) {
+        if (editaObs) {
           const r = await api.put(`/expedientes/${ids[0]}/observaciones`, { observaciones: obs });
           actualizarObservaciones(ids[0], r.data?.observaciones ?? obs);
         } else {
           const r = await api.post('/expedientes/observaciones', { ids, observaciones: obs, agregar: true });
           Object.entries(r.data?.observaciones || {}).forEach(([id, o]) => actualizarObservaciones(id, o));
         }
-        partes.push(uno ? 'se guardaron las observaciones' : `se agregó la observación a ${ids.length} expedientes`);
+        partes.push(editaObs ? 'se guardaron las observaciones' : (uno ? 'se agregó la observación' : `se agregó la observación a ${ids.length} expedientes`));
       }
       if (agregar.length) partes.push(`se dio acceso a ${agregar.map(nombreDe).join(', ')}`);
       if (quitar.length) partes.push(`se quitó el acceso a ${quitar.map(nombreDe).join(', ')}`);
@@ -165,11 +168,11 @@ export default function ModalCompartir({ ids = [], todos = false, titulo = '', o
         {conObservaciones && (
           <div className="modal-compartir-observaciones" style={{ borderColor: theme.border }}>
             <label htmlFor="compartir-observaciones" style={{ color: theme.textPrimary }}>
-              <MessageSquareText size={14} color="#a16207" /> {uno ? 'Observaciones' : `Agregar una observación a los ${ids.length} expedientes`}
+              <MessageSquareText size={14} color="#a16207" /> {editaObs ? 'Observaciones' : (uno ? 'Agregar una observación' : `Agregar una observación a los ${ids.length} expedientes`)}
               <span style={{ color: theme.textSecondary }}>(opcional · las verán quienes tengan acceso)</span>
             </label>
             <textarea id="compartir-observaciones" rows={2} maxLength={MAX_OBSERVACIONES} value={obs} onChange={(e) => setObs(e.target.value)}
-              placeholder={uno ? 'Ej.: revisar el folio, falta la firma…' : 'Se agrega al final de las observaciones de cada uno'}
+              placeholder={editaObs ? 'Ej.: revisar el folio, falta la firma…' : 'Se agrega al final de las observaciones que ya tenga'}
               style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textPrimary }} />
           </div>
         )}

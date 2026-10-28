@@ -4,7 +4,7 @@ import { avisar } from './notificaciones';
 
 // Notificaciones del usuario (campana): se revisan al entrar, cada 45 s y al volver a la pestaña.
 // Las que llegan mientras la persona está en el sistema se avisan también con un mensaje flotante.
-const VACIO = { no_leidas: 0, lista: [] };
+const VACIO = { no_leidas: 0, lista: [], anteriores: [] };
 
 export default function useNotificaciones(activo, alLlegar) {
   const [estado, setEstado] = useState(VACIO);
@@ -28,7 +28,7 @@ export default function useNotificaciones(activo, alLlegar) {
         if (nuevas.length) alLlegarRef.current?.(nuevas);
       }
       conocidas.current = new Set(lista.map((n) => n.id));
-      setEstado({ no_leidas: noLeidas, lista });
+      setEstado({ no_leidas: noLeidas, lista, anteriores: r.data?.anteriores || [] });
     } catch {
       // sin conexión o servidor sin esta función: no se muestra nada
     }
@@ -52,5 +52,30 @@ export default function useNotificaciones(activo, alLlegar) {
     try { await api.post('/notificaciones/leer', ids ? { ids } : { todas: true }); } catch { /* se reintenta al recargar */ }
   }, []);
 
-  return { ...(activo ? estado : VACIO), recargar: cargar, marcarLeidas };
+  // Quitar de la lista: pasan a «Anteriores» (ya leídas)
+  const archivar = useCallback(async (ids = null) => {
+    setEstado((e) => {
+      const salen = e.lista.filter((n) => !ids || ids.includes(n.id));
+      const ahora = new Date().toISOString();
+      return {
+        lista: e.lista.filter((n) => !salen.includes(n)),
+        anteriores: [...salen.map((n) => ({ ...n, leida: true, archivada: true, archivada_en: ahora })), ...e.anteriores],
+        no_leidas: Math.max(0, e.no_leidas - salen.filter((n) => !n.leida).length),
+      };
+    });
+    try { await api.post('/notificaciones/archivar', ids ? { ids } : { todas: true }); } catch { /* se corrige al recargar */ }
+  }, []);
+  const restaurar = useCallback(async (ids) => {
+    setEstado((e) => {
+      const regresan = e.anteriores.filter((n) => ids.includes(n.id)).map((n) => ({ ...n, archivada: false }));
+      return { ...e, anteriores: e.anteriores.filter((n) => !ids.includes(n.id)), lista: [...regresan, ...e.lista].sort((a, b) => String(b.creada_en).localeCompare(String(a.creada_en))) };
+    });
+    try { await api.post('/notificaciones/restaurar', { ids }); } catch { /* se corrige al recargar */ }
+  }, []);
+  const borrar = useCallback(async (ids = null) => {
+    setEstado((e) => ({ ...e, anteriores: ids ? e.anteriores.filter((n) => !ids.includes(n.id)) : [] }));
+    try { await api.post('/notificaciones/borrar', ids ? { ids } : { todas: true }); } catch { /* se corrige al recargar */ }
+  }, []);
+
+  return { ...(activo ? estado : VACIO), recargar: cargar, marcarLeidas, archivar, restaurar, borrar };
 }

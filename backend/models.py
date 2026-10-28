@@ -153,3 +153,4 @@ class Notificacion(Base):
     datos = Column(JSON, nullable=True)                      # {de, ids, ...}
     creada_en = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     leida_en = Column(DateTime(timezone=True), nullable=True)
+    archivada_en = Column(DateTime(timezone=True), nullable=True)   # se quitó de la lista: queda en «Anteriores»

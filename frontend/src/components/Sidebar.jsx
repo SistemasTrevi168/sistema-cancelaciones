@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
-  BarChart3, Edit3, FileSpreadsheet, UserCog, FileText, FolderPlus, History, Inbox, LogOut, Moon, Sun, Users,
+  BarChart3, Edit3, FileSpreadsheet, UserCog, FileText, FolderPlus, History, Inbox, LogOut, Moon, Share2, Sun, Users,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
@@ -273,6 +273,32 @@ export default function Sidebar() {
                     >
                       <BarChart3 size={18} /> Reportes por Persona
                     </button>
+                    {puedeServidor?.('registro_compartidos') && (
+                    <button
+                      onClick={() => setActiveTab('registro')}
+                      data-tab="registro"
+                      aria-current={activeTab === 'registro' ? 'page' : undefined}
+                      className="nav-item"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        color: activeTab === 'registro' ? '#fff' : theme.textSecondary,
+                        fontWeight: '600',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        textAlign: 'left',
+                        transition: 'color 0.25s ease', position: 'relative', zIndex: 1
+                      }}
+                    >
+                      <Share2 size={18} /> Expedientes compartidos
+                    </button>
+                    )}
                     <button
                       onClick={() => setActiveTab('users')}
                   data-tab="users"

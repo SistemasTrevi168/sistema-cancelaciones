@@ -671,6 +671,35 @@ with cliente() as c_nt:
     c_nt.post("/api/notificaciones/leer", json={"todas": True}, headers=_hb)
     chk("notificaciones: marcar todas", c_nt.get("/api/notificaciones", headers=_hb).json()["no_leidas"] == 0)
     chk("notificaciones: sin sesión no", c_nt.get("/api/notificaciones").status_code == 401)
+    # Dejar de compartir también avisa
+    c_nt.post("/api/compartir/quitar", json={"ids": [_ids[0]], "usuarios": [f"ntB_{SUF}"]}, headers=_ha)
+    _n = c_nt.get("/api/notificaciones", headers=_hb).json()
+    chk("notificaciones: dejar de compartir avisa", _n["no_leidas"] == 1 and "dejó de compartirte un expediente" in _n["notificaciones"][0]["titulo"]
+        and "PERSONA NOTIF 0" in _n["notificaciones"][0]["mensaje"], _n["notificaciones"][:1])
+    c_nt.post("/api/compartir/quitar", json={"ids": [_ids[0]], "usuarios": [f"ntB_{SUF}"]}, headers=_ha)
+    chk("notificaciones: quitar lo que ya no tenía no avisa", c_nt.get("/api/notificaciones", headers=_hb).json()["no_leidas"] == 1)
+    c_nt.post("/api/compartir/quitar", json={"todos": True, "usuarios": [f"ntB_{SUF}"]}, headers=_ha)
+    _n = c_nt.get("/api/notificaciones", headers=_hb).json()
+    chk("notificaciones: dejar de compartir todos", "todos sus expedientes" in _n["notificaciones"][0]["titulo"] and _n["notificaciones"][0]["tipo"] == "quitar_todo", _n["notificaciones"][:1])
+    # Quitar de la lista -> «Anteriores»
+    _id1 = _n["notificaciones"][0]["id"]
+    c_nt.post("/api/notificaciones/archivar", json={"ids": [_id1]}, headers=_hb)
+    _n = c_nt.get("/api/notificaciones", headers=_hb).json()
+    chk("notificaciones: archivar la pasa a anteriores", _id1 not in [x["id"] for x in _n["notificaciones"]] and _n["anteriores"][0]["id"] == _id1 and _n["anteriores"][0]["leida"])
+    c_nt.post("/api/notificaciones/restaurar", json={"ids": [_id1]}, headers=_hb)
+    chk("notificaciones: restaurar", _id1 in [x["id"] for x in c_nt.get("/api/notificaciones", headers=_hb).json()["notificaciones"]])
+    c_nt.post("/api/notificaciones/archivar", json={"todas": True}, headers=_hb)
+    _n = c_nt.get("/api/notificaciones", headers=_hb).json()
+    chk("notificaciones: archivar todas", _n["notificaciones"] == [] and _n["no_leidas"] == 0 and len(_n["anteriores"]) >= 4)
+    c_nt.post("/api/notificaciones/borrar", json={"todas": True}, headers=_hb)
+    chk("notificaciones: vaciar anteriores", c_nt.get("/api/notificaciones", headers=_hb).json()["anteriores"] == [])
+    # Registro de lo compartido (solo admin)
+    c_nt.post("/api/compartir", json={"ids": _ids, "usuarios": [f"ntB_{SUF}"]}, headers=_ha)
+    chk("registro: un operador no lo ve", c_nt.get("/api/compartir/registro", headers=_ha).status_code == 403)
+    _r = c_nt.get("/api/compartir/registro", headers=_hadm).json()
+    _mios = [x for x in _r if x["expediente_id"] in _ids]
+    chk("registro: el admin ve qué, de quién, con quién y cuándo", len(_mios) == 2 and all(x["con_usuario"] == f"ntB_{SUF}" and x["compartio"] == f"ntA_{SUF}"
+        and x["acreditado"].startswith("PERSONA NOTIF") and x["creado_en"] for x in _mios), _mios[:1])
 
 print()
 if FALLAS:

@@ -193,14 +193,7 @@ def compartir(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)
                                     detalle={"con": agregados}))
     # Aviso a cada persona: un solo aviso por vez que se comparte (aunque sean varios expedientes)
     for u, lista in por_persona.items():
-        acreditados = [str((e.datos_extraidos or {}).get("nombre_acreditado") or e.numero_credito or "").strip() for e in lista]
-        acreditados = [a for a in acreditados if a]
-        if len(lista) == 1:
-            titulo = f"{quien} te compartió un expediente"
-            mensaje = f"{acreditados[0] if acreditados else 'Expediente'} · crédito {lista[0].numero_credito}"
-        else:
-            titulo = f"{quien} te compartió {len(lista)} expedientes"
-            mensaje = ", ".join(acreditados[:3]) + (f" y {len(lista) - 3} más" if len(lista) > 3 else "")
+        titulo, mensaje = _texto_aviso(quien, lista, "te compartió")
         notificaciones.notificar(db, u, "compartir", titulo, mensaje,
                                  {"de": yo, "de_nombre": quien, "ids": [str(e.id) for e in lista][:200],
                                   "creditos": [e.numero_credito for e in lista][:200]})
@@ -222,21 +215,48 @@ def quitar(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db), u
         raise HTTPException(status_code=400, detail="Elige al menos a una persona.")
     C = models.Compartido
     quitados = 0
+    nombres = _nombres(db)
+    quien = nombres.get(yo, yo)
     if payload.get("todos"):
         dueno = payload.get("propietario") if (payload.get("propietario") and es_admin(usuario)) else yo
+        afectados = [c.con_usuario for c in db.query(C).filter(C.propietario == dueno, C.todos.is_(True), C.con_usuario.in_(usuarios)).all()]
         quitados = db.query(C).filter(C.propietario == dueno, C.todos.is_(True), C.con_usuario.in_(usuarios)).delete(synchronize_session=False)
+        de_quien = "sus" if dueno == yo else f"los de {nombres.get(dueno, dueno)}"
+        for u in dict.fromkeys(afectados):
+            notificaciones.notificar(db, u, "quitar_todo", f"{quien} dejó de compartirte todos {de_quien} expedientes",
+                                     "Los que te compartió uno por uno los sigues viendo en «Compartidos conmigo».", {"de": yo, "de_nombre": quien, "propietario": dueno})
         db.commit()
         kpis.registrar(yo, "quitar_acceso_todo", con=usuarios)
         return {"status": "exito", "quitados": quitados}
     exps = _mis_expedientes(db, payload.get("ids") or [], usuario)
+    por_persona: Dict[str, list] = {}
     for e in exps:
+        tenian = [c.con_usuario for c in db.query(C).filter(C.expediente_id == str(e.id), C.con_usuario.in_(usuarios)).all()]
         n = db.query(C).filter(C.expediente_id == str(e.id), C.con_usuario.in_(usuarios)).delete(synchronize_session=False)
         if n:
             quitados += n
+            for u in dict.fromkeys(tenian):
+                por_persona.setdefault(u, []).append(e)
             db.add(models.Actividad(username=yo, tipo="quitar_acceso", expediente_id=str(e.id), numero_credito=e.numero_credito,
                                     detalle={"con": usuarios}))
+    for u, lista in por_persona.items():
+        titulo, mensaje = _texto_aviso(quien, lista, "dejó de compartirte")
+        notificaciones.notificar(db, u, "quitar", titulo, mensaje,
+                                 {"de": yo, "de_nombre": quien, "ids": [str(e.id) for e in lista][:200],
+                                  "creditos": [e.numero_credito for e in lista][:200]})
     db.commit()
     return {"status": "exito", "quitados": quitados}
+
+
+def _texto_aviso(quien: str, lista, accion: str):
+    """('Ana te compartió 3 expedientes', 'JUAN PEREZ, MARIA…') para las notificaciones."""
+    acreditados = [str((e.datos_extraidos or {}).get("nombre_acreditado") or e.numero_credito or "").strip() for e in lista]
+    acreditados = [a for a in acreditados if a]
+    if len(lista) == 1:
+        return (f"{quien} {accion} un expediente",
+                f"{acreditados[0] if acreditados else 'Expediente'} · crédito {lista[0].numero_credito}")
+    return (f"{quien} {accion} {len(lista)} expedientes",
+            ", ".join(acreditados[:3]) + (f" y {len(lista) - 3} más" if len(lista) > 3 else ""))
 
 
 def resumen_por_expediente(db: Session, expedientes) -> Dict[str, List[str]]:
@@ -259,3 +279,54 @@ def resumen_por_expediente(db: Session, expedientes) -> Dict[str, List[str]]:
         if gente:
             salida[str(e.id)] = gente
     return salida
+
+
+# ---------------- Registro de lo compartido (solo administradores) ----------------
+@router.get("/registro")
+def registro_compartidos(db: Session = Depends(get_db), usuario: dict = Depends(require_user)):
+    """
+    Todo lo compartido en el sistema: qué expediente, de quién es, quién lo compartió, con quién y cuándo.
+    También los accesos a «todos los expedientes» de alguien.
+    """
+    if not es_admin(usuario):
+        raise HTTPException(status_code=403, detail="Solo los administradores pueden ver esto.")
+    import uuid as _uuid
+    from datetime import timezone
+    C, E = models.Compartido, models.Expediente
+    filas = db.query(C).order_by(C.creado_en.desc()).all()
+    gente = {u.username: u for u in db.query(models.Usuario).all()}
+    nombre = lambda u: (gente[u].nombre_mostrar or u) if u in gente else (u or "")  # noqa: E731
+    rol = lambda u: rol_de(gente[u]) if u in gente else ""  # noqa: E731
+    ids = []
+    for c in filas:
+        if c.expediente_id:
+            try:
+                ids.append(_uuid.UUID(str(c.expediente_id)))
+            except ValueError:
+                pass
+    exps = {str(e.id): e for e in db.query(E).filter(E.id.in_(ids)).all()} if ids else {}
+    resultado = []
+    for c in filas:
+        e = exps.get(str(c.expediente_id)) if c.expediente_id else None
+        if c.expediente_id and not e:
+            continue  # el expediente ya no existe
+        d = (e.datos_extraidos or {}) if e else {}
+        cuando = c.creado_en
+        if cuando is not None and cuando.tzinfo is None:
+            cuando = cuando.replace(tzinfo=timezone.utc)
+        resultado.append({
+            "id": c.id,
+            "todos": bool(c.todos),
+            "expediente_id": str(e.id) if e else None,
+            "numero_credito": e.numero_credito if e else "",
+            "acreditado": str(d.get("nombre_acreditado") or "") if e else "",
+            "estado": (lambda x: x if x in ("GENERADO", "REVISADO", "ENTREGADO") else "GENERADO")(str(e.estado or "").upper()) if e else "",
+            "plantilla": str(d.get("plantilla_seleccionada") or d.get("plantilla") or "") if e else "",
+            "observaciones": str(d.get("observaciones") or "") if e else "",
+            "propietario": c.propietario, "propietario_nombre": nombre(c.propietario),
+            "con_usuario": c.con_usuario, "con_nombre": nombre(c.con_usuario), "con_rol": rol(c.con_usuario),
+            "con_activo": bool(getattr(gente.get(c.con_usuario), "activo", True)),
+            "compartio": c.creado_por or c.propietario, "compartio_nombre": nombre(c.creado_por or c.propietario),
+            "creado_en": cuando.isoformat() if cuando else None,
+        })
+    return resultado

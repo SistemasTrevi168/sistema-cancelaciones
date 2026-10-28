@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  BarChart3, ChevronRight, Edit3, FileSpreadsheet, FileText, FolderPlus, History, Inbox, LayoutGrid, LogOut, Moon, Sun, UserCog, Users, X,
-} from 'lucide-react';
+import { BarChart3, ChevronRight, Edit3, FileSpreadsheet, FileText, FolderPlus, History, Inbox, LayoutGrid, LogOut, Moon, Share2, Sun, UserCog, Users, X } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
 import CampanaNotificaciones from './CampanaNotificaciones';
@@ -25,6 +23,7 @@ const MAS = [
   { id: 'compartidos', nombre: 'Compartidos conmigo', detalle: 'Expedientes que otras personas te compartieron', icono: Inbox, compartidos: true },
   { id: 'excel', nombre: 'Carga Excel / Lote', detalle: 'Generar varios expedientes desde un Excel', icono: FileSpreadsheet },
   { id: 'kpis', nombre: 'Reportes por Persona', detalle: 'Rendimiento de cada usuario', icono: BarChart3, admin: true },
+  { id: 'registro', nombre: 'Expedientes compartidos', detalle: 'Qué se compartió, con quién y cuándo', icono: Share2, admin: true, funcion: 'registro_compartidos' },
   { id: 'users', nombre: 'Usuarios', detalle: 'Altas, contraseñas y permisos', icono: Users, admin: true },
 ];
 const TITULOS_PESTANA = {
@@ -35,6 +34,7 @@ const TITULOS_PESTANA = {
   history: 'Mi Historial',
   compartidos: 'Compartidos conmigo',
   kpis: 'Reportes por Persona',
+  registro: 'Expedientes compartidos',
   users: 'Usuarios',
   perfil: 'Mi perfil',
 };
@@ -76,7 +76,7 @@ export default function NavegacionMovil() {
     else setArrastre(0);
   };
 
-  const masVisibles = esRevisor ? [] : MAS.filter((m) => (!m.admin || esAdmin) && (!m.compartidos || verCompartidos));
+  const masVisibles = esRevisor ? [] : MAS.filter((m) => (!m.admin || esAdmin) && (!m.compartidos || verCompartidos) && (!m.funcion || puedeServidor?.(m.funcion)));
   const principales = esRevisor ? PRINCIPALES_REVISOR : PRINCIPALES;
   const enMas = masVisibles.some((m) => m.id === activeTab);
 

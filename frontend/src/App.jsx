@@ -29,6 +29,7 @@ import TabManual from './components/TabManual';
 import TabMasivo from './components/TabMasivo';
 import TabUsuarios from './components/TabUsuarios';
 import TabKpis from './components/TabKpis';
+import TabRegistroCompartidos from './components/TabRegistroCompartidos';
 import TabPerfil from './components/TabPerfil';
 import NavegacionMovil from './components/NavegacionMovil';
 import { AvisoInactividad, AvisoSesionCerrada, AvisoVersionNueva } from './components/AvisosSesion';
@@ -2005,7 +2006,7 @@ const handleExcelSubmit = async (e) => {
   // Si un admin tiene algo compartido de antes, también se le muestra.
   const verCompartidos = puedeServidor('compartir') && (!esAdmin || hayCompartidos);
   const abrirCompartir = (opciones) => setModalCompartir(opciones || null);
-  const PESTANAS_OPERADOR = ['single', 'batch', 'manual', 'excel', 'history', 'users', 'kpis', 'templates'];
+  const PESTANAS_OPERADOR = ['single', 'batch', 'manual', 'excel', 'history', 'users', 'kpis', 'templates', 'registro'];
 
   // Al entrar: ¿le han compartido algo? (para mostrar «Compartidos conmigo» en el menú)
   useEffect(() => {
@@ -2450,8 +2451,8 @@ const cambiarEstado = async (ids, estado) => {
 
   // Notificaciones (campana): p. ej. cuando alguien te comparte expedientes
   const notificaciones = useNotificaciones(isAuthenticated && puedeServidor('notificaciones'), (nuevas) => {
-    if (!nuevas.some((x) => String(x.tipo).startsWith('compartir'))) return;
-    setHayCompartidos(true);
+    if (!nuevas.some((x) => /^(compartir|quitar)/.test(String(x.tipo)))) return;
+    if (nuevas.some((x) => String(x.tipo).startsWith('compartir'))) setHayCompartidos(true);
     if (activeTab === 'compartidos') cargarHistorialUsuario('compartidos');
   });
 
@@ -2637,6 +2638,11 @@ const cambiarEstado = async (ids, estado) => {
     cambiarPestana,
     notificaciones,
     marcarNotificaciones: notificaciones.marcarLeidas,
+    archivarNotificaciones: notificaciones.archivar,
+    restaurarNotificaciones: notificaciones.restaurar,
+    borrarNotificaciones: notificaciones.borrar,
+    // Desde un aviso: abrir «Compartidos conmigo» con la lista al día
+    irACompartidos: () => { setHayCompartidos(true); if (activeTab === 'compartidos') cargarHistorialUsuario('compartidos'); else cambiarPestana('compartidos'); },
     setArchivoExcel,
     setCargando,
     setExpedientes,
@@ -2736,6 +2742,7 @@ const cambiarEstado = async (ids, estado) => {
               {activeTab === 'compartidos' && <TabHistorial />}
               {activeTab === 'users' && esAdmin && <TabUsuarios />}
               {activeTab === 'kpis' && esAdmin && <TabKpis />}
+              {activeTab === 'registro' && esAdmin && <TabRegistroCompartidos />}
               {activeTab === 'perfil' && <TabPerfil />}
               </div>
             </div>

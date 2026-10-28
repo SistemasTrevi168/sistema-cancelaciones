@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle, ArrowRight, Clock, MessageSquareText, Download, FilePlus2, FileSpreadsheet, FileUp, History, Loader2, PenLine, Save, Share2, Shuffle, UserMinus, Wrench, X,
 } from 'lucide-react';
@@ -98,7 +99,8 @@ export default function BitacoraExpediente({ expedienteId, titulo, datos, onCerr
 
   const eventos = [...(info?.eventos || [])].reverse(); // lo más reciente arriba
 
-  return (
+  // Se dibuja directo en <body> para que siempre quede a la vista (también en celular)
+  return createPortal(
     <div className="fondo-modal" onClick={onCerrar} role="dialog" aria-modal="true" aria-labelledby="bitacora-titulo">
       <div className="bitacora modal-entrada" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: theme.cardBg, borderColor: theme.border, color: theme.textPrimary }}>
         <header className="bitacora-encabezado" style={{ borderColor: theme.border }}>
@@ -181,6 +183,7 @@ export default function BitacoraExpediente({ expedienteId, titulo, datos, onCerr
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

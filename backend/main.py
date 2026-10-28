@@ -48,6 +48,7 @@ try:
         _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE"))
         for _col in ("user_agent VARCHAR", "ip VARCHAR", "ultimo_uso TIMESTAMP WITH TIME ZONE"):
             _conn.execute(text(f"ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS {_col}"))
+        _conn.execute(text("ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS archivada_en TIMESTAMP WITH TIME ZONE"))
 except Exception as _e:
     print(f"Aviso al actualizar la tabla usuarios: {_e}")
 

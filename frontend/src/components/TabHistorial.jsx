@@ -12,6 +12,7 @@ import { textoObservaciones } from '../ui/observaciones';
 import { ESTADOS, colorEstado } from '../estadosExpediente';
 import usePresencia from '../ui/usarPresencia';
 import Selector from './Selector';
+import useCelular from '../usarCelular';
 
 const PERIODOS = [['all', 'Todo'], ['hoy', 'Hoy'], ['semana', 'Esta semana'], ['mes', 'Este mes'], ['anio', 'Este año'], ['elegir', 'Elegir fecha…']];
 
@@ -61,6 +62,7 @@ export default function TabHistorial() {
   const [observando, setObservando] = useState(null); // expediente con la ventana de observaciones abierta
   const cerrarObservaciones = useCallback(() => setObservando(null), []);
   const exportar = usePresencia(showExportMenu, 150);
+  const esCelular = useCelular();
   const [bitacora, setBitacora] = useState(null); // { id, titulo, datos }
 
   // Marcados: se conservan al buscar, filtrar o cambiar de página (solo cuentan los que siguen en la lista)
@@ -112,7 +114,7 @@ export default function TabHistorial() {
 
   return (
 <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
+              <div className="historial-cabecera" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
                 <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {enCompartidos
                     ? <><Inbox size={20} color={theme.accent} /> Compartidos conmigo</>
@@ -140,7 +142,7 @@ export default function TabHistorial() {
                     <Search size={16} color={theme.textSecondary} />
                     <input
                       type="text"
-                      placeholder="Buscar por nombre, crédito, folio, carta u observaciones…"
+                      placeholder={esCelular ? 'Buscar expediente…' : 'Buscar por nombre, crédito, folio, carta u observaciones…'}
                       aria-label="Buscar en el historial"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}

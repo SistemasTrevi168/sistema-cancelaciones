@@ -126,13 +126,13 @@ export default function TabUsuarios() {
                 {loadingUsuarios ? (
                   <div style={{ textAlign: 'center', padding: '20px' }}><Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} /></div>
                 ) : (
-                  <div style={{ overflowX: 'auto' }}>
-                  <table className="tabla-tarjetas" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                  <div className="usuarios-lista-scroll" style={{ borderColor: theme.border }}>
+                  <table className="tabla-tarjetas tabla-usuarios" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                     <thead>
-                      <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textSecondary }}>
-                        <th style={{ padding: '10px' }}>Usuario</th>
-                        <th style={{ padding: '10px' }}>Rol</th>
-                        <th style={{ padding: '10px', textAlign: 'right' }}>Acciones</th>
+                      <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textSecondary, backgroundColor: theme.cardBg }}>
+                        <th style={{ padding: '10px', backgroundColor: theme.cardBg }}>Usuario</th>
+                        <th className="col-rol" style={{ padding: '10px', backgroundColor: theme.cardBg }}>Rol</th>
+                        <th className="col-acciones" style={{ padding: '10px', textAlign: 'right', backgroundColor: theme.cardBg }}>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -146,7 +146,7 @@ export default function TabUsuarios() {
                         const btnIcono = {};
                         return (
                           <tr key={u.id} className="fila-usuario" style={{ borderBottom: `1px solid ${theme.border}`, opacity: activo ? 1 : 0.6, animationDelay: `${Math.min(i, 12) * 35}ms` }}>
-                            <td className="celda-titulo" style={{ padding: '10px', fontWeight: '600', color: theme.textPrimary, minWidth: '180px' }}>
+                            <td className="celda-titulo" style={{ padding: '10px', fontWeight: '600', color: theme.textPrimary, minWidth: 0 }}>
                               <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <button type="button" className="usuario-abrir-perfil" onClick={() => setPerfilDe(u)} title={`Ver el perfil de ${u.nombre_mostrar || u.username}`} aria-label={`Ver el perfil de ${u.nombre_mostrar || u.username}`} data-sin-onda>
                                 <Avatar usuario={esYo ? { ...u, foto: currentUser?.foto ?? u.foto, nombre_mostrar: currentUser?.nombre_mostrar ?? u.nombre_mostrar } : u} tam={30} color={theme.accent} />
@@ -154,7 +154,7 @@ export default function TabUsuarios() {
                                 <span>
                                   <button type="button" className="usuario-nombre-perfil" onClick={() => setPerfilDe(u)} data-sin-onda style={{ color: theme.textPrimary }}>
                                   {u.nombre_mostrar || u.username}</button>{esYo && <span style={{ fontWeight: 'normal', color: theme.textSecondary }}> (tú)</span>}
-                                  <span style={{ display: 'block', fontWeight: 'normal', fontSize: '11px', color: theme.textSecondary, whiteSpace: 'nowrap' }}>
+                                  <span className="usuario-meta" style={{ display: 'block', fontWeight: 'normal', fontSize: '11px', color: theme.textSecondary }}>
                                     {u.nombre_mostrar ? `@${u.username}` : ''}{u.nombre_mostrar && typeof u.expedientes === 'number' ? ' · ' : ''}{typeof u.expedientes === 'number' ? `${u.expedientes} expediente${u.expedientes === 1 ? '' : 's'}` : ''}
                                   </span>
                                   <span className="usuario-estado">
@@ -179,7 +179,7 @@ export default function TabUsuarios() {
                                 </Selector>
                               )}
                             </td>
-                            <td className="celda-acciones" style={{ padding: '10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <td className="celda-acciones" style={{ padding: '10px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               <button type="button" className="accion-usuario accion-perfil" onClick={() => setPerfilDe(u)} style={{ color: theme.textSecondary }} title="Ver perfil">
                                 <IdCard size={16} />
                               </button>

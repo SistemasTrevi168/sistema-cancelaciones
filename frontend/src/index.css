@@ -3646,3 +3646,23 @@ input[type="checkbox"]:disabled { opacity: .45; cursor: not-allowed; }
 .segmento-n { font-size: 10.5px; font-weight: 800; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, currentColor 14%, transparent); margin-left: 4px; }
 .segmento-n.nuevas { background: #dc2626; color: #fff; }
 .notificaciones-segmento button { padding: 6px 4px; }
+
+/* Lista de usuarios: todo cabe en la tarjeta (sin deslizar de lado) y la lista tiene su propio scroll */
+.usuarios-lista-scroll { max-height: min(640px, calc(100vh - 260px)); overflow-y: auto; overflow-x: hidden; border-top: 1px solid; margin-top: 4px; scrollbar-width: thin; }
+.tabla-usuarios { table-layout: fixed; }
+.tabla-usuarios thead th { position: sticky; top: 0; z-index: 2; }
+.tabla-usuarios .col-rol { width: 150px; }
+.tabla-usuarios .col-acciones { width: 180px; }
+.tabla-usuarios td { vertical-align: middle; }
+.tabla-usuarios .celda-titulo > span { min-width: 0; }
+.tabla-usuarios .celda-titulo > span > span { min-width: 0; overflow: hidden; }
+.tabla-usuarios .usuario-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabla-usuarios .selector-rol, .tabla-usuarios td[data-etiqueta="Rol"] select { width: 100%; max-width: 140px; }
+.tabla-usuarios .celda-acciones .accion-usuario { width: 30px; height: 30px; margin-left: 0; }
+@media (max-width: 1280px) { .tabla-usuarios .col-rol { width: 128px; } .tabla-usuarios .col-acciones { width: 168px; } }
+@media (max-width: 768px) { .usuarios-lista-scroll { max-height: none; overflow: visible; border-top: none; } }
+
+/* Botones del menú (Mi perfil, Cerrar sesión): la misma animación que la campana */
+.boton-lateral { transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease; }
+.boton-lateral:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15, 23, 42, .12); }
+.boton-lateral:active, .campana:active { transform: translateY(0) scale(.97); box-shadow: none; }

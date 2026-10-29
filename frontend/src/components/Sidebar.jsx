@@ -362,7 +362,7 @@ export default function Sidebar() {
               <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
               <button
                 onClick={() => setActiveTab('perfil')}
-                className="pulse-hover"
+                className="boton-lateral"
                 style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: activeTab === 'perfil' ? `${theme.accent}1f` : theme.subtleBg, color: activeTab === 'perfil' ? theme.accent : theme.textPrimary, border: `1px solid ${activeTab === 'perfil' ? theme.accent : theme.border}`, padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' }}
               >
                 <UserCog size={16} /> Mi perfil
@@ -372,7 +372,7 @@ export default function Sidebar() {
 
               <button
                 onClick={() => setShowLogoutModal(true)}
-                className="pulse-hover"
+                className="boton-lateral"
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: isDarkMode ? '#450a0a' : '#fff1f2', color: '#dc2626', border: '1px solid #fecdd3', padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' }}
               >
                 <LogOut size={16} /> Cerrar Sesión

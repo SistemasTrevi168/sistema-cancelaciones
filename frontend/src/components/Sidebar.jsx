@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
-  BarChart3, Edit3, FileSpreadsheet, UserCog, FileText, FolderPlus, History, Inbox, LogOut, Moon, Share2, Sun, Users,
+  BarChart3, Edit3, FileSpreadsheet, LayoutDashboard, UserCog, FileText, FolderPlus, History, Inbox, LogOut, Moon, Share2, Sun, Users,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
@@ -249,6 +249,32 @@ export default function Sidebar() {
                     <div style={{ height: '1px', backgroundColor: theme.border, margin: '12px 0' }} />
                     <span style={{ fontSize: '11px', fontWeight: '700', color: theme.textSecondary, textTransform: 'uppercase', paddingLeft: '14px', marginBottom: '4px', letterSpacing: '0.5px' }}>Administración</span>
                     
+                    {puedeServidor?.('panel_admin') && (
+                    <button
+                      onClick={() => setActiveTab('panel')}
+                      data-tab="panel"
+                      aria-current={activeTab === 'panel' ? 'page' : undefined}
+                      className="nav-item"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        color: activeTab === 'panel' ? '#fff' : theme.textSecondary,
+                        fontWeight: '600',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        textAlign: 'left',
+                        transition: 'color 0.25s ease', position: 'relative', zIndex: 1
+                      }}
+                    >
+                      <LayoutDashboard size={18} /> Panel de inicio
+                    </button>
+                    )}
                     <button
                       onClick={() => setActiveTab('kpis')}
                       data-tab="kpis"

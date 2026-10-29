@@ -707,6 +707,53 @@ with cliente() as c_tr:
     chk("tiempo real: sesión cerrada se avisa", r.status_code == 200 and "event: sesion_cerrada" in r.text, r.text[:200])
     chk("errores del navegador: se registran", c_tr.post("/api/errores-cliente", json={"mensaje": "prueba", "donde": "test"}).status_code == 200)
 
+# --- Comentarios, posibles duplicados y panel del administrador ---
+with cliente() as c_x:
+    _hadm = {"Authorization": "Bearer " + c_x.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+    c_x.cookies.clear()
+    for _u in (f"cmA_{SUF}", f"cmB_{SUF}", f"cmC_{SUF}"):
+        c_x.post("/api/admin/usuarios", data={"username": _u, "password": "Prueba2026!", "rol": "operador"}, headers=_hadm)
+    def _tok(u):
+        t = c_x.post("/api/auth/login", json={"username": u, "password": "Prueba2026!"}).json()["token"]
+        c_x.cookies.clear()
+        return {"Authorization": "Bearer " + t}
+    _ha, _hb, _hc = _tok(f"cmA_{SUF}"), _tok(f"cmB_{SUF}"), _tok(f"cmC_{SUF}")
+    _folio = "7" + str(uuid.uuid4().int)[:6]
+    _cr1 = "21" + str(uuid.uuid4().int)[:8]
+    r = c_x.post("/api/expedientes/guardar", json={"expedientes": [{"ref": "x", "datos": {**DATOS, "numero_credito": _cr1, "folio_real": _folio,
+                 "numero_escritura": "98765", "fecha_escritura": "02/07/2008"}, "plantilla": PLANTILLA}]}, headers=_ha)
+    _id = r.json()["resultados"][0]["expediente_id"]
+    c_x.post("/api/compartir", json={"ids": [_id], "usuarios": [f"cmB_{SUF}"]}, headers=_ha)
+    n_antes = c_x.get("/api/notificaciones", headers=_ha).json()["no_leidas"]
+    r = c_x.post(f"/api/expedientes/{_id}/comentarios", json={"texto": "Corrige el folio por favor"}, headers=_hb)
+    chk("comentarios: el revisor comenta", r.status_code == 200 and r.json()["comentarios"][0]["texto"] == "Corrige el folio por favor", r.text[:200])
+    _n = c_x.get("/api/notificaciones", headers=_ha).json()
+    chk("comentarios: al dueño le llega aviso", _n["no_leidas"] == n_antes + 1 and _n["notificaciones"][0]["tipo"] == "comentario"
+        and _n["notificaciones"][0]["datos"]["expediente_id"] == _id, _n["notificaciones"][:1])
+    chk("comentarios: quien comenta no se avisa a sí mismo", all(x["tipo"] != "comentario" for x in c_x.get("/api/notificaciones", headers=_hb).json()["notificaciones"]))
+    chk("comentarios: alguien sin acceso no los ve", c_x.get(f"/api/expedientes/{_id}/comentarios", headers=_hc).status_code == 404)
+    chk("comentarios: vacío no", c_x.post(f"/api/expedientes/{_id}/comentarios", json={"texto": "  "}, headers=_ha).status_code == 400)
+    _fila = next(x for x in c_x.get("/api/expedientes", headers=_ha).json() if x["id"] == _id)
+    chk("comentarios: el historial trae cuántos hay", _fila.get("comentarios") == 1, _fila.get("comentarios"))
+    _cid = c_x.get(f"/api/expedientes/{_id}/comentarios", headers=_ha).json()["comentarios"][0]["id"]
+    chk("comentarios: no se borra el de otro", c_x.delete(f"/api/comentarios/{_cid}", headers=_ha).status_code == 403)
+    chk("comentarios: se borra el propio", c_x.delete(f"/api/comentarios/{_cid}", headers=_hb).status_code == 200)
+    # Duplicados por folio y por escritura
+    r = c_x.post("/api/expedientes/coincidencias", json={"datos": {"numero_credito": "2299999999", "folio_real": f'"{_folio}" (LETRAS)'}}, headers=_hc).json()
+    chk("duplicados: mismo folio en otro expediente", any(x["expediente_id"] == _id for x in r["folio"]), r)
+    r = c_x.post("/api/expedientes/coincidencias", json={"datos": {"numero_credito": _cr1, "folio_real": _folio}, "excluir": _id}, headers=_ha).json()
+    chk("duplicados: no se compara consigo mismo", not any(x["expediente_id"] == _id for x in r["folio"]), r)
+    r = c_x.post("/api/expedientes/coincidencias", json={"datos": {"numero_credito": "2299999998", "numero_escritura": "noventa y ocho mil setecientos sesenta y cinco",
+                 "fecha_escritura": "dos de julio de dos mil ocho"}}, headers=_hc).json()
+    chk("duplicados: misma escritura (número y fecha)", any(x["expediente_id"] == _id for x in r["escritura"]), r)
+    r = c_x.post("/api/expedientes/coincidencias", json={"datos": {"numero_credito": "2299999998", "numero_escritura": "98765", "fecha_escritura": "03/07/2009"}}, headers=_hc).json()
+    chk("duplicados: mismo número con otra fecha y otro notario no cuenta", not any(x["expediente_id"] == _id for x in r["escritura"]), r)
+    # Panel del administrador
+    chk("panel: un operador no", c_x.get("/api/admin/panel", headers=_ha).status_code == 403)
+    _p = c_x.get("/api/admin/panel", headers=_hadm).json()
+    chk("panel: cifras y personas", _p["totales"]["total"] >= 1 and _p["totales"]["hoy"] >= 1 and len(_p["ultimos_14_dias"]) == 14
+        and any(x["usuario"] == f"cmA_{SUF}" and x["hoy"] >= 1 for x in _p["personas"]), str(_p)[:300])
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

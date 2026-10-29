@@ -26,6 +26,7 @@ import kpis
 import perfil
 import notificaciones
 import tiempo_real
+import extras
 import versiones
 import respaldos
 import reparaciones
@@ -929,6 +930,7 @@ app.include_router(perfil.router)
 app.include_router(perfil.router_admin)
 app.include_router(notificaciones.router)
 app.include_router(tiempo_real.router)
+app.include_router(extras.router)
 app.include_router(respaldos.router)
 app.include_router(compartir.router)
 app.include_router(documentos.router)
@@ -1071,10 +1073,12 @@ def obtener_historial(
     accesos = compartir.resumen_por_expediente(db, expedientes)
     nombres = {u.username: (u.nombre_mostrar or u.username) for u in db.query(models.Usuario).all()} if accesos else {}
     resultado = []
+    comentarios = extras.conteo_comentarios(db, [str(e.id) for e in expedientes])
     for exp in expedientes:
         fila = renglon_historial(exp)
         gente = accesos.get(str(exp.id)) or []
         fila["compartido_con"] = [{"usuario": u, "nombre": nombres.get(u, u)} for u in gente]
+        fila["comentarios"] = comentarios.get(str(exp.id), 0)
         resultado.append(fila)
     return resultado
 
@@ -1089,9 +1093,11 @@ def expedientes_compartidos_conmigo(db: Session = Depends(get_db), sesion: dict 
                    .order_by(models.Expediente.fecha_creacion.desc()).all())
     nombres = {u.username: (u.nombre_mostrar or u.username) for u in db.query(models.Usuario).all()}
     resultado = []
+    comentarios = extras.conteo_comentarios(db, [str(e.id) for e in expedientes])
     for exp in expedientes:
         fila = renglon_historial(exp)
         fila["compartido_por"] = nombres.get(exp.usuario_propietario, exp.usuario_propietario)
+        fila["comentarios"] = comentarios.get(str(exp.id), 0)
         resultado.append(fila)
     return resultado
 
@@ -2217,6 +2223,7 @@ def eliminar_usuario(
         ids = [str(e.id) for e in expedientes]
         if ids:
             db.query(models.Actividad).filter(models.Actividad.expediente_id.in_(ids)).delete(synchronize_session=False)
+            db.query(models.Comentario).filter(models.Comentario.expediente_id.in_(ids)).delete(synchronize_session=False)
             for e in expedientes:
                 for ruta in (e.ruta_word_generado,):
                     try:

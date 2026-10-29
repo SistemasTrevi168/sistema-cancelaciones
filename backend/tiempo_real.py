@@ -60,9 +60,10 @@ def publicar_todos(tipo: str, datos: Optional[Dict[str, Any]] = None):
 #  - «notificaciones» solo a esa persona;
 #  - «sesiones» (se abrió o cerró una sesión) a todos los conectados con el usuario que cambió:
 #    así se actualizan «Mi perfil → Sesiones» y el perfil que esté viendo un administrador.
-def avisar_al_guardar(db, username: str, tipo: str = "notificaciones"):
+def avisar_al_guardar(db, username: str, tipo: str = "notificaciones", datos: Optional[Dict[str, Any]] = None):
     if username:
-        db.info.setdefault("tr_pendientes", set()).add((username, tipo))
+        extra = json.dumps(datos, sort_keys=True, ensure_ascii=False) if datos else ""
+        db.info.setdefault("tr_pendientes", set()).add((username, tipo, extra))
 
 
 @event.listens_for(SesionBD, "after_flush")
@@ -76,11 +77,11 @@ def _tras_flush(db, _contexto):
 @event.listens_for(SesionBD, "after_commit")
 def _tras_commit(db):
     pendientes = db.info.pop("tr_pendientes", None)
-    for u, tipo in pendientes or ():
+    for u, tipo, extra in pendientes or ():
         if tipo == "sesiones":
             publicar_todos("sesiones", {"usuario": u})
         else:
-            publicar_usuario(u, tipo)
+            publicar_usuario(u, tipo, json.loads(extra) if extra else None)
 
 
 @event.listens_for(SesionBD, "after_rollback")

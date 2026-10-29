@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowUpDown, CalendarDays, ChevronLeft, Pencil, ChevronRight, Download, Eye, FileStack, Filter, History, Inbox, ListChecks, Loader2, MessageSquareText, RefreshCw, RotateCcw, Search, Share2, ShieldAlert, Users, X,
+  ArrowUpDown, CalendarDays, MessageCircle, FileArchive, ChevronLeft, Pencil, ChevronRight, Download, Eye, FileStack, Filter, History, Inbox, ListChecks, Loader2, MessageSquareText, RefreshCw, RotateCcw, Search, Share2, ShieldAlert, Users, X,
 } from 'lucide-react';
 import { etiquetaCampo, revisarIncidencia } from '../datosFaltantes';
 import { useApp } from '../AppContext';
@@ -8,6 +8,7 @@ import IconoArchivo from './IconoArchivo';
 import EstadoExpediente from './EstadoExpediente';
 import BitacoraExpediente from './BitacoraExpediente';
 import { BotonObservaciones, ModalObservaciones } from './Observaciones';
+import ModalComentarios from './ModalComentarios';
 import { textoObservaciones } from '../ui/observaciones';
 import { ESTADOS, colorEstado } from '../estadosExpediente';
 import usePresencia from '../ui/usarPresencia';
@@ -57,8 +58,23 @@ export default function TabHistorial() {
     puedeServidor,
     setModalCompletarPdfs,
     actualizarObservaciones,
+    actualizarComentarios,
+    comentariosPendientes,
+    setComentariosPendientes,
+    descargarZipIds,
+    descargandoZipIds,
     theme
   } = useApp();
+  const [comentando, setComentando] = useState(null); // expediente con sus comentarios abiertos
+  const cerrarComentarios = useCallback(() => setComentando(null), []);
+  // Desde una notificación de comentario: se abren los comentarios de ese expediente
+  useEffect(() => {
+    if (!comentariosPendientes || cargandoHistorial) return;
+    const fila = (historial || []).find((h) => String(h.id || h.expediente_id) === comentariosPendientes.id);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setComentando(fila || { id: comentariosPendientes.id, numero_credito: comentariosPendientes.credito });
+    setComentariosPendientes(null);
+  }, [comentariosPendientes, cargandoHistorial, historial, setComentariosPendientes]);
   const [observando, setObservando] = useState(null); // expediente con la ventana de observaciones abierta
   const cerrarObservaciones = useCallback(() => setObservando(null), []);
   const exportar = usePresencia(showExportMenu, 150);
@@ -258,6 +274,10 @@ export default function TabHistorial() {
                       </button>
                     );
                   })}
+                  <button type="button" className="boton-barra boton-word" onClick={() => descargarZipIds(marcadosIds, enCompartidos ? 'Compartidos' : 'Mis_expedientes')} disabled={descargandoZipIds}
+                    title="Descargar los Word de los marcados en un solo ZIP">
+                    {descargandoZipIds ? <Loader2 size={14} className="girando" /> : <FileArchive size={14} />} Descargar Word ({marcadosIds.length})
+                  </button>
                   {!enCompartidos && puedeCompartir && (
                     <button type="button" className="boton-barra boton-compartir" onClick={() => abrirCompartir({ ids: marcadosIds, onListo: quitarMarcas })}>
                       <Share2 size={14} /> Compartir ({marcadosIds.length})
@@ -424,6 +444,14 @@ export default function TabHistorial() {
                               >
                                 <Pencil size={15} />
                               </button>}
+                              {puedeServidor('comentarios') && (
+                                <button type="button" className={`accion-icono boton-comentarios ${item.comentarios ? 'con-comentarios' : ''}`} onClick={() => setComentando(item)}
+                                  title={item.comentarios ? `${item.comentarios} comentario(s)` : 'Comentarios'} aria-label={`Comentarios de ${nombre}`}
+                                  style={{ backgroundColor: item.comentarios ? `${theme.accent}14` : theme.subtleBg, color: item.comentarios ? theme.accent : theme.textPrimary, borderColor: item.comentarios ? `${theme.accent}55` : theme.border }}>
+                                  <MessageCircle size={15} />
+                                  {item.comentarios > 0 && <span className="comentarios-n" style={{ backgroundColor: theme.accent }}>{item.comentarios > 9 ? '9+' : item.comentarios}</span>}
+                                </button>
+                              )}
                               {puedeServidor('observaciones') && <BotonObservaciones expediente={item} onAbrir={setObservando} className="accion-icono" />}
                               <button
                                 type="button"
@@ -470,6 +498,9 @@ export default function TabHistorial() {
                     </nav>
                   )}
                 </div>
+              )}
+              {comentando && (
+                <ModalComentarios expediente={comentando} onCerrar={cerrarComentarios} onConteo={actualizarComentarios} />
               )}
               {observando && (
                 <ModalObservaciones expediente={observando} onCerrar={cerrarObservaciones} onGuardado={(id, obs) => actualizarObservaciones(id, obs)} />

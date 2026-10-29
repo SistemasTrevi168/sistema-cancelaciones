@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ChevronDown, ChevronLeft, ChevronRight, FolderOpen, ListChecks, Loader2, RefreshCw, Search, Share2, UserMinus, Users, X,
+  ChevronDown, ChevronLeft, FileArchive, ChevronRight, FolderOpen, ListChecks, Loader2, RefreshCw, Search, Share2, UserMinus, Users, X,
 } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../AppContext';
@@ -21,7 +21,7 @@ const cuando = (iso) => {
 };
 
 export default function TabRegistroCompartidos() {
-  const { theme, isDarkMode, currentUser, abrirCompartir } = useApp();
+  const { theme, isDarkMode, currentUser, abrirCompartir, descargarZipIds, descargandoZipIds } = useApp();
   const [filas, setFilas] = useState(null);
   const [version, setVersion] = useState(0);
   const [vista, setVista] = useState('persona'); // persona / expediente
@@ -83,6 +83,28 @@ export default function TabRegistroCompartidos() {
 
   const expedientesIds = new Set(lista.filter((f) => f.expediente_id).map((f) => f.expediente_id));
   const marcadosIds = Object.keys(marcados).filter((i) => marcados[i] && expedientesIds.has(i));
+  // Marcar varios a la vez: todos los que se ven (con la búsqueda y filtros actuales) o los de una persona
+  const idsVisibles = [...new Set(visibles.filter((f) => f.expediente_id).map((f) => f.expediente_id))];
+  const estadoMarca = (ids) => {
+    const n = ids.filter((i) => marcados[i]).length;
+    return { todos: ids.length > 0 && n === ids.length, parcial: n > 0 && n < ids.length };
+  };
+  const alternarVarios = (ids) => {
+    const { todos } = estadoMarca(ids);
+    setMarcados((m) => {
+      const nuevo = { ...m };
+      ids.forEach((i) => { if (todos) delete nuevo[i]; else nuevo[i] = true; });
+      return nuevo;
+    });
+  };
+  const casillaVarias = (ids, etiqueta) => {
+    const { todos, parcial } = estadoMarca(ids);
+    return (
+      <input type="checkbox" aria-label={etiqueta} title={etiqueta} checked={todos}
+        ref={(el) => { if (el) el.indeterminate = parcial; }}
+        onChange={() => alternarVarios(ids)} />
+    );
+  };
   const personas = new Set(lista.map((f) => f.con_usuario));
 
   const compartirOtraVez = (ids, titulo) => abrirCompartir({ ids, titulo, onListo: () => { setMarcados({}); recargar(); } });
@@ -172,6 +194,18 @@ export default function TabRegistroCompartidos() {
     const ids = [...new Set(g.filas.filter((f) => f.expediente_id).map((f) => f.expediente_id))];
     return (
       <div className="rc-cuerpo" style={{ borderColor: theme.border }}>
+        {ids.length > 1 && (
+          <div className="rc-cuerpo-barra" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg }}>
+            <label className="rc-marcar-todos" style={{ color: theme.textPrimary }}>
+              {casillaVarias(ids, `Marcar los ${ids.length} expedientes`)}
+              <span>Marcar {vista === 'persona' ? `los ${ids.length} expedientes de ${g.filas[0].con_nombre}` : 'este expediente'}</span>
+            </label>
+            <button type="button" className="boton-barra" onClick={() => compartirOtraVez(ids, vista === 'persona' ? `${ids.length} expedientes de ${g.filas[0].con_nombre}` : g.filas[0].acreditado)}
+              style={{ backgroundColor: theme.cardBg, color: theme.accent, borderColor: theme.border }}>
+              <Share2 size={14} /> Compartir los {ids.length} con alguien más
+            </button>
+          </div>
+        )}
         {g.filas.map((f) => (
           <div key={f.id} className="rc-renglon" style={{ borderColor: theme.border }}>
             {vista === 'persona' ? (
@@ -204,7 +238,7 @@ export default function TabRegistroCompartidos() {
             </span>
           </div>
         ))}
-        {ids.length > 0 && (
+        {ids.length === 1 && (
           <div className="rc-pie">
             <button type="button" className="boton-barra" onClick={() => compartirOtraVez(ids, vista === 'persona' ? `${ids.length} expedientes de ${g.filas[0].con_nombre}` : g.filas[0].acreditado)}
               style={{ backgroundColor: theme.cardBg, color: theme.accent, borderColor: theme.border }}>
@@ -260,14 +294,27 @@ export default function TabRegistroCompartidos() {
         </label>
       </div>
 
-      {marcadosIds.length > 0 && (
-        <div className="barra-marcados" style={{ borderColor: theme.accent, backgroundColor: `${theme.accent}12`, color: theme.textPrimary }}>
-          <ListChecks size={16} color={theme.accent} />
-          <strong>{marcadosIds.length} marcado(s)</strong>
-          <button type="button" className="boton-barra boton-compartir" onClick={() => compartirOtraVez(marcadosIds, marcadosIds.length === 1 ? (lista.find((f) => f.expediente_id === marcadosIds[0])?.acreditado || '') : `${marcadosIds.length} expedientes`)}>
-            <Share2 size={14} /> Compartir con alguien más
-          </button>
-          <button type="button" className="enlace-pequeno" onClick={() => setMarcados({})} style={{ marginLeft: 'auto' }}>Quitar marcas</button>
+      {idsVisibles.length > 0 && (
+        <div className={`barra-marcados rc-seleccion ${marcadosIds.length ? 'con-marcas' : ''}`}
+          style={marcadosIds.length ? { borderColor: theme.accent, backgroundColor: `${theme.accent}12`, color: theme.textPrimary } : { borderColor: theme.border, backgroundColor: theme.subtleBg, color: theme.textPrimary }}>
+          <label className="rc-marcar-todos">
+            {casillaVarias(idsVisibles, 'Marcar todos los que se ven')}
+            <span>{busca.trim() || quienCompartio ? `Marcar los ${idsVisibles.length} que se ven` : `Marcar todos (${idsVisibles.length})`}</span>
+          </label>
+          {marcadosIds.length > 0 ? (
+            <>
+              <strong className="rc-marcados-n"><ListChecks size={15} color={theme.accent} /> {marcadosIds.length} marcado(s)</strong>
+              <button type="button" className="boton-barra boton-compartir" onClick={() => compartirOtraVez(marcadosIds, marcadosIds.length === 1 ? (lista.find((f) => f.expediente_id === marcadosIds[0])?.acreditado || '') : `${marcadosIds.length} expedientes`)}>
+                <Share2 size={14} /> Compartir {marcadosIds.length === 1 ? 'con alguien más' : `los ${marcadosIds.length} con alguien más`}
+              </button>
+              <button type="button" className="boton-barra boton-word" onClick={() => descargarZipIds(marcadosIds, 'Compartidos')} disabled={descargandoZipIds}>
+                {descargandoZipIds ? <Loader2 size={14} className="girando" /> : <FileArchive size={14} />} Descargar Word ({marcadosIds.length})
+              </button>
+              <button type="button" className="enlace-pequeno" onClick={() => setMarcados({})} style={{ marginLeft: 'auto' }}>Quitar marcas</button>
+            </>
+          ) : (
+            <span className="rc-pista" style={{ color: theme.textSecondary }}>o márcalos uno por uno para compartirlos con alguien más</span>
+          )}
         </div>
       )}
 

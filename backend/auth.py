@@ -25,7 +25,7 @@ DURACION_SESION = timedelta(hours=24)
 INACTIVIDAD_SEGUNDOS = int(os.getenv("INACTIVIDAD_SEGUNDOS", "900"))  # 15 minutos
 # Funciones que tiene esta versión del servidor: la pantalla solo muestra las que el servidor ya sabe hacer
 # (así, si la pantalla se publica antes que el servidor, no aparecen botones que todavía no funcionarían)
-FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir", "restablecer_password", "observaciones", "notificaciones", "registro_compartidos", "tiempo_real"]
+FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir", "restablecer_password", "observaciones", "notificaciones", "registro_compartidos", "tiempo_real", "comentarios", "coincidencias", "panel_admin", "zip_historial"]
 GRACIA_SEGUNDOS = int(os.getenv("GRACIA_SEGUNDOS", "45"))
 
 # Por qué se cerró una sesión (para avisarle al otro dispositivo). Se guarda en memoria unas horas.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BarChart3, ChevronRight, Edit3, FileSpreadsheet, FileText, FolderPlus, History, Inbox, LayoutGrid, LogOut, Moon, Share2, Sun, UserCog, Users, X } from 'lucide-react';
+import { BarChart3, ChevronRight, Edit3, FileSpreadsheet, FileText, FolderPlus, History, Inbox, LayoutDashboard, LayoutGrid, LogOut, Moon, Share2, Sun, UserCog, Users, X } from 'lucide-react';
 import { useApp } from '../AppContext';
 import Avatar from './Avatar';
 import CampanaNotificaciones from './CampanaNotificaciones';
@@ -22,6 +22,7 @@ const PRINCIPALES_REVISOR = [
 const MAS = [
   { id: 'compartidos', nombre: 'Compartidos conmigo', detalle: 'Expedientes que otras personas te compartieron', icono: Inbox, compartidos: true },
   { id: 'excel', nombre: 'Carga Excel / Lote', detalle: 'Generar varios expedientes desde un Excel', icono: FileSpreadsheet },
+  { id: 'panel', nombre: 'Panel de inicio', detalle: 'Cómo va el trabajo del equipo hoy', icono: LayoutDashboard, admin: true, funcion: 'panel_admin' },
   { id: 'kpis', nombre: 'Reportes por Persona', detalle: 'Rendimiento de cada usuario', icono: BarChart3, admin: true },
   { id: 'registro', nombre: 'Expedientes compartidos', detalle: 'Qué se compartió, con quién y cuándo', icono: Share2, admin: true, funcion: 'registro_compartidos' },
   { id: 'users', nombre: 'Usuarios', detalle: 'Altas, contraseñas y permisos', icono: Users, admin: true },
@@ -34,6 +35,7 @@ const TITULOS_PESTANA = {
   history: 'Mi Historial',
   compartidos: 'Compartidos conmigo',
   kpis: 'Reportes por Persona',
+  panel: 'Panel de inicio',
   registro: 'Expedientes compartidos',
   users: 'Usuarios',
   perfil: 'Mi perfil',

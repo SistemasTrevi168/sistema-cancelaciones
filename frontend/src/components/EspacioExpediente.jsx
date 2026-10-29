@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import useCelular from '../usarCelular';
-import { AlertTriangle, CheckCircle, Eye, FileText, FileUp, Hash, ListChecks, Loader2, PencilLine, Save, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Copy, Eye, FileText, FileUp, Hash, ListChecks, Loader2, PencilLine, Save, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
 import { revisarIncidencia } from '../datosFaltantes';
 import { nombrePlantilla } from '../plantillasCatalogo';
 import { useApp } from '../AppContext';
 import CamposDatos from './CamposDatos';
 import { CampoObservaciones } from './Observaciones';
+import useCoincidencias from '../ui/usarCoincidencias';
 import { esPlantillaCoac } from '../camposExpediente';
 import IconoArchivo from './IconoArchivo';
 import OpcionesPlantilla from './OpcionesPlantilla';
@@ -38,6 +39,10 @@ export default function EspacioExpediente({
   const plantillaLimpia = String(plantilla || '').replace(/\.docx$/i, '');
   const enUsoSugerida = !!sugerencia?.plantilla && sugerencia.plantilla === plantillaLimpia;
   const esCelular = useCelular();
+  // Posibles duplicados (mismo folio real o misma escritura en otro expediente)
+  const coincide = useCoincidencias(datos, expedienteId || edicion?.id || '', puedeServidor('coincidencias'));
+  const ESTADOS_TXT = { GENERADO: 'Generado', REVISADO: 'Revisado', ENTREGADO: 'Entregado' };
+  const describir = (x) => `${x.acreditado || 'Sin nombre'} (crédito ${x.numero_credito}, de ${x.nombre_usuario}, ${ESTADOS_TXT[x.estado] || x.estado})`;
 
   const botones = (
     <>
@@ -185,6 +190,21 @@ export default function EspacioExpediente({
                   )}
                 </div>
               )))}</div>
+            </div>
+          )}
+          {(coincide.folio.length > 0 || coincide.escritura.length > 0) && (
+            <div className="aviso-duplicado" role="status" style={{ backgroundColor: isDarkMode ? '#3b0764' : '#faf5ff', color: isDarkMode ? '#e9d5ff' : '#6b21a8', borderColor: isDarkMode ? '#6b21a8' : '#e9d5ff' }}>
+              <Copy size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <strong>Posible duplicado</strong>
+                {coincide.folio.length > 0 && (
+                  <p>El <b>folio real</b> ya está en {coincide.folio.length === 1 ? 'otro expediente' : `${coincide.folio.length} expedientes`}: {coincide.folio.slice(0, 3).map(describir).join('; ')}{coincide.folio.length > 3 ? '…' : ''}.</p>
+                )}
+                {coincide.escritura.length > 0 && (
+                  <p>La <b>misma escritura</b> (número y fecha o notario) ya está en {coincide.escritura.length === 1 ? 'otro expediente' : `${coincide.escritura.length} expedientes`}: {coincide.escritura.slice(0, 3).map(describir).join('; ')}{coincide.escritura.length > 3 ? '…' : ''}.</p>
+                )}
+                <small>Revisa que no sea el mismo inmueble. Si es correcto (por ejemplo, una escritura con varias viviendas), puedes continuar.</small>
+              </div>
             </div>
           )}
           {avisoCoac}

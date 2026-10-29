@@ -154,3 +154,14 @@ class Notificacion(Base):
     creada_en = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     leida_en = Column(DateTime(timezone=True), nullable=True)
     archivada_en = Column(DateTime(timezone=True), nullable=True)   # se quitó de la lista: queda en «Anteriores»
+
+
+class Comentario(Base):
+    """Comentarios de un expediente entre quien lo hizo y quienes lo revisan (p. ej. «corrige el folio»)."""
+    __tablename__ = "comentarios"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    expediente_id = Column(String, index=True, nullable=False)
+    username = Column(String, index=True, nullable=False)
+    texto = Column(Text, nullable=False)
+    creado_en = Column(DateTime(timezone=True), server_default=func.now(), index=True)

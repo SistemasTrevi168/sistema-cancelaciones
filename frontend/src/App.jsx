@@ -30,6 +30,7 @@ import TabMasivo from './components/TabMasivo';
 import TabUsuarios from './components/TabUsuarios';
 import TabKpis from './components/TabKpis';
 import TabRegistroCompartidos from './components/TabRegistroCompartidos';
+import TabPanelAdmin from './components/TabPanelAdmin';
 import TabPerfil from './components/TabPerfil';
 import NavegacionMovil from './components/NavegacionMovil';
 import { AvisoInactividad, AvisoSesionCerrada, AvisoVersionNueva } from './components/AvisosSesion';
@@ -740,6 +741,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     }
   };
 
+  const actualizarComentarios = (id, n) => setHistorial((prev) => prev.map((h) => (String(h.id || h.expediente_id) === String(id) ? { ...h, comentarios: n } : h)));
   // Observaciones guardadas de un expediente: se ven al momento en la tabla
   const actualizarObservaciones = (id, obs) => setHistorial((prev) => prev.map((h) => (String(h.id || h.expediente_id) === String(id)
     ? { ...h, observaciones: obs, datos_extraidos: { ...(h.datos_extraidos || {}), observaciones: obs } } : h)));
@@ -1997,6 +1999,44 @@ const handleExcelSubmit = async (e) => {
     }
   };
 
+  // Varios Word en un ZIP (Mi Historial, Compartidos conmigo, Expedientes compartidos)
+  const [descargandoZipIds, setDescargandoZipIds] = useState(false);
+  const descargarZipIds = async (ids, nombre = 'Cancelaciones') => {
+    const lista = [...new Set((ids || []).map(String))];
+    if (!lista.length) return false;
+    if (lista.length > 150 && !(await confirmar(`Son ${lista.length} expedientes; el ZIP puede tardar un poco en prepararse.`, { titulo: 'Descargar Word', textoConfirmar: 'Descargar' }))) return false;
+    setDescargandoZipIds(true);
+    try {
+      const res = await api.post('/expedientes/descargar-zip', lista, { responseType: 'blob', timeout: 0 });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/zip' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${nombre}_${new Date().toISOString().slice(0, 10)}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      avisar.exito(`Se descargó el ZIP con ${lista.length} Word.`);
+      return true;
+    } catch {
+      avisar.error('No se pudo preparar el ZIP. Intenta con menos expedientes.');
+      return false;
+    } finally {
+      setDescargandoZipIds(false);
+    }
+  };
+
+  // Comentarios: abrir los de un expediente desde una notificación (se abre en Mi Historial o en Compartidos)
+  const [comentariosPendientes, setComentariosPendientes] = useState(null); // { id, t }
+  const irAComentarios = (datosAviso) => {
+    const id = datosAviso?.expediente_id;
+    if (!id) return;
+    const destino = datosAviso.propietario && datosAviso.propietario !== currentUser?.username ? 'compartidos' : 'history';
+    if (destino === 'compartidos') setHayCompartidos(true);
+    setComentariosPendientes({ id: String(id), credito: datosAviso.credito });
+    if (activeTab !== destino) cambiarPestana(destino);
+  };
+
   const formatLabel = (key) => etiquetaDe(key);
 
   const esAdmin = currentUser?.es_admin || currentUser?.role === 'admin';
@@ -2007,7 +2047,7 @@ const handleExcelSubmit = async (e) => {
   // Si un admin tiene algo compartido de antes, también se le muestra.
   const verCompartidos = puedeServidor('compartir') && (!esAdmin || hayCompartidos);
   const abrirCompartir = (opciones) => setModalCompartir(opciones || null);
-  const PESTANAS_OPERADOR = ['single', 'batch', 'manual', 'excel', 'history', 'users', 'kpis', 'templates', 'registro'];
+  const PESTANAS_OPERADOR = ['single', 'batch', 'manual', 'excel', 'history', 'users', 'kpis', 'templates', 'registro', 'panel'];
 
   // Al entrar: ¿le han compartido algo? (para mostrar «Compartidos conmigo» en el menú)
   useEffect(() => {
@@ -2536,6 +2576,7 @@ const cambiarEstado = async (ids, estado) => {
     agregarCarta2Single,
     normalizarCampo,
     actualizarObservaciones,
+    actualizarComentarios,
     camposDePlantilla: (plantilla) => camposPorPlantilla[normalizarPlantilla(plantilla)] || null,
     actosSingle,
     asignarCampoDesdeDocumento,
@@ -2649,6 +2690,11 @@ const cambiarEstado = async (ids, estado) => {
     restaurarNotificaciones: notificaciones.restaurar,
     borrarNotificaciones: notificaciones.borrar,
     // Desde un aviso: abrir «Compartidos conmigo» con la lista al día
+    descargarZipIds,
+    descargandoZipIds,
+    comentariosPendientes,
+    setComentariosPendientes,
+    irAComentarios,
     irACompartidos: () => { setHayCompartidos(true); if (activeTab === 'compartidos') cargarHistorialUsuario('compartidos'); else cambiarPestana('compartidos'); },
     setArchivoExcel,
     setCargando,
@@ -2750,6 +2796,7 @@ const cambiarEstado = async (ids, estado) => {
               {activeTab === 'users' && esAdmin && <TabUsuarios />}
               {activeTab === 'kpis' && esAdmin && <TabKpis />}
               {activeTab === 'registro' && esAdmin && <TabRegistroCompartidos />}
+              {activeTab === 'panel' && esAdmin && <TabPanelAdmin />}
               {activeTab === 'perfil' && <TabPerfil />}
               </div>
             </div>

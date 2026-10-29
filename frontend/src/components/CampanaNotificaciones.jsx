@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArchiveRestore, Bell, BellRing, Check, Inbox, Share2, Trash2, UserMinus, UserX, Users, X } from 'lucide-react';
+import { ArchiveRestore, Bell, BellRing, Check, Inbox, MessageCircle, Share2, Trash2, UserMinus, UserX, Users, X } from 'lucide-react';
 import { useApp } from '../AppContext';
 import ErrorBoundary from './ErrorBoundary';
 
@@ -14,7 +14,7 @@ const hace = (iso) => {
   if (s < 172800) return 'ayer';
   return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 };
-const ICONOS = { compartir: Share2, compartir_todo: Users, quitar: UserMinus, quitar_todo: UserX };
+const ICONOS = { compartir: Share2, compartir_todo: Users, quitar: UserMinus, quitar_todo: UserX, comentario: MessageCircle };
 const esQuitar = (t) => String(t).startsWith('quitar');
 const tactil = () => typeof window !== 'undefined' && window.matchMedia?.('(hover: none)').matches;
 
@@ -145,7 +145,7 @@ function Aviso({ x, modo, theme, onAbrir, onLeer, onQuitar, onRestaurar, onBorra
 
 // Campana con el número de avisos sin leer; al abrirla se ve la lista (p. ej. «Ana te compartió 3 expedientes»)
 export default function CampanaNotificaciones({ className = '', tam = 18, estilo = {} }) {
-  const { theme, isDarkMode, notificaciones, marcarNotificaciones, archivarNotificaciones, restaurarNotificaciones, borrarNotificaciones, irACompartidos } = useApp();
+  const { theme, isDarkMode, notificaciones, marcarNotificaciones, archivarNotificaciones, restaurarNotificaciones, borrarNotificaciones, irACompartidos, irAComentarios } = useApp();
   const [vista, setVista] = useState('recibidas'); // recibidas / leidas / borradas
   const [abierta, setAbierta] = useState(false);
   const [pos, setPos] = useState(null);
@@ -188,7 +188,8 @@ export default function CampanaNotificaciones({ className = '', tam = 18, estilo
     if (!x.leida) marcarNotificaciones([x.id]);
     if (esQuitar(x.tipo)) return; // solo es un aviso: ya no hay nada que abrir
     setAbierta(false);
-    irACompartidos();
+    if (x.tipo === 'comentario') irAComentarios(x.datos);
+    else irACompartidos();
   };
 
   const Icono = n > 0 ? BellRing : Bell;

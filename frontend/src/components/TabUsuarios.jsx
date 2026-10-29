@@ -1,5 +1,5 @@
 import { Eye, EyeOff, IdCard, KeyRound, LifeBuoy, Loader2, Plus, Power, Search, ShieldCheck, Trash2, UserCog, Users, X } from 'lucide-react';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import Selector from './Selector';
 
 // Tipos de usuario: el operador hace expedientes y los comparte; el revisor solo revisa los que le comparten
@@ -37,13 +37,29 @@ export default function TabUsuarios() {
   const visibles = usuariosLista.filter((u) => !busca.trim() || normal(`${u.nombre_mostrar || ''} ${u.username}`).includes(normal(busca.trim())));
   // Perfil de un usuario abierto (como lo ve él en "Mi perfil")
   const [perfilDe, setPerfilDe] = useState(null);
+  // La lista mide lo mismo que el formulario de al lado (sin hueco abajo); la lista tiene su propio scroll
+  const alta = useRef(null);
+  const [altoLista, setAltoLista] = useState(null);
+  useLayoutEffect(() => {
+    const el = alta.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const medir = () => {
+      const lado = el.parentElement && getComputedStyle(el.parentElement).gridTemplateColumns.split(' ').length > 1;
+      setAltoLista(lado ? Math.max(420, el.offsetHeight) : null);
+    };
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    window.addEventListener('resize', medir);
+    medir();
+    return () => { ro.disconnect(); window.removeEventListener('resize', medir); };
+  }, [perfilDe]);
   if (perfilDe) return <PerfilUsuario usuario={perfilDe} onVolver={() => setPerfilDe(null)} />;
 
   return (
 <>
 <div className="grid-usuarios" style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) minmax(0, 1fr)', gap: '24px', alignItems: 'start' }}>
               {/* Formulario Crear Usuario: mide lo que su contenido y se queda a la vista al bajar por la lista */}
-              <div className="usuarios-alta" style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}` }}>
+              <div ref={alta} className="usuarios-alta" style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}` }}>
                 <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Plus size={20} color={theme.accent} /> Crear Nuevo Usuario
                 </h2>
@@ -109,7 +125,7 @@ export default function TabUsuarios() {
               </div>
 
               {/* Lista de Usuarios */}
-              <div style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}` }}>
+              <div className={`usuarios-lista-tarjeta ${altoLista ? 'a-la-medida' : ''}`} style={{ backgroundColor: theme.cardBg, padding: '24px', borderRadius: '16px', border: `1px solid ${theme.border}`, height: altoLista || undefined }}>
                 <div className="usuarios-encabezado">
                   <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Users size={20} color={theme.accent} /> Lista de Usuarios

@@ -3666,3 +3666,6 @@ input[type="checkbox"]:disabled { opacity: .45; cursor: not-allowed; }
 .boton-lateral { transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease; }
 .boton-lateral:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15, 23, 42, .12); }
 .boton-lateral:active, .campana:active { transform: translateY(0) scale(.97); box-shadow: none; }
+/* La tarjeta de la lista mide lo mismo que la del formulario: el scroll queda adentro */
+.usuarios-lista-tarjeta.a-la-medida { display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; }
+.usuarios-lista-tarjeta.a-la-medida .usuarios-lista-scroll { flex: 1 1 0; min-height: 0; max-height: none; }

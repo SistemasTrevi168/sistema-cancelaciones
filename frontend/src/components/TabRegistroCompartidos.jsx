@@ -84,7 +84,6 @@ export default function TabRegistroCompartidos() {
   const expedientesIds = new Set(lista.filter((f) => f.expediente_id).map((f) => f.expediente_id));
   const marcadosIds = Object.keys(marcados).filter((i) => marcados[i] && expedientesIds.has(i));
   // Marcar varios a la vez: todos los que se ven (con la búsqueda y filtros actuales) o los de una persona
-  const idsVisibles = [...new Set(visibles.filter((f) => f.expediente_id).map((f) => f.expediente_id))];
   const estadoMarca = (ids) => {
     const n = ids.filter((i) => marcados[i]).length;
     return { todos: ids.length > 0 && n === ids.length, parcial: n > 0 && n < ids.length };
@@ -294,13 +293,9 @@ export default function TabRegistroCompartidos() {
         </label>
       </div>
 
-      {idsVisibles.length > 0 && (
+      {marcadosIds.length > 0 && (
         <div className={`barra-marcados rc-seleccion ${marcadosIds.length ? 'con-marcas' : ''}`}
           style={marcadosIds.length ? { borderColor: theme.accent, backgroundColor: `${theme.accent}12`, color: theme.textPrimary } : { borderColor: theme.border, backgroundColor: theme.subtleBg, color: theme.textPrimary }}>
-          <label className="rc-marcar-todos">
-            {casillaVarias(idsVisibles, 'Marcar todos los que se ven')}
-            <span>{busca.trim() || quienCompartio ? `Marcar los ${idsVisibles.length} que se ven` : `Marcar todos (${idsVisibles.length})`}</span>
-          </label>
           {marcadosIds.length > 0 ? (
             <>
               <strong className="rc-marcados-n"><ListChecks size={15} color={theme.accent} /> {marcadosIds.length} marcado(s)</strong>
@@ -312,9 +307,7 @@ export default function TabRegistroCompartidos() {
               </button>
               <button type="button" className="enlace-pequeno" onClick={() => setMarcados({})} style={{ marginLeft: 'auto' }}>Quitar marcas</button>
             </>
-          ) : (
-            <span className="rc-pista" style={{ color: theme.textSecondary }}>o márcalos uno por uno para compartirlos con alguien más</span>
-          )}
+          ) : null}
         </div>
       )}
 

@@ -219,7 +219,7 @@ DESORDEN = ["GRAVAMENES, HIPOTECAS, DERECHOS REALES Y LIMITACIONES DE DOMINIO IN
             "HIPOTECA. VOLANTE: 1000000002505 CALIFICADOR: ORLANDO - ANALISTA:NINGUNO CANCELACION DE HIPOTECA ESCRITURA 5555. VOLANTE: "
             "1000000009999 CALIFICADOR: ANA - ANALISTA:INSCRIPCIONES"]
 chk("actos: texto en otro orden (plan B)", len(actos_ifrem.dividir_actos(DESORDEN)) == 2, actos_ifrem.dividir_actos(DESORDEN))
-chk("sesión: 15 minutos de inactividad por defecto", main.auth.INACTIVIDAD_SEGUNDOS == int(os.getenv("INACTIVIDAD_SEGUNDOS", "900")))
+chk("sesión: ya no se cierra por inactividad", main.auth.INACTIVIDAD_SEGUNDOS == 0)
 
 # ---- Cónyuge: también donde la plantilla dice "con el consentimiento de su cónyuge" sin el nombre
 d_cony = main.limpiar_datos_para_plantilla({"nombre_acreditado": "FABIOLA ZETA HERNANDEZ", "numero_credito": CREDITO, "tiene_conyuge": "Sí",
@@ -544,7 +544,7 @@ _INM = 'la vivienda habitacional marcada con el número dieciocho guion "a", con
 _RAW = "DATOS DE IDENTIFICACIÓN: VIVIENDA: CASA 18-A LOTE: 18 MANZANA: 11 MUNICIPIO: TOLUCA SUPERFICIE: 60 M2"
 chk("inmueble escrito a mano: se respeta", _L({"datos_inmueble": _INM, "texto_raw": _RAW})["datos_inmueble"] == _INM)
 chk("inmueble escrito a mano: no se recorta a lote y manzana", _L({"datos_inmueble": _INM})["datos_inmueble"] == _INM)
-chk("inmueble leído del PDF: se arma con la constancia", _L({"datos_inmueble": "x", "texto_raw": _RAW}, desde_pdf=True)["datos_inmueble"].startswith("Vivienda CASA 18-A, Lote 18"))
+chk("inmueble leído del PDF: se arma con la constancia", _L({"datos_inmueble": "x", "texto_raw": _RAW}, desde_pdf=True)["datos_inmueble"].startswith('LA CASA MARCADA CON EL NÚMERO Y LETRA DIECIOCHO GUION "A", CONSTRUIDA SOBRE EL LOTE DIECIOCHO, MANZANA ONCE'))
 chk("folio: al cambiar el número cambian sus letras", _L({"folio_real": '"321250" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CUARENTA)'})["folio_real"] == '"321250" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CINCUENTA)')
 chk("carta: al cambiar el número cambian sus letras", _L({"numero_carta": '"0543910958" (cero cinco cuatro tres nueve uno cero nueve cinco nueve)'})["numero_carta"].endswith("cinco ocho)"))
 chk("carta 2: igual", _L({"numero_carta_2": "0543910958 (cero cinco)", "nombre_acreditado_2": "X"})["numero_carta_2"] == '"0543910958" (cero cinco cuatro tres nueve uno cero nueve cinco ocho)')
@@ -753,6 +753,50 @@ with cliente() as c_x:
     _p = c_x.get("/api/admin/panel", headers=_hadm).json()
     chk("panel: cifras y personas", _p["totales"]["total"] >= 1 and _p["totales"]["hoy"] >= 1 and len(_p["ultimos_14_dias"]) == 14
         and any(x["usuario"] == f"cmA_{SUF}" and x["hoy"] >= 1 for x in _p["personas"]), str(_p)[:300])
+
+# --- Ajustes: sesión por horario, monto sin «con», redacción del inmueble ---
+from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+_A = main.auth
+_z = _A.ZONA_MX
+_cierre = _A.cierre_programado(_dt(2026, 11, 3, 10, 30, tzinfo=_z))
+chk("horario: entrando a las 10:30 se cierra a las 20:00", _cierre.astimezone(_z).strftime("%H:%M") == "20:00", _cierre)
+_cierre = _A.cierre_programado(_dt(2026, 11, 3, 21, 0, tzinfo=_z))
+chk("horario: entrando después de las 20:00 se cierra 2 h después", _cierre.astimezone(_z).strftime("%H:%M") == "23:00", _cierre)
+chk("monto: sin «con» en los centavos", main.services.numero_a_letras("$246,555.99") ==
+    "DOSCIENTOS CUARENTA Y SEIS MIL QUINIENTOS CINCUENTA Y CINCO PESOS NOVENTA Y NUEVE CENTAVOS, MONEDA NACIONAL", main.services.numero_a_letras("$246,555.99"))
+chk("monto: cero centavos", main.services.numero_a_letras("100000").endswith("PESOS CERO CENTAVOS, MONEDA NACIONAL"), main.services.numero_a_letras("100000"))
+chk("monto: las letras viejas con «con» pasan al formato nuevo",
+    main._monto_letras_respetando("$245,310.50", "DOSCIENTOS CUARENTA Y CINCO MIL TRESCIENTOS DIEZ PESOS CON CINCUENTA CENTAVOS, MONEDA NACIONAL") ==
+    "DOSCIENTOS CUARENTA Y CINCO MIL TRESCIENTOS DIEZ PESOS CINCUENTA CENTAVOS, MONEDA NACIONAL")
+import inmueble as _inm
+_t = _inm.redactar_inmueble({"1_vivienda": "12-B", "2_uso_de_suelo": "HABITACIONAL", "4_lote": "8-B", "5_manzana": "X", "9_calle": "AV. HACIENDA GERANIOS",
+                             "11_denominacion_del_inmueble": "FRACCIONAMIENTO HABITACIONAL POPULAR", "13_colonia": "HACIENDA REAL DE TULTEPEC II",
+                             "15_municipio": "TULTEPEC", "17_estado": "ESTADO DE MÉXICO"})
+chk("inmueble: redacción como la escritura", _t == 'LA VIVIENDA HABITACIONAL MARCADA CON EL NÚMERO Y LETRA DOCE GUION "B", CONSTRUIDA SOBRE EL LOTE OCHO GUION "B", '
+    'MANZANA DIEZ ROMANO, UBICADA EN AVENIDA HACIENDA GERANIOS, DEL FRACCIONAMIENTO HABITACIONAL POPULAR DENOMINADO "HACIENDA REAL DE TULTEPEC II", '
+    'EN EL MUNICIPIO DE TULTEPEC, ESTADO DE MÉXICO', _t)
+c_ses = cliente()
+if True:
+    _r = c_ses.post("/api/auth/login", json={"username": f"ana_{SUF}", "password": "Prueba2026!", "mantener": True})
+    _hm = {"Authorization": "Bearer " + _r.json()["token"]}
+    _p = c_ses.get("/api/auth/ping", headers=_hm).json()
+    chk("sesión mantenida: no tiene hora de cierre", _p["activa"] and _p["mantener"] is True, _p)
+c_ses2 = cliente()
+if True:
+    _r = c_ses2.post("/api/auth/login", json={"username": f"ana_{SUF}", "password": "Prueba2026!"})
+    _hn = {"Authorization": "Bearer " + _r.json()["token"]}
+    _p = c_ses2.get("/api/auth/ping", headers=_hn).json()
+    chk("sesión normal: se cierra al terminar el horario", _p["activa"] and _p["mantener"] is False and _p["cierra_en"], _p)
+    # Se simula que ya pasó la hora de cierre
+    _db = main.SessionLocal()
+    _s = _db.query(main.models.Sesion).filter(main.models.Sesion.id == _hn["Authorization"][7:]).first()
+    _s.creada_en = _dt.now(_tz.utc) - _td(days=1)
+    _db.commit(); _db.close()
+    _p = c_ses2.get("/api/auth/ping", headers=_hn).json()
+    chk("sesión normal: después del horario se cierra (motivo horario)", _p["activa"] is False and _p["motivo"] == "horario", _p)
+    chk("sesión mantenida: sigue abierta", c_ses.get("/api/auth/ping", headers=_hm).json()["activa"] is True)
+    _r = c_ses.post("/api/expedientes/redactar-inmueble", headers=_hm, json={"datos": {"1_vivienda": "DEPTO 2", "4_lote": "2", "15_municipio": "METEPEC", "17_estado": "MEXICO"}})
+    chk("redactar inmueble: desde el desglose", _r.status_code == 200 and _r.json()["texto"].startswith("EL DEPARTAMENTO MARCADO CON EL NÚMERO DOS, CONSTRUIDO SOBRE EL LOTE DOS"), _r.text[:300])
 
 print()
 if FALLAS:

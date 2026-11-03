@@ -87,7 +87,7 @@ export function agruparDatos(datos, coac = false) {
   if (puntos.length) {
     const desglose = {
       titulo: 'Desglose del inmueble',
-      nota: 'Referencia del PDF. El Word usa el campo "Datos del inmueble".',
+      nota: 'Referencia del PDF. El Word usa el campo "Datos del inmueble", que se redacta con estos datos.',
       campos: puntos,
       plegado: true,
     };

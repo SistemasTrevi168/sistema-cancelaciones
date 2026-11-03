@@ -1,6 +1,11 @@
 import { Clock, LogIn, MonitorSmartphone, RefreshCw, ShieldAlert } from 'lucide-react';
 
 const MENSAJES = {
+  horario: {
+    icono: Clock,
+    titulo: 'Terminó el horario',
+    texto: 'Tu sesión se cerró sola porque terminó el horario de trabajo. Por seguridad se quitaron los archivos cargados y lo que no estaba guardado. Si en este dispositivo no quieres que se cierre, marca «Mantener la sesión activa en este dispositivo» al entrar.',
+  },
   inactividad: {
     icono: Clock,
     titulo: 'Tu sesión expiró',
@@ -63,16 +68,20 @@ export function AvisoVersionNueva({ onActualizar, onDespues, theme }) {
   );
 }
 
-// Aviso de los últimos segundos antes de cerrar por inactividad
-export function AvisoInactividad({ segundos, onSeguir, theme }) {
+// Aviso de los últimos minutos antes de que la sesión se cierre por fin del horario
+export function AvisoInactividad({ aviso, onSeguir, theme }) {
+  if (!aviso) return null;
+  const { segundos, hora } = aviso;
+  const reloj = segundos >= 60 ? `${Math.floor(segundos / 60)}:${String(segundos % 60).padStart(2, '0')}` : `${segundos} s`;
+  const horaTxt = new Date(hora).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
   return (
     <div className="aviso-inactividad" role="alert" style={{ backgroundColor: theme.cardBg, borderColor: '#f59e0b', color: theme.textPrimary }}>
-      <span className="aviso-inactividad-contador" style={{ '--avance': `${Math.min(100, (segundos / 60) * 100)}%` }}>{segundos}</span>
+      <span className="aviso-inactividad-contador" style={{ '--avance': `${Math.min(100, (segundos / 300) * 100)}%` }}>{reloj}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <strong>¿Sigues ahí?</strong>
-        <small style={{ color: theme.textSecondary }}>Por inactividad, tu sesión se cerrará en {segundos} s. Se perderán los archivos cargados y lo que no hayas guardado.</small>
+        <strong>Tu sesión se cerrará a las {horaTxt}</strong>
+        <small style={{ color: theme.textSecondary }}>Terminó el horario. Guarda lo que estés haciendo: se perderán los archivos cargados y lo que no esté guardado.</small>
       </div>
-      <button type="button" onClick={onSeguir} style={{ backgroundColor: theme.accent }}>Seguir trabajando</button>
+      <button type="button" onClick={onSeguir} style={{ backgroundColor: theme.accent }}>Entendido</button>
     </div>
   );
 }

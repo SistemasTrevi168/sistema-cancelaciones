@@ -226,6 +226,8 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
   // --- 2. ESTADOS DE AUTENTICACIÓN / LOGIN ---
   const [loginUser, setLoginUser] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  // «Mantener la sesión activa en este dispositivo» (se recuerda la elección de este navegador)
+  const [mantenerSesion, setMantenerSesion] = useState(() => { try { return localStorage.getItem('mantener_sesion') === '1'; } catch { return false; } });
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -620,8 +622,10 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     try {
       const res = await api.post('/auth/login', {
         username: loginUser.trim(),
-        password: loginPassword
+        password: loginPassword,
+        mantener: mantenerSesion,
       });
+      try { localStorage.setItem('mantener_sesion', mantenerSesion ? '1' : '0'); } catch { /* sin almacenamiento */ }
 
       if (res.data?.status === 'ok') {
         guardarToken(res.data.token);
@@ -657,7 +661,7 @@ const [selectedPlantilla, setSelectedPlantilla] = React.useState('CDMX_AP_H_SOLT
     if (!navegador.auth) return;
     navegador.auth = false;
     setAvisoInactividad(null);
-    setAvisoSesion({ motivo, segundos: segundos || 900 });
+    setAvisoSesion({ motivo, segundos: segundos || 0 });
     handleConfirmLogout();
   };
   useEffect(() => { navegador.alExpirar = expirarSesion; });
@@ -2665,6 +2669,8 @@ const cambiarEstado = async (ids, estado) => {
     loadingUsuarios,
     loginError,
     loginPassword,
+    mantenerSesion,
+    setMantenerSesion,
     loginUser,
     manualPreviewRef,
     mesesNombres,
@@ -2824,7 +2830,7 @@ const cambiarEstado = async (ids, estado) => {
       {/* AVISOS FLOTANTES Y CONFIRMACIONES */}
       <Notificaciones />
       {isAuthenticated && avisoInactividad !== null && (
-        <AvisoInactividad segundos={avisoInactividad} onSeguir={() => { seguirTrabajando(); setAvisoInactividad(null); }} theme={theme} />
+        <AvisoInactividad aviso={avisoInactividad} onSeguir={() => { seguirTrabajando(); setAvisoInactividad(null); }} theme={theme} />
       )}
       {hayVersionNueva && !versionPospuesta && (
         <AvisoVersionNueva onActualizar={actualizarVersion} onDespues={() => setVersionPospuesta(true)} theme={theme} />

@@ -19,13 +19,22 @@ pwd_context = CryptContext(
 # Duración de la sesión (igual que la cookie: 24 horas)
 DURACION_SESION = timedelta(hours=24)
 
-# Inactividad: el navegador avisa 15 s antes y cierra la sesión a los 2 minutos sin actividad.
-# El servidor la invalida si pasan INACTIVIDAD + GRACIA segundos sin saber nada del navegador
-# (por ejemplo, si cerraron la pestaña o el celular se bloqueó).
-INACTIVIDAD_SEGUNDOS = int(os.getenv("INACTIVIDAD_SEGUNDOS", "900"))  # 15 minutos
+# Ya no se cierra la sesión por inactividad. Al entrar, la persona elige:
+#  - «Mantener la sesión activa en este dispositivo»: dura DIAS_SESION_MANTENIDA días desde su último uso.
+#  - Sin marcar: se cierra sola a la HORA_CIERRE_SESION (hora del centro de México), fin del horario de trabajo.
+#    Si entra después de esa hora, se cierra HORAS_FUERA_DE_HORARIO horas después de entrar.
+INACTIVIDAD_SEGUNDOS = 0  # (se conserva el nombre: 0 = sin cierre por inactividad)
+HORA_CIERRE_SESION = os.getenv("HORA_CIERRE_SESION", "20:00")
+HORAS_FUERA_DE_HORARIO = float(os.getenv("HORAS_FUERA_DE_HORARIO", "2"))
+DIAS_SESION_MANTENIDA = int(os.getenv("DIAS_SESION_MANTENIDA", "30"))
+try:
+    from zoneinfo import ZoneInfo
+    ZONA_MX = ZoneInfo("America/Mexico_City")
+except Exception:  # pragma: no cover
+    ZONA_MX = timezone(timedelta(hours=-6))
 # Funciones que tiene esta versión del servidor: la pantalla solo muestra las que el servidor ya sabe hacer
 # (así, si la pantalla se publica antes que el servidor, no aparecen botones que todavía no funcionarían)
-FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir", "restablecer_password", "observaciones", "notificaciones", "registro_compartidos", "tiempo_real", "comentarios", "coincidencias", "panel_admin", "zip_historial"]
+FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir", "restablecer_password", "observaciones", "notificaciones", "registro_compartidos", "tiempo_real", "comentarios", "coincidencias", "panel_admin", "zip_historial", "sesion_horario", "redactar_inmueble"]
 GRACIA_SEGUNDOS = int(os.getenv("GRACIA_SEGUNDOS", "45"))
 
 # Por qué se cerró una sesión (para avisarle al otro dispositivo). Se guarda en memoria unas horas.
@@ -92,18 +101,54 @@ def cerrar_sesiones_de(db: Session, username: str, excepto: str = None, motivo: 
 
 
 def _inactiva(sesion) -> bool:
-    ultimo = getattr(sesion, "ultimo_uso", None) or sesion.creada_en
-    if not ultimo:
-        return False
-    return (_ahora() - _a_utc(ultimo)).total_seconds() > INACTIVIDAD_SEGUNDOS + GRACIA_SEGUNDOS
+    """Ya no hay cierre por inactividad (se dejó la función por compatibilidad)."""
+    return False
+
+
+def _hora_cierre():
+    try:
+        h, m = (int(x) for x in str(HORA_CIERRE_SESION).strip().split(":")[:2])
+        return h % 24, m % 60
+    except Exception:
+        return 20, 0
+
+
+def cierre_programado(desde: datetime) -> datetime:
+    """Cuándo se cierra una sesión sin «mantener» abierta a esa hora: hoy a la hora de cierre (o unas horas después si ya pasó)."""
+    local = _a_utc(desde).astimezone(ZONA_MX)
+    h, m = _hora_cierre()
+    cierre = local.replace(hour=h, minute=m, second=0, microsecond=0)
+    if local >= cierre:
+        # Entró después del horario: se le dan unas horas más
+        cierre = local + timedelta(hours=HORAS_FUERA_DE_HORARIO)
+    return cierre.astimezone(timezone.utc)
+
+
+def sesion_mantenida(sesion) -> bool:
+    return bool(getattr(sesion, "mantener", False))
+
+
+def vence(sesion) -> datetime:
+    """Hora a la que vence la sesión (la que llegue primero: su expiración o el fin del horario)."""
+    fin = _a_utc(sesion.expira_en)
+    if not sesion_mantenida(sesion) and sesion.creada_en:
+        fin = min(fin, cierre_programado(sesion.creada_en))
+    return fin
+
+
+def _motivo_vencida(sesion) -> str:
+    return "expirada" if sesion_mantenida(sesion) else "horario"
 
 
 def _marcar_uso(sesion, db: Session):
     """Guarda el último uso de la sesión (como máximo cada 10 segundos)."""
     try:
         ultimo = getattr(sesion, "ultimo_uso", None)
-        if ultimo is None or (_ahora() - _a_utc(ultimo)).total_seconds() >= min(10, INACTIVIDAD_SEGUNDOS / 4):
+        if ultimo is None or (_ahora() - _a_utc(ultimo)).total_seconds() >= 10:
             sesion.ultimo_uso = _ahora()
+            if sesion_mantenida(sesion):
+                # «Mantener activa»: cuenta desde el último uso
+                sesion.expira_en = _ahora() + timedelta(days=DIAS_SESION_MANTENIDA)
             db.commit()
     except Exception:
         db.rollback()
@@ -135,6 +180,8 @@ router = APIRouter(prefix="/api/auth", tags=["Autenticación"])
 class LoginRequest(BaseModel):
     username: str
     password: str
+    # «Mantener la sesión activa en este dispositivo»
+    mantener: bool = False
 
 
 class VerifyPasswordRequest(BaseModel):
@@ -187,16 +234,11 @@ def obtener_sesion(request: Request, db: Session) -> dict:
     if not sesion:
         raise HTTPException(status_code=401, detail="Sesión no válida o expirada")
 
-    if _a_utc(sesion.expira_en) < _ahora():
+    if vence(sesion) < _ahora():
+        anotar_cierre([sesion.id], _motivo_vencida(sesion))
         db.delete(sesion)
         db.commit()
         raise HTTPException(status_code=401, detail="Sesión no válida o expirada")
-
-    if _inactiva(sesion):
-        anotar_cierre([sesion.id], "inactividad")
-        db.delete(sesion)
-        db.commit()
-        raise HTTPException(status_code=401, detail="Tu sesión expiró por inactividad")
 
     user = db.query(Usuario).filter(Usuario.username == sesion.username).first()
     if not user or getattr(user, "activo", True) is False:
@@ -290,8 +332,9 @@ def login(data: LoginRequest, response: Response, request: Request, db: Session 
         username=user.username,
         es_admin=es_administrador,
         role=rol_nombre,
-        expira_en=_ahora() + DURACION_SESION,
+        expira_en=_ahora() + (timedelta(days=DIAS_SESION_MANTENIDA) if data.mantener else DURACION_SESION),
         ultimo_uso=_ahora(),
+        mantener=bool(data.mantener),
         **datos_del_dispositivo(request),
     ))
     db.commit()
@@ -307,7 +350,7 @@ def login(data: LoginRequest, response: Response, request: Request, db: Session 
         httponly=True,       # Protege la cookie contra JS malicioso (XSS)
         samesite="none",     # OBLIGATORIO: Permite compartir cookies entre Vercel y Railway
         secure=True,         # OBLIGATORIO: Requerido cuando samesite="none" (HTTPS)
-        max_age=int(DURACION_SESION.total_seconds())
+        max_age=int(timedelta(days=DIAS_SESION_MANTENIDA).total_seconds()) if data.mantener else int(DURACION_SESION.total_seconds())
     )
 
     return {
@@ -367,15 +410,16 @@ def ping(request: Request, activo: int = 0, db: Session = Depends(get_db)):
         db.delete(sesion)
         db.commit()
         return {"activa": False, "motivo": "cerrada"}
-    if _a_utc(sesion.expira_en) < _ahora() or _inactiva(sesion):
-        motivo = "inactividad" if _inactiva(sesion) else "expirada"
+    if vence(sesion) < _ahora():
+        motivo = _motivo_vencida(sesion)
         anotar_cierre([sid], motivo)
         db.delete(sesion)
         db.commit()
         return {"activa": False, "motivo": motivo}
     if activo:
         _marcar_uso(sesion, db)
-    return {"activa": True, "inactividad_segundos": INACTIVIDAD_SEGUNDOS, "funciones": FUNCIONES}
+    return {"activa": True, "inactividad_segundos": 0, "mantener": sesion_mantenida(sesion),
+            "cierra_en": vence(sesion).isoformat(), "funciones": FUNCIONES}
 
 
 @router.post("/logout")

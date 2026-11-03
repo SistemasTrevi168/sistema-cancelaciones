@@ -18,6 +18,8 @@ export default function LoginScreen() {
     loginError,
     loginPassword,
     loginUser,
+    mantenerSesion,
+    setMantenerSesion,
     setLoginPassword,
     setLoginUser,
     theme,
@@ -144,11 +146,20 @@ export default function LoginScreen() {
                 </button>
               </div>
             </div>
-            <div style={{ minHeight: '22px', marginBottom: '14px' }}>
+            <div style={{ minHeight: '22px', marginBottom: '8px' }}>
               {mayusculas && (
                 <span className="login-mayusculas">Bloq Mayús está activado</span>
               )}
             </div>
+            <label className="login-mantener login-entrada" style={{ animationDelay: '0.28s', color: theme.textPrimary }}>
+              <input type="checkbox" id="login-mantener" checked={!!mantenerSesion} onChange={(e) => setMantenerSesion?.(e.target.checked)} />
+              <span>
+                Mantener la sesión activa en este dispositivo
+                <small style={{ color: theme.textSecondary }}>
+                  {mantenerSesion ? 'No se cerrará sola. No la marques en computadoras compartidas.' : 'Si no la marcas, la sesión se cierra sola al terminar el horario (8:00 p.m.).'}
+                </small>
+              </span>
+            </label>
 
             <button
               type="submit"

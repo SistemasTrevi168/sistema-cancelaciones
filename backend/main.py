@@ -32,6 +32,7 @@ import respaldos
 import reparaciones
 import compartir
 import documentos
+import inmueble as redaccion_inmueble
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -48,7 +49,7 @@ try:
         for _col in ("nombre_mostrar VARCHAR", "foto TEXT", "color_acento VARCHAR", "tema VARCHAR", "rol VARCHAR", "portada TEXT", "portada_pos INTEGER"):
             _conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {_col}"))
         _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE"))
-        for _col in ("user_agent VARCHAR", "ip VARCHAR", "ultimo_uso TIMESTAMP WITH TIME ZONE"):
+        for _col in ("user_agent VARCHAR", "ip VARCHAR", "ultimo_uso TIMESTAMP WITH TIME ZONE", "mantener BOOLEAN DEFAULT FALSE"):
             _conn.execute(text(f"ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS {_col}"))
         _conn.execute(text("ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS archivada_en TIMESTAMP WITH TIME ZONE"))
 except Exception as _e:
@@ -563,7 +564,8 @@ def _valor_inmueble(valor: str) -> str:
     if v.upper() in _SIN_DATO or re.fullmatch(r"(?:TR[AÁ]MITE|VOLANTE|FECHA|CLAVE).*", v, re.I):
         return ""
     v = services.expandir_abreviaturas(v)
-    return corregir_numeros_compuestos(convertir_romanos_a_texto(v))
+    # Los romanos se dejan como vienen ("X", "HACIENDA REAL II"): al redactar el inmueble se escriben con letra donde toca
+    return corregir_numeros_compuestos(v)
 
 
 def procesar_19_puntos_inmueble(texto_inmueble_raw: str, texto_completo: str = "") -> Dict[str, str]:
@@ -697,6 +699,9 @@ def _monto_letras_respetando(monto: str, letras_escritas: Any) -> str:
     letras = " ".join(str(letras_escritas or "").split())
     if not letras or letras.upper() in _SIN_DATO or not calculadas or calculadas == str(monto):
         return calculadas
+    # Las que calculaba antes el sistema («… PESOS CON OCHENTA CENTAVOS …»): se pasan al formato nuevo, sin «CON»
+    if re.sub(r"\bPESOS\s+CON\s+", "PESOS ", letras, flags=re.I).upper() == calculadas.upper():
+        return calculadas
     valor = services.normalizar_monto(monto)
     pesos = re.split(r"\b(?:DE\s+)?PESOS?\b", letras, maxsplit=1, flags=re.I)[0]
     pesos = re.sub(r"veinti[uú]n\b", "veintiuno", pesos, flags=re.I)
@@ -784,7 +789,12 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
         puntos_inmueble = {}
     else:
         puntos_inmueble = procesar_19_puntos_inmueble(str(inmueble_raw), str(texto_raw))
-        inmueble_str = _texto_inmueble(puntos_inmueble)
+        # Redacción notarial («LA VIVIENDA HABITACIONAL MARCADA CON EL NÚMERO …»); si algo falla, la lista de datos
+        try:
+            inmueble_str = redaccion_inmueble.redactar_inmueble(puntos_inmueble) or _texto_inmueble(puntos_inmueble)
+        except Exception as e:
+            print(f"No se pudo redactar el inmueble: {e}")
+            inmueble_str = _texto_inmueble(puntos_inmueble)
         if not inmueble_str:
             texto_libre = str(inmueble_raw or "").strip()
             inmueble_str = "" if texto_libre.upper() in _SIN_DATO else corregir_numeros_compuestos(
@@ -1869,6 +1879,14 @@ def normalizar_campo(
         print(f"No se pudo normalizar {campo}: {e}")
         valor = texto
     return {"campo": campo_pedido, "original": texto, "valor": valor, "extra": extra}
+
+@app.post("/api/expedientes/redactar-inmueble")
+def redactar_inmueble_desde_desglose(payload: Dict[str, Any] = Body(...), sesion: dict = Depends(require_user)):
+    """Vuelve a redactar «Datos del inmueble» con el desglose (los 19 puntos) que se ve en pantalla."""
+    datos = payload.get("datos") or {}
+    puntos = {k: _valor_inmueble(datos.get(k)) for k in _PUNTOS_INMUEBLE}
+    return {"texto": redaccion_inmueble.redactar_inmueble(puntos)}
+
 
 @app.post("/api/expedientes/vista-previa")
 def vista_previa(

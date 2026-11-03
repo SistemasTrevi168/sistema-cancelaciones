@@ -55,6 +55,8 @@ class Sesion(Base):
     user_agent = Column(String, nullable=True)
     ip = Column(String, nullable=True)
     ultimo_uso = Column(DateTime(timezone=True), nullable=True)
+    # «Mantener la sesión activa en este dispositivo» (si no, se cierra al terminar el horario)
+    mantener = Column(Boolean, default=False)
 
 
 class PlantillaSubida(Base):

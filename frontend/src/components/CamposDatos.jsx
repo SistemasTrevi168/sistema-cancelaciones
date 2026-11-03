@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CheckCircle, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown, Lock, Pencil, Unlock } from 'lucide-react';
+import { CheckCircle, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown, Loader2, Lock, Pencil, Unlock, WandSparkles } from 'lucide-react';
+import { api } from '../api';
+import { avisar } from '../ui/notificaciones';
 import { useApp } from '../AppContext';
 import { CAMPOS_LARGOS, agruparDatos, esPuntoInmueble, etiquetaDe } from '../camposExpediente';
 import { esDatoVacio } from '../datosFaltantes';
@@ -10,7 +12,23 @@ import { esFecha, formatoAlSalir } from '../ui/conversiones';
 // plegables: los grupos se pueden plegar y los que están completos empiezan plegados (espacio de trabajo).
 // enfocar: { clave, t } para abrir el grupo de ese dato y llevar la vista hasta él.
 export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, compacto = false, coac = false, plegables = false, enfocar = null }) {
-  const { theme, isDarkMode, unlockedFields, setUnlockedFields, handleToggleUnlock, normalizarCampo } = useApp();
+  const { theme, isDarkMode, unlockedFields, setUnlockedFields, handleToggleUnlock, normalizarCampo, puedeServidor } = useApp();
+  const [redactando, setRedactando] = useState(false);
+  // Vuelve a escribir «Datos del inmueble» con el desglose que se ve en pantalla (por si se corrigió algún punto)
+  const redactarInmueble = async () => {
+    setRedactando(true);
+    try {
+      const res = await api.post('/expedientes/redactar-inmueble', { datos });
+      const texto = res.data?.texto || '';
+      if (!texto) { avisar.error('El desglose está vacío: no hay con qué redactar.'); return; }
+      onCambio('datos_inmueble', texto);
+      avisar.exito('Se redactó «Datos del inmueble» con el desglose. Revísalo y corrígelo si hace falta.');
+    } catch {
+      avisar.error('No se pudo redactar el inmueble.');
+    } finally {
+      setRedactando(false);
+    }
+  };
 
   // Al cambiar un número se rehacen sus letras dentro del mismo campo: el cursor se queda donde estaba
   const cursor = useRef(null);
@@ -180,6 +198,13 @@ export default function CamposDatos({ datos, prefijo, faltantes = [], onCambio, 
               <h4 style={estiloTitulo}>{titulo}</h4>
             )}
             {g.nota && !plegado && <p style={{ fontSize: '11px', color: theme.textSecondary, margin: '-4px 0 10px 0' }}>{g.nota}</p>}
+            {!plegado && g.campos.some(esPuntoInmueble) && puedeServidor?.('redactar_inmueble') && g.campos.some((k) => !esDatoVacio(datos?.[k])) && (
+              <button type="button" className="boton-redactar-inmueble" onClick={redactarInmueble} disabled={redactando}
+                title="Escribe «Datos del inmueble» (lo que va en el Word) con los datos de este desglose"
+                style={{ color: theme.accent, borderColor: theme.border, backgroundColor: theme.cardBg }}>
+                {redactando ? <Loader2 size={14} className="girando" /> : <WandSparkles size={14} />} Redactar «Datos del inmueble» con este desglose
+              </button>
+            )}
             {!plegado && (
               <div style={{ display: 'grid', gridTemplateColumns: compacto ? 'repeat(auto-fill, minmax(240px, 1fr))' : 'repeat(auto-fill, minmax(230px, 1fr))', gap: '12px' }}>
                 {g.campos.map(campo)}

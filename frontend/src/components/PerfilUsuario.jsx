@@ -221,7 +221,7 @@ export default function PerfilUsuario({ usuario, onVolver }) {
                     {s.actual && <span className="perfil-chip" style={{ backgroundColor: `${theme.accent}1f`, color: theme.accent }}>Tu sesión actual</span>}
                   </strong>
                   <small style={{ color: theme.textSecondary }}>
-                    {s.ip ? `IP ${s.ip} · ` : ''}Entró {fechaCorta(s.inicio)} · Último uso {fechaCorta(s.ultimo_uso)}
+                    {s.ip ? `IP ${s.ip} · ` : ''}Entró {fechaCorta(s.inicio)} · Último uso {fechaCorta(s.ultimo_uso)}{s.mantener ? ' · Se mantiene activa' : (s.cierra_en ? ` · Se cierra a las ${String(s.cierra_en).slice(11, 16)}` : '')}
                   </small>
                 </span>
                 {!s.actual && (

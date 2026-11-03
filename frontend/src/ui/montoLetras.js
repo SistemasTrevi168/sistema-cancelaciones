@@ -1,5 +1,5 @@
 // Monto con letra en pesos: la MISMA regla que el servidor (services.numero_a_letras).
-// 198640 -> "CIENTO NOVENTA Y OCHO MIL SEISCIENTOS CUARENTA PESOS CON CERO CENTAVOS, MONEDA NACIONAL"
+// 198640 -> "CIENTO NOVENTA Y OCHO MIL SEISCIENTOS CUARENTA PESOS CERO CENTAVOS, MONEDA NACIONAL"
 const UNIDADES = ['', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
 const DIECES = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
 const VEINTIS = ['VEINTE', 'VEINTIUNO', 'VEINTIDÓS', 'VEINTITRÉS', 'VEINTICUATRO', 'VEINTICINCO', 'VEINTISÉIS', 'VEINTISIETE', 'VEINTIOCHO', 'VEINTINUEVE'];
@@ -71,7 +71,7 @@ export function montoALetras(monto) {
     const moneda = enteros === 1 ? 'PESO' : (enteros % 1000000 === 0 ? 'DE PESOS' : 'PESOS');
     txt = `${entero(enteros, true)} ${moneda}`;
   }
-  const cent = centavos > 0 ? `CON ${grupo(centavos, true)} CENTAVOS` : 'CON CERO CENTAVOS';
+  const cent = centavos > 0 ? `${grupo(centavos, true)} CENTAVOS` : 'CERO CENTAVOS'; // sin «CON», como en la escritura
   return `${txt} ${cent}, MONEDA NACIONAL`;
 }
 

@@ -16,7 +16,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
-from auth import _a_utc, _ahora, anotar_cierre, require_admin, require_user, session_id_de
+from auth import _a_utc, _ahora, anotar_cierre, require_admin, require_user, session_id_de, sesion_mantenida, vence
 from database import get_db
 
 router = APIRouter(prefix="/api/perfil", tags=["perfil"])
@@ -87,7 +87,7 @@ def _sesiones(db: Session, username: str, actual: Optional[str]):
     filas = db.query(models.Sesion).filter(models.Sesion.username == username).all()
     lista = []
     for s in filas:
-        if _a_utc(s.expira_en) < _ahora():
+        if vence(s) < _ahora():
             continue
         lista.append({
             "id": s.id[:8],
@@ -96,6 +96,8 @@ def _sesiones(db: Session, username: str, actual: Optional[str]):
             "ip": getattr(s, "ip", "") or "",
             "inicio": _iso(s.creada_en),
             "ultimo_uso": _iso(getattr(s, "ultimo_uso", None) or s.creada_en),
+            "mantener": sesion_mantenida(s),
+            "cierra_en": _iso(vence(s)),
         })
     lista.sort(key=lambda x: (not x["actual"], x["ultimo_uso"] or ""), reverse=False)
     actual_primero = [x for x in lista if x["actual"]] + sorted([x for x in lista if not x["actual"]], key=lambda x: x["ultimo_uso"] or "", reverse=True)

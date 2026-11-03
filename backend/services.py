@@ -463,7 +463,7 @@ def formatear_monto(texto):
 
 
 def numero_a_letras(numero):
-    """Monto con letra: CIENTO SESENTA Y SIETE MIL OCHOCIENTOS OCHENTA PESOS CON NOVENTA Y SEIS CENTAVOS, MONEDA NACIONAL."""
+    """Monto con letra: CIENTO SESENTA Y SIETE MIL OCHOCIENTOS OCHENTA PESOS NOVENTA Y SEIS CENTAVOS, MONEDA NACIONAL."""
     val = normalizar_monto(numero)
     if val is None:
         return str(numero)
@@ -476,7 +476,8 @@ def numero_a_letras(numero):
         # "UN MILLÓN DE PESOS" (millones exactos llevan "de")
         moneda = 'PESO' if enteros == 1 else ('DE PESOS' if enteros % 1_000_000 == 0 else 'PESOS')
         texto_enteros = f"{entero_en_letras(enteros, apocope=True)} {moneda}"
-    texto_centavos = f"CON {grupo_en_letras(centavos, apocope=True)} CENTAVOS" if centavos > 0 else "CON CERO CENTAVOS"
+    # Sin «CON»: «… PESOS OCHENTA CENTAVOS, MONEDA NACIONAL», como se escribe en la escritura
+    texto_centavos = f"{grupo_en_letras(centavos, apocope=True)} CENTAVOS" if centavos > 0 else "CERO CENTAVOS"
     return f"{texto_enteros} {texto_centavos}, MONEDA NACIONAL"
 
 # Abreviaturas que vienen en las constancias y cartas -> texto completo

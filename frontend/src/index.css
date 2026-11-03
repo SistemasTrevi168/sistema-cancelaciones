@@ -3251,7 +3251,7 @@ button.semaforo[aria-disabled='true'] { cursor: default; }
 .tema-oscuro .aviso-ya-generado { background: #1e1b4b; border-color: #3730a3; border-left-color: #818cf8; color: #e0e7ff; }
 
 /* ---- Usuarios: alta a la vista, buscador y acciones animadas ---- */
-@media (min-width: 901px) {
+@media (min-width: 1361px) {
   .usuarios-alta { position: sticky; top: 16px; }
 }
 .usuarios-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -3648,7 +3648,7 @@ input[type="checkbox"]:disabled { opacity: .45; cursor: not-allowed; }
 .notificaciones-segmento button { padding: 6px 4px; }
 
 /* Lista de usuarios: todo cabe en la tarjeta (sin deslizar de lado) y la lista tiene su propio scroll */
-.usuarios-lista-scroll { max-height: min(640px, calc(100vh - 260px)); overflow-y: auto; overflow-x: hidden; border-top: 1px solid; margin-top: 4px; scrollbar-width: thin; }
+.usuarios-lista-scroll { max-height: none; overflow: visible; border-top: 1px solid; margin-top: 4px; scrollbar-width: thin; }
 .tabla-usuarios { table-layout: fixed; }
 .tabla-usuarios thead th { position: sticky; top: 0; z-index: 2; }
 .tabla-usuarios .col-rol { width: 150px; }
@@ -3823,6 +3823,7 @@ button.chip-filtro-lote.activo { box-shadow: 0 0 0 2px currentColor; }
 
 /* Pantallas medianas (laptops con zoom): el alta va arriba, a lo ancho, y la lista abajo con todo el espacio */
 @media (max-width: 1360px) and (min-width: 769px) {
+  .usuarios-alta { position: static; top: auto; }
   .grid-usuarios { grid-template-columns: minmax(0, 1fr) !important; }
   .usuarios-alta form { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); column-gap: 18px; align-items: start; }
   .usuarios-alta form > button[type="submit"] { grid-column: 1 / -1; max-width: 320px; justify-self: end; }

@@ -2249,6 +2249,33 @@ def cambiar_genero_usuario(usuario_id: str, payload: Dict[str, Any] = Body(...),
     return {"genero": auth.genero_de_usuario(u), "genero_fijo": bool(u.genero)}
 
 
+@app.put("/api/admin/usuarios/{usuario_id}")
+def editar_usuario(usuario_id: str, payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db),
+                   admin: dict = Depends(require_admin)):
+    """Editar los datos de una persona: nombre completo y si es mujer u hombre (el usuario para entrar no cambia)."""
+    try:
+        uid = uuid.UUID(str(usuario_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de usuario inválido")
+    u = db.query(models.Usuario).filter(models.Usuario.id == uid).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if "nombre_mostrar" in payload:
+        nombre = " ".join(str(payload.get("nombre_mostrar") or "").split())
+        if len(nombre) > 60:
+            raise HTTPException(status_code=400, detail="El nombre puede tener máximo 60 caracteres.")
+        u.nombre_mostrar = nombre or None
+    if "genero" in payload:
+        g = str(payload.get("genero") or "").strip().upper()
+        if g not in ("", "FEMENINO", "MASCULINO"):
+            raise HTTPException(status_code=400, detail="Elige mujer u hombre.")
+        u.genero = g or None
+    db.commit()
+    print(f"--> {admin['username']} editó los datos de {u.username}")
+    return {"id": str(u.id), "username": u.username, "nombre_mostrar": u.nombre_mostrar or "",
+            "genero": auth.genero_de_usuario(u), "genero_fijo": bool(u.genero)}
+
+
 @app.post("/api/admin/usuarios")
 def crear_usuario_admin(
     username: str = Form(...),

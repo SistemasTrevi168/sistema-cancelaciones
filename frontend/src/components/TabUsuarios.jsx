@@ -1,4 +1,4 @@
-import { ArrowUpDown, CheckCircle2, ChevronLeft, ChevronRight, Eye, EyeOff, FileText, IdCard, Inbox, KeyRound, LifeBuoy, Loader2, PackageCheck, Plus, Power, Search, Share2, ShieldCheck, Trash2, UserCog, Users, X } from 'lucide-react';
+import { ArrowUpDown, CheckCircle2, ChevronLeft, ChevronRight, Eye, EyeOff, FileText, IdCard, Inbox, KeyRound, LifeBuoy, Loader2, PackageCheck, Pencil, Plus, Power, Search, Share2, ShieldCheck, Trash2, UserCog, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { avisar } from '../ui/notificaciones';
@@ -15,6 +15,7 @@ import Avatar from './Avatar';
 import PanelRespaldos from './PanelRespaldos';
 import PanelPdfs from './PanelPdfs';
 import PerfilUsuario from './PerfilUsuario';
+import ModalEditarUsuario from './ModalEditarUsuario';
 
 export default function TabUsuarios() {
   const {
@@ -32,6 +33,7 @@ export default function TabUsuarios() {
     theme,
     usuariosLista,
     cargarUsuarios,
+    setCurrentUser,
   } = useApp();
   const [verPassword, setVerPassword] = useState(false);
   // Buscador de la lista: por nombre o usuario, sin importar acentos ni mayúsculas
@@ -63,6 +65,14 @@ export default function TabUsuarios() {
   const totalPaginas = Math.max(1, Math.ceil(visibles.length / POR_PAGINA));
   const paginaVista = Math.min(pagina, totalPaginas);
   const enPagina = visibles.slice((paginaVista - 1) * POR_PAGINA, paginaVista * POR_PAGINA);
+  // Editar nombre completo y mujer/hombre de un usuario
+  const [editando, setEditando] = useState(null);
+  const alGuardarEdicion = (d) => {
+    cargarUsuarios?.();
+    if (d && d.username === currentUser?.username) {
+      setCurrentUser?.((cu) => (cu ? { ...cu, nombre_mostrar: d.nombre_mostrar, genero: d.genero } : cu));
+    }
+  };
   // Perfil de un usuario abierto (como lo ve él en "Mi perfil")
   const [perfilDe, setPerfilDe] = useState(null);
 
@@ -335,6 +345,11 @@ export default function TabUsuarios() {
                               <button type="button" className="accion-usuario accion-perfil" onClick={() => setPerfilDe(u)} style={{ color: theme.textSecondary }} title="Ver perfil">
                                 <IdCard size={16} />
                               </button>
+                              {puedeServidor('editar_usuario') && (
+                                <button type="button" className="accion-usuario accion-editar" onClick={() => setEditando(u)} style={{ color: theme.accent }} title="Editar usuario (nombre completo, mujer u hombre)">
+                                  <Pencil size={16} />
+                                </button>
+                              )}
                               {!esYo && (
                                 <button type="button" className="accion-usuario accion-llave" onClick={() => setModalPassword({ modo: 'reset', usuario: u })} style={{ ...btnIcono, color: theme.accent }} title="Cambiar contraseña (con la contraseña actual del usuario)">
                                   <KeyRound size={16} />
@@ -387,6 +402,7 @@ export default function TabUsuarios() {
                 )}
               </div>
             </div>
+{editando && <ModalEditarUsuario usuario={editando} onCerrar={() => setEditando(null)} onGuardado={alGuardarEdicion} />}
 <PanelRespaldos />
 <PanelPdfs />
 </>

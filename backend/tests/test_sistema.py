@@ -813,6 +813,16 @@ _r = c_gen.post("/api/auth/login", json={"username": f"meredit_{SUF}", "password
 chk("género: el saludo usa el elegido", _r.json()["user"]["genero"] == "MASCULINO", _r.text[:200])
 chk("folio: con minúsculas", main.numero_folio_a_letras("41230") == "cuarenta y un mil doscientos treinta", main.numero_folio_a_letras("41230"))
 
+# --- Editar usuario: nombre completo y mujer/hombre ---
+c_gen = cliente()
+_ha2 = {"Authorization": "Bearer " + c_gen.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+_r = c_gen.put(f"/api/admin/usuarios/{_u.get('id')}", headers=_ha2, json={"nombre_mostrar": "  Meredit   Ramírez Soto ", "genero": "FEMENINO"})
+chk("editar usuario: guarda nombre y género", _r.status_code == 200 and _r.json()["nombre_mostrar"] == "Meredit Ramírez Soto" and _r.json()["genero"] == "FEMENINO", _r.text[:200])
+_u2 = next((x for x in c_gen.get("/api/admin/usuarios", headers=_ha2).json() if x["username"] == f"meredit_{SUF}"), {})
+chk("editar usuario: la lista lo refleja", _u2.get("nombre_mostrar") == "Meredit Ramírez Soto" and _u2.get("genero") == "FEMENINO", _u2)
+chk("editar usuario: nombre muy largo", c_gen.put(f"/api/admin/usuarios/{_u.get('id')}", headers=_ha2, json={"nombre_mostrar": "x" * 61}).status_code == 400)
+chk("editar usuario: id inválido", c_gen.put("/api/admin/usuarios/no-existe", headers=_ha2, json={"genero": "FEMENINO"}).status_code == 400)
+
 # --- «Revisados» cuenta para quien cambió el estado ---
 from database import SessionLocal as _SL  # noqa: E402
 import models as _models  # noqa: E402

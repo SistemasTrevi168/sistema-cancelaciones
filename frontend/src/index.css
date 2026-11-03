@@ -3362,6 +3362,7 @@ button.semaforo[aria-disabled='true'] { cursor: default; }
 .usuario-nombre-perfil { padding: 0; border: none; background: none; font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
 .usuario-nombre-perfil:hover { text-decoration: underline; text-underline-offset: 3px; }
 .accion-perfil:hover svg { animation: latidoPerfil .45s ease; }
+.accion-editar:hover svg { animation: latidoPerfil .45s ease; }
 @keyframes latidoPerfil { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
 .perfil-ajeno-barra { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .perfil-ajeno-aviso { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; flex: 1; min-width: 200px; }
@@ -3803,7 +3804,7 @@ button.chip-filtro-lote.activo { box-shadow: 0 0 0 2px currentColor; }
 .lote-vacio { text-align: center; padding: 22px 10px; font-size: 13px; margin: 0; }
 
 /* Usuarios: la columna del usuario ocupa todo lo que puede; tipo y acciones van juntos y compactos */
-.tabla-usuarios .col-acciones { width: 176px; }
+.tabla-usuarios .col-acciones { width: 200px; }
 .tabla-usuarios .celda-titulo > span > span { overflow: visible; }
 .celda-rol-acciones { vertical-align: middle; }
 .celda-rol-acciones .usuario-rol { display: flex; justify-content: flex-end; margin-bottom: 6px; font-size: 12px; }

@@ -32,6 +32,7 @@ export default function TabMasivo() {
     cartasLote,
     constanciasLote,
     agregarArchivosLote,
+    nuevoLote,
     quitarArchivoDeLote,
     soltarArchivosLote,
     handleBatchInputChange,
@@ -270,7 +271,7 @@ export default function TabMasivo() {
         <div className="lote-resumen" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg, color: theme.textSecondary }}>
           <FolderPlus size={18} color={theme.accent} />
           <span><strong style={{ color: theme.textPrimary }}>{batchFiles.length} archivos</strong> · {validos.length} expediente(s) leídos</span>
-          <button type="button" className="boton-barra" onClick={() => setCargaAbierta(true)} style={{ marginLeft: 'auto', backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+          <button type="button" className="boton-barra" onClick={async () => { if (!nuevoLote || await nuevoLote()) { setAbierto(null); setFiltroLote('todos'); setPagina(1); setCargaAbierta(true); } }} style={{ marginLeft: 'auto', backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
             <Upload size={15} /> Cargar otro lote
           </button>
         </div>

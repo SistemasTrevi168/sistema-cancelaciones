@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Archive, CalendarClock, Download, Loader2, Plus, ShieldCheck } from 'lucide-react';
+import { Archive, CalendarClock, ChevronLeft, ChevronRight, Download, Loader2, Plus, ShieldCheck } from 'lucide-react';
 import { api } from '../api';
 import { useApp } from '../AppContext';
 import { avisar } from '../ui/notificaciones';
@@ -16,6 +16,9 @@ export default function PanelRespaldos() {
   const [lista, setLista] = useState(null);
   const [creando, setCreando] = useState(false);
   const [bajando, setBajando] = useState(null);
+  // 5 respaldos por página
+  const POR_PAGINA = 5;
+  const [pagina, setPagina] = useState(1);
 
   const cargar = useCallback(async () => {
     try {
@@ -63,6 +66,10 @@ export default function PanelRespaldos() {
   };
 
   const ultimo = lista?.find((r) => r.automatico);
+  const total = lista?.length || 0;
+  const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const paginaVista = Math.min(pagina, totalPaginas);
+  const enPagina = (lista || []).slice((paginaVista - 1) * POR_PAGINA, paginaVista * POR_PAGINA);
   return (
     <section className="panel-respaldos" style={{ backgroundColor: theme.cardBg, borderColor: theme.border, color: theme.textPrimary }}>
       <div className="panel-respaldos-encabezado">
@@ -90,7 +97,7 @@ export default function PanelRespaldos() {
         <p style={{ color: theme.textSecondary, fontSize: 13, margin: '8px 0 0' }}>Todavía no hay respaldos.</p>
       ) : (
         <ul className="panel-respaldos-lista">
-          {lista.map((r, i) => (
+          {enPagina.map((r, i) => (
             <li key={r.id} style={{ borderColor: theme.border, animationDelay: `${Math.min(i, 10) * 30}ms` }}>
               <Archive size={18} color={theme.textSecondary} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -103,6 +110,19 @@ export default function PanelRespaldos() {
             </li>
           ))}
         </ul>
+      )}
+      {total > POR_PAGINA && (
+        <nav className="paginacion-lote" aria-label="Páginas de respaldos" style={{ borderColor: theme.border, color: theme.textSecondary, marginTop: 8 }}>
+          <span>{(paginaVista - 1) * POR_PAGINA + 1}–{Math.min(paginaVista * POR_PAGINA, total)} de {total} respaldos</span>
+          <div className="paginacion-botones">
+            <button type="button" onClick={() => setPagina(paginaVista - 1)} disabled={paginaVista === 1} aria-label="Página anterior" style={{ borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.textPrimary }}><ChevronLeft size={15} /></button>
+            {Array.from({ length: totalPaginas }, (_, k) => k + 1).map((n) => (
+              <button key={n} type="button" onClick={() => setPagina(n)} aria-current={n === paginaVista ? 'page' : undefined}
+                style={{ borderColor: n === paginaVista ? theme.accent : theme.border, backgroundColor: n === paginaVista ? theme.accent : theme.cardBg, color: n === paginaVista ? '#fff' : theme.textPrimary }}>{n}</button>
+            ))}
+            <button type="button" onClick={() => setPagina(paginaVista + 1)} disabled={paginaVista === totalPaginas} aria-label="Página siguiente" style={{ borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.textPrimary }}><ChevronRight size={15} /></button>
+          </div>
+        </nav>
       )}
     </section>
   );

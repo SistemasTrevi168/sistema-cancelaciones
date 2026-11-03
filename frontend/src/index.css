@@ -3801,3 +3801,29 @@ button.chip-filtro-lote { cursor: pointer; font-family: inherit; border-width: 1
 button.chip-filtro-lote:hover { transform: translateY(-1px); box-shadow: 0 2px 6px -2px rgba(15, 23, 42, .25); }
 button.chip-filtro-lote.activo { box-shadow: 0 0 0 2px currentColor; }
 .lote-vacio { text-align: center; padding: 22px 10px; font-size: 13px; margin: 0; }
+
+/* Usuarios: la columna del usuario ocupa todo lo que puede; tipo y acciones van juntos y compactos */
+.tabla-usuarios .col-acciones { width: 176px; }
+.tabla-usuarios .celda-titulo > span > span { overflow: visible; }
+.celda-rol-acciones { vertical-align: middle; }
+.celda-rol-acciones .usuario-rol { display: flex; justify-content: flex-end; margin-bottom: 6px; font-size: 12px; }
+.celda-rol-acciones .usuario-rol .selector, .celda-rol-acciones .selector-rol { min-width: 0 !important; width: 100%; max-width: 160px; }
+.celda-rol-acciones .usuario-botones { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 2px; }
+.usuario-cifra { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.usuarios-paginas { margin-top: 10px; }
+.usuario-genero { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px dashed; background: transparent; cursor: pointer; font-family: inherit; }
+.usuario-genero:hover { border-style: solid; }
+/* Alta de usuario: mujer u hombre */
+.alta-genero { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 12px; line-height: 1.35; }
+.alta-genero-opciones { display: inline-flex; gap: 6px; }
+.alta-genero-opciones button { flex: 1; padding: 6px 10px; border: 1px solid; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+@media (max-width: 768px) {
+  .celda-rol-acciones .usuario-rol, .celda-rol-acciones .usuario-botones { justify-content: flex-start; }
+}
+
+/* Pantallas medianas (laptops con zoom): el alta va arriba, a lo ancho, y la lista abajo con todo el espacio */
+@media (max-width: 1360px) and (min-width: 769px) {
+  .grid-usuarios { grid-template-columns: minmax(0, 1fr) !important; }
+  .usuarios-alta form { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); column-gap: 18px; align-items: start; }
+  .usuarios-alta form > button[type="submit"] { grid-column: 1 / -1; max-width: 320px; justify-self: end; }
+}

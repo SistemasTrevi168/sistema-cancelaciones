@@ -46,7 +46,7 @@ models.Base.metadata.create_all(bind=engine)
 try:
     with engine.begin() as _conn:
         _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE"))
-        for _col in ("nombre_mostrar VARCHAR", "foto TEXT", "color_acento VARCHAR", "tema VARCHAR", "rol VARCHAR", "portada TEXT", "portada_pos INTEGER"):
+        for _col in ("nombre_mostrar VARCHAR", "foto TEXT", "color_acento VARCHAR", "tema VARCHAR", "rol VARCHAR", "portada TEXT", "portada_pos INTEGER", "genero VARCHAR"):
             _conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {_col}"))
         _conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE"))
         for _col in ("user_agent VARCHAR", "ip VARCHAR", "ultimo_uso TIMESTAMP WITH TIME ZONE", "mantener BOOLEAN DEFAULT FALSE"):
@@ -446,12 +446,12 @@ def numero_a_letras(monto: Any) -> str:
 
 
 def numero_folio_a_letras(monto: Any) -> str:
-    """Número de folio con letra, sin moneda: 21 -> VEINTIUNO."""
+    """Número de folio con letra, sin moneda y en minúsculas: 21 -> veintiuno."""
     if not monto:
         return ""
     monto_str = re.sub(r"[^\d.]", "", str(monto))
     try:
-        return services.entero_en_letras(int(float(monto_str)))
+        return services.entero_en_letras(int(float(monto_str))).lower()
     except Exception:
         return str(monto)
 
@@ -2184,9 +2184,40 @@ def obtener_usuarios(db: Session = Depends(get_db), admin: dict = Depends(requir
             "debe_cambiar_password": bool(getattr(u, "debe_cambiar_password", False)),
             "nombre_mostrar": getattr(u, "nombre_mostrar", None) or "",
             "foto": getattr(u, "foto", None) or "",
+            "genero": auth.genero_de_usuario(u),
+            "genero_fijo": bool(getattr(u, "genero", None)),
         }
         for u in usuarios
     ]
+
+
+@app.post("/api/admin/genero-de-nombre")
+def genero_de_nombre(payload: Dict[str, Any] = Body(...), admin: dict = Depends(require_admin)):
+    """Si un nombre es de mujer u hombre (lo mismo que usa el saludo de bienvenida)."""
+    nombre = " ".join(str(payload.get("nombre") or "").replace(".", " ").replace("_", " ").split())
+    try:
+        return {"genero": nombres.genero(nombre) if nombre else ""}
+    except Exception:
+        return {"genero": ""}
+
+
+@app.put("/api/admin/usuarios/{usuario_id}/genero")
+def cambiar_genero_usuario(usuario_id: str, payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db),
+                           admin: dict = Depends(require_admin)):
+    """Fija si la persona es mujer u hombre (FEMENINO / MASCULINO), o "" para que se deduzca otra vez de su nombre."""
+    try:
+        uid = uuid.UUID(str(usuario_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de usuario inválido")
+    u = db.query(models.Usuario).filter(models.Usuario.id == uid).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    g = str(payload.get("genero") or "").strip().upper()
+    if g not in ("", "FEMENINO", "MASCULINO"):
+        raise HTTPException(status_code=400, detail="Elige mujer u hombre.")
+    u.genero = g or None
+    db.commit()
+    return {"genero": auth.genero_de_usuario(u), "genero_fijo": bool(u.genero)}
 
 
 @app.post("/api/admin/usuarios")
@@ -2195,10 +2226,13 @@ def crear_usuario_admin(
     password: str = Form(...),
     es_admin: bool = Form(False),
     rol: str = Form(""),
+    nombre_mostrar: str = Form(""),
+    genero: str = Form(""),
     db: Session = Depends(get_db),
     admin: dict = Depends(require_admin)
 ):
     rol = (rol or "").strip().lower()
+    genero = (genero or "").strip().upper()
     if rol == "admin":
         es_admin = True
     usuario_existente = db.query(models.Usuario).filter(models.Usuario.username == username).first()
@@ -2213,6 +2247,8 @@ def crear_usuario_admin(
         password_hash=pass_hash,
         es_admin=es_admin,
         rol=None if es_admin else (rol if rol in compartir.ROLES else "operador"),
+        nombre_mostrar=" ".join(str(nombre_mostrar or "").split())[:80] or None,
+        genero=genero if genero in ("FEMENINO", "MASCULINO") else None,
     )
     db.add(nuevo_usuario)
     db.commit()

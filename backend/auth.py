@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover
     ZONA_MX = timezone(timedelta(hours=-6))
 # Funciones que tiene esta versión del servidor: la pantalla solo muestra las que el servidor ya sabe hacer
 # (así, si la pantalla se publica antes que el servidor, no aparecen botones que todavía no funcionarían)
-FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir", "restablecer_password", "observaciones", "notificaciones", "registro_compartidos", "tiempo_real", "comentarios", "coincidencias", "panel_admin", "zip_historial", "sesion_horario", "redactar_inmueble"]
+FUNCIONES = ["editar_expediente", "actualizar_existente", "password_usuario", "compartir", "restablecer_password", "observaciones", "notificaciones", "registro_compartidos", "tiempo_real", "comentarios", "coincidencias", "panel_admin", "zip_historial", "sesion_horario", "redactar_inmueble", "genero_usuario"]
 GRACIA_SEGUNDOS = int(os.getenv("GRACIA_SEGUNDOS", "45"))
 
 # Por qué se cerró una sesión (para avisarle al otro dispositivo). Se guarda en memoria unas horas.
@@ -275,6 +275,9 @@ def genero_de_usuario(user) -> str:
     """FEMENINO / MASCULINO por el nombre que se muestra (o el usuario); '' si no se sabe. Para el saludo de bienvenida."""
     if not user:
         return ""
+    fijo = str(getattr(user, "genero", None) or "").upper()
+    if fijo in ("FEMENINO", "MASCULINO"):
+        return fijo
     nombre = (getattr(user, "nombre_mostrar", None) or "").strip() or str(getattr(user, "username", "") or "").replace(".", " ").replace("_", " ")
     try:
         return nombres.genero(nombre) if nombre else ""

@@ -11,7 +11,7 @@ import { conMontoEnLetras, entero } from './montoLetras';
 const DIGITOS = ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
 const digitosConLetra = (d) => d.split('').map((x) => DIGITOS[Number(x)]).join(' ');
 
-const folioLetras = (n) => entero(Number(n));
+const folioLetras = (n) => entero(Number(n)).toLowerCase(); // el folio va con minúsculas: "41230" (cuarenta y un mil …)
 const escrituraLetras = (n) => entero(Number(n)).toLowerCase();
 function salarioLetras(n) {
   const limpio = String(n).replace(/,/g, '');

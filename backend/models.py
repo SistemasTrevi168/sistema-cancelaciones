@@ -26,6 +26,8 @@ class Usuario(Base):
     rol = Column(String, nullable=True)
     # El administrador le restableció la contraseña: al entrar debe cambiarla por una propia
     debe_cambiar_password = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    # Mujer u hombre, si el administrador lo eligió (para «Bienvenida» / «Bienvenido»). Vacío: se deduce del nombre
+    genero = Column(String, nullable=True)
 
 class Expediente(Base):
     __tablename__ = "expedientes"

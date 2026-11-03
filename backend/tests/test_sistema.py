@@ -545,7 +545,7 @@ _RAW = "DATOS DE IDENTIFICACIÓN: VIVIENDA: CASA 18-A LOTE: 18 MANZANA: 11 MUNIC
 chk("inmueble escrito a mano: se respeta", _L({"datos_inmueble": _INM, "texto_raw": _RAW})["datos_inmueble"] == _INM)
 chk("inmueble escrito a mano: no se recorta a lote y manzana", _L({"datos_inmueble": _INM})["datos_inmueble"] == _INM)
 chk("inmueble leído del PDF: se arma con la constancia", _L({"datos_inmueble": "x", "texto_raw": _RAW}, desde_pdf=True)["datos_inmueble"].startswith('LA CASA MARCADA CON EL NÚMERO Y LETRA DIECIOCHO GUION "A", CONSTRUIDA SOBRE EL LOTE DIECIOCHO, MANZANA ONCE'))
-chk("folio: al cambiar el número cambian sus letras", _L({"folio_real": '"321250" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CUARENTA)'})["folio_real"] == '"321250" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CINCUENTA)')
+chk("folio: al cambiar el número cambian sus letras", _L({"folio_real": '"321250" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CUARENTA)'})["folio_real"] == '"321250" (trescientos veintiún mil doscientos cincuenta)')
 chk("carta: al cambiar el número cambian sus letras", _L({"numero_carta": '"0543910958" (cero cinco cuatro tres nueve uno cero nueve cinco nueve)'})["numero_carta"].endswith("cinco ocho)"))
 chk("carta 2: igual", _L({"numero_carta_2": "0543910958 (cero cinco)", "nombre_acreditado_2": "X"})["numero_carta_2"] == '"0543910958" (cero cinco cuatro tres nueve uno cero nueve cinco ocho)')
 chk("escritura: número con sus letras viejas", _L({"numero_escritura": "15813 (quince mil ochocientos doce)"})["numero_escritura"] == "quince mil ochocientos trece")
@@ -572,7 +572,7 @@ with cliente() as c_cv:
     chk("Word: el inmueble escrito a mano", "marcada con el número dieciocho guion" in _t and "del lote condominal tres" in _t, _t[:300])
     chk("Word: el folio con sus letras nuevas", "321250" in _t and "DOSCIENTOS CINCUENTA" in _t.upper(), _t[:300])
     r = c_cv.post("/api/expedientes/normalizar-campo", headers=_h, json={"campo": "folio_real", "texto": "00321240"}).json()
-    chk("normalizar folio: con su formato", r["valor"] == '"321240" (TRESCIENTOS VEINTIÚN MIL DOSCIENTOS CUARENTA)', r)
+    chk("normalizar folio: con su formato", r["valor"] == '"321240" (trescientos veintiún mil doscientos cuarenta)', r)
 
 # --- El administrador ve el perfil de otro usuario y le cierra sesiones ---
 with cliente() as c_vp:
@@ -797,6 +797,21 @@ if True:
     chk("sesión mantenida: sigue abierta", c_ses.get("/api/auth/ping", headers=_hm).json()["activa"] is True)
     _r = c_ses.post("/api/expedientes/redactar-inmueble", headers=_hm, json={"datos": {"1_vivienda": "DEPTO 2", "4_lote": "2", "15_municipio": "METEPEC", "17_estado": "MEXICO"}})
     chk("redactar inmueble: desde el desglose", _r.status_code == 200 and _r.json()["texto"].startswith("EL DEPARTAMENTO MARCADO CON EL NÚMERO DOS, CONSTRUIDO SOBRE EL LOTE DOS"), _r.text[:300])
+
+# --- Mujer u hombre al dar de alta ---
+c_gen = cliente()
+_tk = c_gen.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]
+_ha2 = {"Authorization": "Bearer " + _tk}
+chk("género: se deduce del nombre", c_gen.post("/api/admin/genero-de-nombre", headers=_ha2, json={"nombre": "Laura"}).json()["genero"] == "FEMENINO")
+_r = c_gen.post("/api/admin/usuarios", headers=_ha2, data={"username": f"meredit_{SUF}", "password": "Prueba2026!", "rol": "operador", "genero": "FEMENINO"})
+chk("género: alta con mujer elegida", _r.status_code == 200, _r.text[:200])
+_u = next((x for x in c_gen.get("/api/admin/usuarios", headers=_ha2).json() if x["username"] == f"meredit_{SUF}"), {})
+chk("género: la lista lo trae fijo", _u.get("genero") == "FEMENINO" and _u.get("genero_fijo") is True, _u)
+_r = c_gen.put(f"/api/admin/usuarios/{_u.get('id')}/genero", headers=_ha2, json={"genero": "MASCULINO"})
+chk("género: se puede cambiar", _r.status_code == 200 and _r.json()["genero"] == "MASCULINO", _r.text[:200])
+_r = c_gen.post("/api/auth/login", json={"username": f"meredit_{SUF}", "password": "Prueba2026!"})
+chk("género: el saludo usa el elegido", _r.json()["user"]["genero"] == "MASCULINO", _r.text[:200])
+chk("folio: con minúsculas", main.numero_folio_a_letras("41230") == "cuarenta y un mil doscientos treinta", main.numero_folio_a_letras("41230"))
 
 print()
 if FALLAS:

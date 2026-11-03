@@ -862,9 +862,12 @@ const handlePreviewExcel = async (file) => {
       formDataObj.append('password', nuevoUsuario.password);
       formDataObj.append('es_admin', nuevoUsuario.role === 'admin');
       formDataObj.append('rol', nuevoUsuario.role || 'operador');
+      if (nuevoUsuario.nombre_mostrar) formDataObj.append('nombre_mostrar', nuevoUsuario.nombre_mostrar);
+      // Mujer u hombre: lo que eligió el administrador, o lo que se dedujo del nombre
+      if (nuevoUsuario.genero) formDataObj.append('genero', nuevoUsuario.genero);
 
       await api.post('/admin/usuarios', formDataObj);
-      setNuevoUsuario({ username: '', password: '', role: 'operador', es_admin: false });
+      setNuevoUsuario({ username: '', password: '', role: 'operador', es_admin: false, nombre_mostrar: '', genero: '' });
       cargarUsuarios();
       avisar.exito(`Usuario ${nuevoUsuario.username} creado.`);
     } catch (err) {
@@ -1105,6 +1108,20 @@ const handlePreviewExcel = async (file) => {
   const descartarLoteSinGuardar = async () => {
     const sinGuardar = batchResults.filter((r) => !r.error && !r.expediente_id).length;
     return sinGuardar === 0 || confirmar(`${sinGuardar} expediente(s) del lote anterior no se han guardado y se perderán.`, { titulo: '¿Cargar otro lote?', textoConfirmar: 'Sí, cargar otro', peligro: true });
+  };
+  // «Cargar otro lote»: pregunta antes (como «Nuevo expediente») y deja los recuadros vacíos para el siguiente
+  const nuevoLote = async () => {
+    const sinGuardar = batchResults.filter((r) => !r.error && !r.expediente_id).length;
+    const ok = await confirmar(
+      sinGuardar > 0
+        ? `${sinGuardar} expediente(s) de este lote no se han guardado y se perderán, junto con los archivos cargados.`
+        : 'Se quitarán la lista y los archivos de este lote. Los que guardaste ya están en Mi Historial.',
+      { titulo: '¿Cargar otro lote?', textoConfirmar: sinGuardar > 0 ? 'Descartar y cargar otro' : 'Sí, cargar otro', peligro: sinGuardar > 0 },
+    );
+    if (!ok) return false;
+    setBatchResults([]);
+    setCartasLote([]); setConstanciasLote([]); setSelectedBatchIndices([]); setOpenAccordion({});
+    return true;
   };
   const agregarArchivosLote = async (tipo, archivos) => {
     const pdfs = Array.from(archivos || []).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
@@ -2634,6 +2651,7 @@ const cambiarEstado = async (ids, estado) => {
     cartasLote,
     constanciasLote,
     agregarArchivosLote,
+    nuevoLote,
     quitarArchivoDeLote,
     soltarArchivosLote,
     handleBatchInputChange,
@@ -2738,7 +2756,8 @@ const cambiarEstado = async (ids, estado) => {
     guardarPreferencias,
     setCurrentUser,
     unlockedFields,
-    usuariosLista
+    usuariosLista,
+    cargarUsuarios,
   };
 
   return (

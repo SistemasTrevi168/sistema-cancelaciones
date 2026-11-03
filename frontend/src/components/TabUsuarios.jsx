@@ -1,4 +1,4 @@
-import { Eye, EyeOff, IdCard, KeyRound, LifeBuoy, Loader2, Plus, Power, Search, ShieldCheck, Trash2, UserCog, Users, X } from 'lucide-react';
+import { ArrowUpDown, CheckCircle2, Eye, EyeOff, FileText, IdCard, Inbox, KeyRound, LifeBuoy, Loader2, PackageCheck, Plus, Power, Search, Share2, ShieldCheck, Trash2, UserCog, Users, X } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import Selector from './Selector';
 
@@ -34,7 +34,26 @@ export default function TabUsuarios() {
   // Buscador de la lista: por nombre o usuario, sin importar acentos ni mayúsculas
   const [busca, setBusca] = useState('');
   const normal = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const visibles = usuariosLista.filter((u) => !busca.trim() || normal(`${u.nombre_mostrar || ''} ${u.username}`).includes(normal(busca.trim())));
+  // Filtros y orden de la lista
+  const [tipo, setTipo] = useState('todos'); // todos | operador | admin | revisor
+  const [estadoFiltro, setEstadoFiltro] = useState('todos'); // todos | activos | inactivos
+  const [orden, setOrden] = useState('az'); // az | za | expedientes | reciente
+  const esAdminU = (u) => u.es_admin || u.role === 'admin' || u.username === 'admin';
+  const tipoDe = (u) => (esAdminU(u) ? 'admin' : (u.rol === 'revisor' ? 'revisor' : 'operador'));
+  const nombreDe = (u) => (u.nombre_mostrar || u.username || '').trim();
+  const hayRevisores = usuariosLista.some((u) => tipoDe(u) === 'revisor');
+  const cuantos = (t) => usuariosLista.filter((u) => t === 'todos' || tipoDe(u) === t).length;
+  const visibles = usuariosLista
+    .filter((u) => !busca.trim() || normal(`${u.nombre_mostrar || ''} ${u.username}`).includes(normal(busca.trim())))
+    .filter((u) => tipo === 'todos' || tipoDe(u) === tipo)
+    .filter((u) => estadoFiltro === 'todos' || (estadoFiltro === 'activos') === (u.activo !== false))
+    .sort((a, b) => {
+      if (orden === 'expedientes') return (b.expedientes || 0) - (a.expedientes || 0) || nombreDe(a).localeCompare(nombreDe(b), 'es', { sensitivity: 'base' });
+      if (orden === 'reciente') return String(b.ultimo_expediente || '').localeCompare(String(a.ultimo_expediente || '')) || nombreDe(a).localeCompare(nombreDe(b), 'es', { sensitivity: 'base' });
+      const r = nombreDe(a).localeCompare(nombreDe(b), 'es', { sensitivity: 'base' });
+      return orden === 'za' ? -r : r;
+    });
+  const filtrando = busca.trim() || tipo !== 'todos' || estadoFiltro !== 'todos';
   // Perfil de un usuario abierto (como lo ve él en "Mi perfil")
   const [perfilDe, setPerfilDe] = useState(null);
   // La lista mide lo mismo que el formulario de al lado (sin hueco abajo); la lista tiene su propio scroll
@@ -129,7 +148,7 @@ export default function TabUsuarios() {
                 <div className="usuarios-encabezado">
                   <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Users size={20} color={theme.accent} /> Lista de Usuarios
-                    <span className="usuarios-conteo" style={{ color: theme.textSecondary, borderColor: theme.border }}>{busca.trim() ? `${visibles.length} de ${usuariosLista.length}` : usuariosLista.length}</span>
+                    <span className="usuarios-conteo" style={{ color: theme.textSecondary, borderColor: theme.border }}>{filtrando ? `${visibles.length} de ${usuariosLista.length}` : usuariosLista.length}</span>
                   </h2>
                   <label className="usuarios-buscar" style={{ borderColor: theme.border, backgroundColor: theme.inputBg }}>
                     <Search size={15} color={theme.textSecondary} />
@@ -137,6 +156,35 @@ export default function TabUsuarios() {
                       aria-label="Buscar usuarios" style={{ color: theme.textPrimary }} />
                     {busca && <button type="button" className="quitar-archivo" onClick={() => setBusca('')} aria-label="Limpiar búsqueda"><X size={13} /></button>}
                   </label>
+                </div>
+                <div className="usuarios-filtros">
+                  <div className="hf-segmentos usuarios-tipos" role="group" aria-label="Tipo de usuario" style={{ borderColor: theme.border, backgroundColor: theme.subtleBg }}>
+                    {[['todos', 'Todos'], ['operador', 'Operadores'], ...(hayRevisores ? [['revisor', 'Revisores']] : []), ['admin', 'Administradores']].map(([id, txt]) => (
+                      <button key={id} type="button" className={`hf-segmento ${tipo === id ? 'activo' : ''}`} onClick={() => setTipo(id)} aria-pressed={tipo === id}
+                        style={tipo === id ? { backgroundColor: theme.accent, color: '#fff' } : { color: theme.textSecondary }}>
+                        {txt} <span className="usuarios-tipo-n">{cuantos(id)}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <Selector value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)} aria-label="Estado"
+                    style={{ border: `1px solid ${theme.border}`, borderRadius: '8px', backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '12px', padding: '6px 8px', cursor: 'pointer' }}>
+                    <option value="todos">Activos e inactivos</option>
+                    <option value="activos">Solo activos</option>
+                    <option value="inactivos">Solo inactivos</option>
+                  </Selector>
+                  <label className="usuarios-orden" style={{ borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textSecondary }}>
+                    <ArrowUpDown size={13} />
+                    <Selector value={orden} onChange={(e) => setOrden(e.target.value)} aria-label="Ordenar"
+                      style={{ border: 'none', backgroundColor: 'transparent', color: theme.textPrimary, fontSize: '12px', fontWeight: 600, padding: '6px 0', cursor: 'pointer' }}>
+                      <option value="az">Nombre A-Z</option>
+                      <option value="za">Nombre Z-A</option>
+                      <option value="expedientes">Más expedientes</option>
+                      <option value="reciente">Último expediente</option>
+                    </Selector>
+                  </label>
+                  {filtrando && (
+                    <button type="button" className="enlace-pequeno" onClick={() => { setBusca(''); setTipo('todos'); setEstadoFiltro('todos'); }} style={{ color: theme.accent }}>Limpiar filtros</button>
+                  )}
                 </div>
 
                 {loadingUsuarios ? (
@@ -153,7 +201,7 @@ export default function TabUsuarios() {
                     </thead>
                     <tbody>
                       {visibles.length === 0 && (
-                        <tr><td colSpan={3} style={{ padding: '24px', textAlign: 'center', color: theme.textSecondary }}>Ningún usuario coincide con «{busca}».</td></tr>
+                        <tr><td colSpan={3} style={{ padding: '24px', textAlign: 'center', color: theme.textSecondary }}>{busca.trim() ? `Ningún usuario coincide con «${busca}».` : 'Ningún usuario con estos filtros.'}</td></tr>
                       )}
                       {visibles.map((u, i) => {
                         const esUsuarioAdmin = u.es_admin || u.role === 'admin' || u.username === 'admin';
@@ -163,16 +211,42 @@ export default function TabUsuarios() {
                         return (
                           <tr key={u.id} className="fila-usuario" style={{ borderBottom: `1px solid ${theme.border}`, opacity: activo ? 1 : 0.6, animationDelay: `${Math.min(i, 12) * 35}ms` }}>
                             <td className="celda-titulo" style={{ padding: '10px', fontWeight: '600', color: theme.textPrimary, minWidth: 0 }}>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <span style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                                 <button type="button" className="usuario-abrir-perfil" onClick={() => setPerfilDe(u)} title={`Ver el perfil de ${u.nombre_mostrar || u.username}`} aria-label={`Ver el perfil de ${u.nombre_mostrar || u.username}`} data-sin-onda>
                                 <Avatar usuario={esYo ? { ...u, foto: currentUser?.foto ?? u.foto, nombre_mostrar: currentUser?.nombre_mostrar ?? u.nombre_mostrar } : u} tam={30} color={theme.accent} />
                                 </button>
                                 <span>
                                   <button type="button" className="usuario-nombre-perfil" onClick={() => setPerfilDe(u)} data-sin-onda style={{ color: theme.textPrimary }}>
                                   {u.nombre_mostrar || u.username}</button>{esYo && <span style={{ fontWeight: 'normal', color: theme.textSecondary }}> (tú)</span>}
-                                  <span className="usuario-meta" style={{ display: 'block', fontWeight: 'normal', fontSize: '11px', color: theme.textSecondary }}>
-                                    {u.nombre_mostrar ? `@${u.username}` : ''}{u.nombre_mostrar && typeof u.expedientes === 'number' ? ' · ' : ''}{typeof u.expedientes === 'number' ? `${u.expedientes} expediente${u.expedientes === 1 ? '' : 's'}` : ''}
-                                  </span>
+                                  {u.nombre_mostrar && (
+                                    <span className="usuario-meta" style={{ display: 'block', fontWeight: 'normal', fontSize: '11px', color: theme.textSecondary }}>@{u.username}</span>
+                                  )}
+                                  {typeof u.expedientes === 'number' && (
+                                    <span className="usuario-cifras">
+                                      <span className="usuario-cifra" title={`${u.generados ?? 0} generados · ${u.revisados ?? 0} revisados · ${u.entregados ?? 0} entregados`}
+                                        style={{ color: theme.textPrimary, backgroundColor: theme.subtleBg, borderColor: theme.border }}>
+                                        <FileText size={11} /> {u.expedientes} expediente{u.expedientes === 1 ? '' : 's'}
+                                      </span>
+                                      {typeof u.revisados === 'number' && (
+                                        <span className={`usuario-cifra ${u.revisados ? 'cifra-revisados' : 'cifra-cero'}`} title="Expedientes marcados como Revisado">
+                                          <CheckCircle2 size={11} /> {u.revisados} revisado{u.revisados === 1 ? '' : 's'}
+                                        </span>
+                                      )}
+                                      {u.entregados > 0 && (
+                                        <span className="usuario-cifra cifra-entregados" title="Expedientes marcados como Entregado"><PackageCheck size={11} /> {u.entregados} entregado{u.entregados === 1 ? '' : 's'}</span>
+                                      )}
+                                      {typeof u.compartidos === 'number' && (
+                                        <span className={`usuario-cifra ${u.compartidos || u.compartio_todos ? 'cifra-compartidos' : 'cifra-cero'}`} title="Expedientes suyos que compartió con alguien">
+                                          <Share2 size={11} /> {u.compartio_todos ? 'Compartió todos' : `${u.compartidos} compartido${u.compartidos === 1 ? '' : 's'}`}
+                                        </span>
+                                      )}
+                                      {(u.le_comparten > 0 || u.le_comparten_todos) && (
+                                        <span className="usuario-cifra cifra-recibidos" title="Expedientes de otras personas que puede ver">
+                                          <Inbox size={11} /> {u.le_comparten_todos ? 'Le comparten todos los de alguien' : `Le comparten ${u.le_comparten}`}
+                                        </span>
+                                      )}
+                                    </span>
+                                  )}
                                   <span className="usuario-estado">
                               <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '999px', backgroundColor: activo ? '#dcfce7' : '#f1f5f9', color: activo ? '#166534' : '#475569' }}>
                                 {activo ? 'Activo' : 'Inactivo'}

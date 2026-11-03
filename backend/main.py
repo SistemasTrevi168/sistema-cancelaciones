@@ -2145,12 +2145,37 @@ def bitacora_expediente(
 def obtener_usuarios(db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
     usuarios = db.query(models.Usuario).all()
     from sqlalchemy import func as _func
-    conteo = dict(db.query(models.Expediente.usuario_propietario, _func.count(models.Expediente.id))
-                  .group_by(models.Expediente.usuario_propietario).all())
+    E, C = models.Expediente, models.Compartido
+    conteo: Dict[str, int] = {}
+    por_estado: Dict[str, Dict[str, int]] = {}
+    ultimo: Dict[str, Any] = {}
+    for dueno, estado, n, fecha in (db.query(E.usuario_propietario, E.estado, _func.count(E.id), _func.max(E.fecha_creacion))
+                                    .group_by(E.usuario_propietario, E.estado).all()):
+        est = str(estado or "").upper()
+        est = est if est in ESTADOS else "GENERADO"  # los de antes (PENDIENTE…) cuentan como generados
+        conteo[dueno] = conteo.get(dueno, 0) + int(n)
+        por_estado.setdefault(dueno, {})[est] = por_estado.setdefault(dueno, {}).get(est, 0) + int(n)
+        if fecha and (dueno not in ultimo or fecha > ultimo[dueno]):
+            ultimo[dueno] = fecha
+    # Compartidos: los que la persona compartió (de sus expedientes) y los que le comparten a ella
+    compartio = dict(db.query(C.propietario, _func.count(_func.distinct(C.expediente_id)))
+                     .filter(C.todos.is_(False)).group_by(C.propietario).all())
+    recibe = dict(db.query(C.con_usuario, _func.count(_func.distinct(C.expediente_id)))
+                  .filter(C.todos.is_(False)).group_by(C.con_usuario).all())
+    compartio_todo = {x for (x,) in db.query(C.propietario).filter(C.todos.is_(True)).distinct().all()}
+    recibe_todo = {x for (x,) in db.query(C.con_usuario).filter(C.todos.is_(True)).distinct().all()}
     return [
         {
             "id": str(u.id),
             "expedientes": int(conteo.get(u.username, 0)),
+            "generados": int(por_estado.get(u.username, {}).get("GENERADO", 0)),
+            "revisados": int(por_estado.get(u.username, {}).get("REVISADO", 0)),
+            "entregados": int(por_estado.get(u.username, {}).get("ENTREGADO", 0)),
+            "compartidos": int(compartio.get(u.username, 0)),
+            "compartio_todos": u.username in compartio_todo,
+            "le_comparten": int(recibe.get(u.username, 0)),
+            "le_comparten_todos": u.username in recibe_todo,
+            "ultimo_expediente": ultimo[u.username].isoformat() if u.username in ultimo else None,
             "rol": compartir.rol_de(u),
             "username": u.username,
             "es_admin": u.es_admin,

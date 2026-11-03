@@ -78,23 +78,40 @@ export default function TabMasivo() {
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(10);
   const inicioResultados = useRef(null);
-  const totalPaginas = Math.max(1, Math.ceil(batchResults.length / porPagina));
+  const plantillaDe = (res) => res.plantilla_seleccionada || selectedPlantilla;
+  const faltanDe = (res) => faltantesPara(res.datos_extraidos || {}, plantillaDe(res));
+  const incidenciaDe = (res) => (res.leyendo ? null : revisarIncidencia(res.datos_extraidos));
+  // Filtro de la lista: todos | borradores | guardados | faltantes | incidencia (se elige con los contadores de arriba)
+  const [filtroLote, setFiltroLote] = useState('todos');
+  const pasaFiltro = (res) => {
+    if (filtroLote === 'todos') return true;
+    if (res.error) return false;
+    if (filtroLote === 'borradores') return !res.expediente_id;
+    if (filtroLote === 'guardados') return !!res.expediente_id;
+    if (filtroLote === 'faltantes') return faltanDe(res).length > 0;
+    if (filtroLote === 'incidencia') return !!incidenciaDe(res)?.incidencia;
+    return true;
+  };
+  const filtradas = batchResults.map((res, idx) => ({ res, idx })).filter(({ res }) => pasaFiltro(res));
+  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / porPagina));
   const paginaVista = Math.min(pagina, totalPaginas);
   const irAPagina = (n) => {
     setPagina(Math.min(Math.max(1, n), totalPaginas));
     inicioResultados.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   // Al volver de revisar un expediente, la tabla queda en la página donde está ese expediente
-  const volverALista = () => { if (abierto !== null) setPagina(Math.floor(abierto / porPagina) + 1); setAbierto(null); };
-  const filasPagina = batchResults.map((res, idx) => ({ res, idx })).slice((paginaVista - 1) * porPagina, paginaVista * porPagina);
+  const volverALista = () => {
+    const pos = filtradas.findIndex((f) => f.idx === abierto);
+    if (pos >= 0) setPagina(Math.floor(pos / porPagina) + 1);
+    setAbierto(null);
+  };
+  const filasPagina = filtradas.slice((paginaVista - 1) * porPagina, paginaVista * porPagina);
+  const elegirFiltro = (f) => { setFiltroLote((actual) => (actual === f ? 'todos' : f)); setPagina(1); };
 
   const validos = batchResults.map((r, i) => (r.error ? null : i)).filter((i) => i !== null);
   const enRevision = abierto !== null && batchResults[abierto] && !batchResults[abierto].error ? abierto : null;
   const cargaVisible = batchResults.length === 0 || batchLoading || cargaAbierta;
-  const plantillaDe = (res) => res.plantilla_seleccionada || selectedPlantilla;
-  const faltanDe = (res) => faltantesPara(res.datos_extraidos || {}, plantillaDe(res));
   const conFaltantes = validos.filter((i) => faltanDe(batchResults[i]).length > 0).length;
-  const incidenciaDe = (res) => (res.leyendo ? null : revisarIncidencia(res.datos_extraidos));
   const conIncidencia = validos.filter((i) => incidenciaDe(batchResults[i])?.incidencia).length;
   const borradores = validos.filter((i) => !batchResults[i].expediente_id);
   const guardadosN = validos.length - borradores.length;
@@ -272,10 +289,30 @@ export default function TabMasivo() {
                 title="Marcar todos"
               />
               <h2 style={{ color: theme.textPrimary }}><ListChecks size={19} color={theme.accent} /> Resultados ({validos.length})</h2>
-              {borradores.length > 0 && <span className="chip-dato chip-borrador"><PencilLine size={12} /> {borradores.length} sin guardar</span>}
-              {guardadosN > 0 && <span className="chip-dato chip-ok"><Save size={12} /> {guardadosN} guardados</span>}
-              {conFaltantes > 0 && <span className="chip-dato chip-falta"><AlertTriangle size={12} /> {conFaltantes} con faltantes</span>}
-              {conIncidencia > 0 && <span className="chip-dato chip-incidencia-grande" title="No pueden pasar a firma: les falta el notario de origen, o el número y la fecha de la escritura"><ShieldAlert size={12} /> {conIncidencia} con incidencia</span>}
+              {/* Los contadores filtran la lista: clic para ver solo esos, otro clic para ver todos */}
+              {(borradores.length > 0 || filtroLote === 'borradores') && (
+                <button type="button" className={`chip-dato chip-borrador chip-filtro-lote ${filtroLote === 'borradores' ? 'activo' : ''}`} onClick={() => elegirFiltro('borradores')} aria-pressed={filtroLote === 'borradores'} title="Ver solo los que faltan por guardar">
+                  <PencilLine size={12} /> {borradores.length} sin guardar
+                </button>
+              )}
+              {(guardadosN > 0 || filtroLote === 'guardados') && (
+                <button type="button" className={`chip-dato chip-ok chip-filtro-lote ${filtroLote === 'guardados' ? 'activo' : ''}`} onClick={() => elegirFiltro('guardados')} aria-pressed={filtroLote === 'guardados'} title="Ver solo los guardados">
+                  <Save size={12} /> {guardadosN} guardado{guardadosN === 1 ? '' : 's'}
+                </button>
+              )}
+              {(conFaltantes > 0 || filtroLote === 'faltantes') && (
+                <button type="button" className={`chip-dato chip-falta chip-filtro-lote ${filtroLote === 'faltantes' ? 'activo' : ''}`} onClick={() => elegirFiltro('faltantes')} aria-pressed={filtroLote === 'faltantes'} title="Ver solo los que tienen datos faltantes">
+                  <AlertTriangle size={12} /> {conFaltantes} con faltantes
+                </button>
+              )}
+              {(conIncidencia > 0 || filtroLote === 'incidencia') && (
+                <button type="button" className={`chip-dato chip-incidencia-grande chip-filtro-lote ${filtroLote === 'incidencia' ? 'activo' : ''}`} onClick={() => elegirFiltro('incidencia')} aria-pressed={filtroLote === 'incidencia'} title="Ver solo los que no pueden pasar a firma: les falta el notario de origen, o el número y la fecha de la escritura">
+                  <ShieldAlert size={12} /> {conIncidencia} con incidencia
+                </button>
+              )}
+              {filtroLote !== 'todos' && (
+                <button type="button" className="enlace-pequeno" onClick={() => elegirFiltro('todos')} style={{ color: theme.accent }}><X size={12} /> Ver todos ({validos.length})</button>
+              )}
             </div>
             <div className="resultados-acciones">
               <Selector
@@ -313,6 +350,12 @@ export default function TabMasivo() {
           </header>
 
           <div className="filas-lote">
+            {filtradas.length === 0 && (
+              <p className="lote-vacio" style={{ color: theme.textSecondary }}>
+                {filtroLote === 'guardados' ? 'Todavía no hay expedientes guardados en este lote.' : filtroLote === 'borradores' ? 'Ya se guardaron todos los expedientes de este lote.' : 'Ningún expediente con este filtro.'}{' '}
+                <button type="button" className="enlace-pequeno" onClick={() => elegirFiltro('todos')} style={{ color: theme.accent }}>Ver todos</button>
+              </p>
+            )}
             {filasPagina.map(({ res, idx }) => {
               if (res.error) {
                 return (
@@ -437,10 +480,10 @@ export default function TabMasivo() {
             })}
           </div>
 
-          {batchResults.length > 10 && (
+          {filtradas.length > 10 && (
             <nav className="paginacion-lote" aria-label="Páginas de resultados" style={{ borderColor: theme.border, color: theme.textSecondary }}>
               <span>
-                {(paginaVista - 1) * porPagina + 1}–{Math.min(paginaVista * porPagina, batchResults.length)} de {batchResults.length} expedientes
+                {(paginaVista - 1) * porPagina + 1}–{Math.min(paginaVista * porPagina, filtradas.length)} de {filtradas.length} expedientes{filtroLote !== 'todos' ? ' (filtrados)' : ''}
               </span>
               <div className="paginacion-botones">
                 <button type="button" onClick={() => irAPagina(paginaVista - 1)} disabled={paginaVista === 1} aria-label="Página anterior" style={{ borderColor: theme.border, backgroundColor: theme.cardBg, color: theme.textPrimary }}><ChevronLeft size={15} /></button>

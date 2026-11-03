@@ -277,12 +277,12 @@ export default function TabUsuarios() {
                                   )}
                                   {typeof u.expedientes === 'number' && (
                                     <span className="usuario-cifras">
-                                      <span className="usuario-cifra" title={`${u.generados ?? 0} generados · ${u.revisados ?? 0} revisados · ${u.entregados ?? 0} entregados`}
+                                      <span className="usuario-cifra" title={`De sus expedientes: ${u.generados ?? 0} generados · ${u.en_revisado ?? 0} en revisado · ${u.entregados ?? 0} entregados`}
                                         style={{ color: theme.textPrimary, backgroundColor: theme.subtleBg, borderColor: theme.border }}>
                                         <FileText size={11} /> {u.expedientes} expediente{u.expedientes === 1 ? '' : 's'}
                                       </span>
                                       {typeof u.revisados === 'number' && (
-                                        <span className={`usuario-cifra ${u.revisados ? 'cifra-revisados' : 'cifra-cero'}`} title="Expedientes marcados como Revisado">
+                                        <span className={`usuario-cifra ${u.revisados ? 'cifra-revisados' : 'cifra-cero'}`} title="Expedientes que esta persona marcó como Revisado (suyos o que le compartieron). Si otra persona revisó los suyos, cuentan para esa otra persona.">
                                           <CheckCircle2 size={11} /> {u.revisados} revisado{u.revisados === 1 ? '' : 's'}
                                         </span>
                                       )}

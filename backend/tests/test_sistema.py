@@ -813,6 +813,26 @@ _r = c_gen.post("/api/auth/login", json={"username": f"meredit_{SUF}", "password
 chk("género: el saludo usa el elegido", _r.json()["user"]["genero"] == "MASCULINO", _r.text[:200])
 chk("folio: con minúsculas", main.numero_folio_a_letras("41230") == "cuarenta y un mil doscientos treinta", main.numero_folio_a_letras("41230"))
 
+# --- «Revisados» cuenta para quien cambió el estado ---
+from database import SessionLocal as _SL  # noqa: E402
+import models as _models  # noqa: E402
+c_gen = cliente()
+_ha2 = {"Authorization": "Bearer " + c_gen.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+_db = _SL()
+_ex = _models.Expediente(usuario_propietario=f"meredit_{SUF}", numero_credito=f"77{SUF[:6]}", estado="GENERADO", datos_extraidos={"nombre_acreditado": "PRUEBA REVISADOS"})
+_db.add(_ex); _db.commit(); _exid = str(_ex.id); _db.close()
+_lista = lambda: {x["username"]: x for x in c_gen.get("/api/admin/usuarios", headers=_ha2).json()}
+_antes_adm = _lista()["admin"]["revisados"]
+_r = c_gen.put(f"/api/expedientes/{_exid}/estado", headers=_ha2, json={"estado": "REVISADO"})
+chk("revisados: el admin lo marca revisado", _r.status_code == 200, _r.text[:200])
+_l = _lista()
+chk("revisados: cuenta para quien lo revisó", _l["admin"]["revisados"] == _antes_adm + 1, (_antes_adm, _l["admin"]["revisados"]))
+chk("revisados: no cuenta para la dueña", _l[f"meredit_{SUF}"]["revisados"] == 0 and _l[f"meredit_{SUF}"]["en_revisado"] == 1, _l[f"meredit_{SUF}"])
+c_gen.put(f"/api/expedientes/{_exid}/estado", headers=_ha2, json={"estado": "ENTREGADO"})
+chk("revisados: entregado sigue contando", _lista()["admin"]["revisados"] == _antes_adm + 1)
+c_gen.put(f"/api/expedientes/{_exid}/estado", headers=_ha2, json={"estado": "GENERADO"})
+chk("revisados: regresado a generado ya no cuenta", _lista()["admin"]["revisados"] == _antes_adm)
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

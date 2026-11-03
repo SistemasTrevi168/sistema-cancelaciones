@@ -2250,6 +2250,15 @@ const cambiarEstado = async (ids, estado) => {
     accent: acento,
   };
 
+  // El fondo de la página sigue el tema del sistema (no el de Windows): si Windows está en modo oscuro
+  // y el sistema en claro, lo que queda abajo de la pantalla ya no se ve como un recuadro negro.
+  useEffect(() => {
+    const raiz = document.documentElement;
+    raiz.style.backgroundColor = theme.bg;
+    raiz.style.colorScheme = isDarkMode ? 'dark' : 'light';
+    document.body.style.backgroundColor = theme.bg;
+  }, [theme.bg, isDarkMode]);
+
   // ---- DOCUMENTOS DEL EXPEDIENTE (visor de PDF: seleccionar texto / elegir acto) ----
   // destino: { origen: 'single' } o { origen: 'batch', index }
   const esPdf = (f) => /\.pdf$/i.test(f.name);

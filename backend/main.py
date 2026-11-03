@@ -2141,6 +2141,32 @@ def bitacora_expediente(
     }
 
 
+def revisados_por_persona(db: Session) -> Dict[str, int]:
+    """
+    Cuántos expedientes marcó cada persona como «Revisado», según la bitácora de cambios de estado.
+    Cuenta para quien hizo el cambio (aunque el expediente sea de otra persona que se lo compartió).
+    Si después lo regresaron a «Generado» ya no cuenta; si se entregó, sigue contando como revisado por ella.
+    """
+    A, E = models.Actividad, models.Expediente
+    revisor: Dict[str, str] = {}
+    for exp_id, quien, detalle in (db.query(A.expediente_id, A.username, A.detalle)
+                                   .filter(A.tipo == "estado", A.expediente_id.isnot(None))
+                                   .order_by(A.creado_en.asc(), A.id.asc()).all()):
+        a = str((detalle or {}).get("a") or "").upper() if isinstance(detalle, dict) else ""
+        if a == "REVISADO":
+            revisor[str(exp_id)] = quien
+        elif a == "GENERADO":
+            revisor.pop(str(exp_id), None)
+    if not revisor:
+        return {}
+    vigentes = {str(i) for (i, est) in db.query(E.id, E.estado).all() if str(est or "").upper() in ("REVISADO", "ENTREGADO")}
+    cuenta: Dict[str, int] = {}
+    for exp_id, quien in revisor.items():
+        if exp_id in vigentes:
+            cuenta[quien] = cuenta.get(quien, 0) + 1
+    return cuenta
+
+
 @app.get("/api/admin/usuarios")
 def obtener_usuarios(db: Session = Depends(get_db), admin: dict = Depends(require_admin)):
     usuarios = db.query(models.Usuario).all()
@@ -2164,12 +2190,15 @@ def obtener_usuarios(db: Session = Depends(get_db), admin: dict = Depends(requir
                   .filter(C.todos.is_(False)).group_by(C.con_usuario).all())
     compartio_todo = {x for (x,) in db.query(C.propietario).filter(C.todos.is_(True)).distinct().all()}
     recibe_todo = {x for (x,) in db.query(C.con_usuario).filter(C.todos.is_(True)).distinct().all()}
+    revisados_por = revisados_por_persona(db)
     return [
         {
             "id": str(u.id),
             "expedientes": int(conteo.get(u.username, 0)),
             "generados": int(por_estado.get(u.username, {}).get("GENERADO", 0)),
-            "revisados": int(por_estado.get(u.username, {}).get("REVISADO", 0)),
+            # Los que ESTA persona marcó como Revisado (suyos o que le compartieron), no los suyos que revisó otra
+            "revisados": int(revisados_por.get(u.username, 0)),
+            "en_revisado": int(por_estado.get(u.username, {}).get("REVISADO", 0)),
             "entregados": int(por_estado.get(u.username, {}).get("ENTREGADO", 0)),
             "compartidos": int(compartio.get(u.username, 0)),
             "compartio_todos": u.username in compartio_todo,

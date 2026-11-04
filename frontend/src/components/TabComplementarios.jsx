@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, History, Info, Loader2, RefreshCw, Search, Upload, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, History, Info, Loader2, RefreshCw, Search, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { useApp } from '../AppContext';
@@ -39,6 +39,9 @@ export default function TabComplementarios() {
   const [llenadosAhora, setLlenadosAhora] = useState([]);
   const [arrastrando, setArrastrando] = useState(false);
   const input = useRef(null);
+  const inputWords = useRef(null);
+  const [subiendoWords, setSubiendoWords] = useState(false);
+  const [words, setWords] = useState(null); // {resultados, llenados, zip}
 
   const cargarLista = () => api.get('/complementarios').then((r) => setExcels(r.data?.excels || [])).catch(() => setExcels([]));
   useEffect(() => { cargarLista(); }, []);
@@ -128,7 +131,43 @@ export default function TabComplementarios() {
     }
   };
 
-  const otroExcel = () => { setRes(null); setElegidos({}); setLlenadosAhora([]); cargarLista(); };
+  const otroExcel = () => { setRes(null); setElegidos({}); setLlenadosAhora([]); setWords(null); cargarLista(); };
+
+  // Word hechos fuera del sistema: se llenan con su renglón del Excel (por su crédito o su nombre)
+  const subirWords = async (lista) => {
+    const archivos = [...(lista || [])].filter((f) => /\.docx$/i.test(f.name));
+    if (!archivos.length) { avisar.aviso('Elige uno o varios Word (.docx).'); return; }
+    setSubiendoWords(true);
+    try {
+      const fd = new FormData();
+      archivos.forEach((f) => fd.append('files', f));
+      const r = await api.post(`/complementarios/${res.excel.id}/words`, fd, { timeout: 0 });
+      const d = r.data || {};
+      setWords(d);
+      setRes((x) => ({ ...x, excel: d.excel, filas: d.filas }));
+      if (d.llenados) avisar.exito(`Listo: ${d.llenados} Word llenado(s). Descárgalos en el ZIP.`);
+      else avisar.aviso('No se pudo llenar ninguno de esos Word. Revisa el detalle.');
+      cargarLista();
+    } catch (err) {
+      avisar.error(err.response?.data?.detail || 'No se pudieron subir los Word.');
+    } finally {
+      setSubiendoWords(false);
+      if (inputWords.current) inputWords.current.value = '';
+    }
+  };
+  const bajarZipWords = async () => {
+    try {
+      const r = await api.get(`/complementarios/zip/${words.zip}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([r.data]));
+      const a = document.createElement('a');
+      a.href = url; a.download = 'Word_llenados.zip';
+      document.body.appendChild(a); a.click(); a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      avisar.error('Ese ZIP ya no está disponible; vuelve a subir los Word.');
+    }
+  };
+  const LUGARES = { encabezado: 'encabezado', instrumento: 'instrumento', volumen: 'volumen', PE: 'PE', fecha: 'fecha', 'EXP.': 'EXP.' };
 
   const tarjeta = { backgroundColor: theme.cardBg, borderRadius: '16px', border: `1px solid ${theme.border}`, padding: '22px' };
   const ex = res?.excel;
@@ -165,6 +204,32 @@ export default function TabComplementarios() {
             )}
           </div>
         )}
+
+        {!res && excels && excels.length > 0 && (
+          <div className="excels-cargados" style={{ marginTop: '16px' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: '14px', color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <History size={16} color={theme.accent} /> Excel que ya están cargados
+              <span style={{ fontWeight: 400, fontSize: '12px', color: theme.textSecondary }}>· úsalos de nuevo sin volver a subirlos</span>
+            </h3>
+            <ul className="lista-excels-complementarios" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {excels.map((x) => (
+                <li key={x.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 14px', padding: '10px 0', borderTop: `1px solid ${theme.border}` }}>
+                  <FileSpreadsheet size={18} color="#15803d" />
+                  <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: theme.textPrimary, overflowWrap: 'anywhere' }}>{x.nombre}</div>
+                    <div style={{ fontSize: '12px', color: theme.textSecondary }}>Subido el {fechaCorta(x.creado_en)} por {nombreUsuario(x.subido_por, usuariosLista)}</div>
+                  </div>
+                  {x.completo
+                    ? <span className="chip-dato chip-ok"><CheckCircle2 size={12} /> Usado completo ({x.total})</span>
+                    : <span className="chip-dato chip-falta">{x.llenados} de {x.total} llenados · {x.pendientes} pendientes</span>}
+                  <button type="button" className="boton-barra" onClick={() => abrir(x)} disabled={analizando} style={{ backgroundColor: x.completo ? theme.cardBg : theme.accent, color: x.completo ? theme.textPrimary : '#fff', borderColor: x.completo ? theme.border : theme.accent }}>
+                    {x.completo ? 'Ver' : 'Usar este Excel'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {res && ex && (
@@ -192,6 +257,48 @@ export default function TabComplementarios() {
           {res.faltan_columnas?.length > 0 && (
             <div className="aviso-complementarios alerta"><AlertTriangle size={16} /> <span>No encontré la(s) columna(s) <b>{res.faltan_columnas.join(', ')}</b>; esos datos quedarán vacíos.</span></div>
           )}
+
+          <div className="panel-words-complementarios" style={{ border: `1px dashed ${theme.border}`, borderRadius: '12px', padding: '12px 14px', margin: '10px 0', backgroundColor: theme.dropzoneBg }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+              <FileText size={18} color={theme.accent} />
+              <div style={{ flex: '1 1 260px', fontSize: '13px', color: theme.textPrimary }}>
+                <b>¿Tienes Word hechos fuera del sistema?</b>
+                <span style={{ color: theme.textSecondary }}> Súbelos aquí: cada uno se busca en este Excel por su número de crédito (o su nombre) y se le llenan EXP., escritura, volumen y fecha. Te los regresa en un ZIP.</span>
+              </div>
+              <button type="button" className="boton-barra boton-subir-words" disabled={subiendoWords} onClick={() => inputWords.current?.click()}
+                style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
+                {subiendoWords ? <Loader2 size={15} className="girando" /> : <Upload size={15} />} Subir Word
+              </button>
+              <input ref={inputWords} type="file" accept=".docx" multiple hidden onChange={(e) => subirWords(e.target.files)} />
+            </div>
+            {words && (
+              <div className="resultado-words" style={{ marginTop: '10px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <span className="chip-dato chip-ok">{words.llenados} llenado(s)</span>
+                  {words.resultados.length - words.llenados > 0 && <span className="chip-dato chip-falta">{words.resultados.length - words.llenados} sin llenar</span>}
+                  {words.zip && (
+                    <button type="button" className="boton-barra" onClick={bajarZipWords} style={{ backgroundColor: theme.accent, color: '#fff', borderColor: theme.accent, marginLeft: 'auto' }}>
+                      <Download size={15} /> Descargar Word llenados (ZIP)
+                    </button>
+                  )}
+                </div>
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0, fontSize: '12.5px' }}>
+                  {words.resultados.map((w, i) => (
+                    <li key={`${w.archivo}-${i}`} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', padding: '5px 0', borderTop: `1px solid ${theme.border}` }}>
+                      {w.estado === 'llenado' ? <CheckCircle2 size={15} color="#15803d" style={{ flexShrink: 0, marginTop: 2 }} /> : <AlertTriangle size={15} color="#b45309" style={{ flexShrink: 0, marginTop: 2 }} />}
+                      <span style={{ color: theme.textPrimary, minWidth: 0, overflowWrap: 'anywhere' }}>
+                        <b>{w.archivo}</b>
+                        {w.nombre && <> → {w.nombre} (renglón {w.n}{w.por === 'nombre' ? ', por su nombre' : ''})</>}
+                        {w.lugares?.length > 0 && <span style={{ color: theme.textSecondary }}> · se llenó: {w.lugares.map((l) => LUGARES[l] || l).join(', ')}</span>}
+                        {w.nombre_ok === false && <span style={{ color: '#b45309' }}> · el nombre del Word no coincide igual con el del Excel, revísalo</span>}
+                        {w.detalle && <span style={{ display: 'block', color: w.estado === 'llenado' ? theme.textSecondary : '#b45309' }}>{w.detalle}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
 
           <div className="complementarios-filtros" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', margin: '10px 0' }}>
             {FILTROS.map(([id, txt]) => {
@@ -265,7 +372,7 @@ export default function TabComplementarios() {
                             )}
                           </>
                         ) : f.cotejo === 'llenado' ? (
-                          <span style={{ color: theme.textSecondary }}>Llenado{f.llenado_por ? ` por ${nombreUsuario(f.llenado_por, usuariosLista)}` : ''}{f.llenado_en ? ` · ${fechaCorta(f.llenado_en)}` : ''}</span>
+                          <span style={{ color: theme.textSecondary }}>{f.word ? <>Llenado en su Word <b>{f.word}</b></> : 'Llenado'}{f.llenado_por ? ` por ${nombreUsuario(f.llenado_por, usuariosLista)}` : ''}{f.llenado_en ? ` · ${fechaCorta(f.llenado_en)}` : ''}</span>
                         ) : (
                           <span style={{ color: theme.textSecondary }}>No está en el sistema todavía</span>
                         )}
@@ -296,7 +403,7 @@ export default function TabComplementarios() {
 
           <div className="complementarios-acciones" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginTop: '14px' }}>
             <span style={{ fontSize: '12px', color: theme.textSecondary, display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 260px' }}>
-              <Info size={14} /> Los que no tienen expediente quedan pendientes: cuando alguien guarde ese expediente, se llena solo.
+              <Info size={14} /> Los que no tienen expediente quedan pendientes: sube su Word arriba, o cuando alguien guarde ese expediente se llena solo.
             </span>
             {llenadosAhora.length > 0 && (
               <button type="button" className="boton-barra" disabled={descargandoZipIds} onClick={() => descargarZipIds(llenadosAhora, 'Datos_complementarios')}
@@ -312,27 +419,6 @@ export default function TabComplementarios() {
         </div>
       )}
 
-      {!res && excels && excels.length > 0 && (
-        <div style={tarjeta}>
-          <h3 style={{ margin: '0 0 10px', fontSize: '15px', color: theme.textPrimary, display: 'flex', alignItems: 'center', gap: '8px' }}><History size={17} color={theme.accent} /> Excel cargados</h3>
-          <ul className="lista-excels-complementarios" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-            {excels.map((x) => (
-              <li key={x.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 14px', padding: '10px 0', borderTop: `1px solid ${theme.border}` }}>
-                <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, color: theme.textPrimary, overflowWrap: 'anywhere' }}>{x.nombre}</div>
-                  <div style={{ fontSize: '12px', color: theme.textSecondary }}>{fechaCorta(x.creado_en)} · {nombreUsuario(x.subido_por, usuariosLista)}</div>
-                </div>
-                {x.completo
-                  ? <span className="chip-dato chip-ok"><CheckCircle2 size={12} /> Usado completo ({x.total})</span>
-                  : <span className="chip-dato chip-falta">{x.llenados} de {x.total} llenados · {x.pendientes} pendientes</span>}
-                <button type="button" className="boton-barra" onClick={() => abrir(x)} style={{ backgroundColor: theme.cardBg, color: theme.textPrimary, borderColor: theme.border }}>
-                  {x.completo ? 'Ver' : 'Continuar'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

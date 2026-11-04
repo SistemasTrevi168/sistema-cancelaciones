@@ -13,6 +13,7 @@ Flujo:
      expediente se guarde.
 """
 import difflib
+import os
 import hashlib
 import io
 import re
@@ -360,3 +361,233 @@ def marcar_llenado(db: Session, excel, n: Any, expediente_id: Any, usuario: str)
                         "llenado_en": datetime.now(timezone.utc).isoformat()}
     excel.filas = filas
     flag_modified(excel, "filas")
+
+
+# ---------------------------------------------------------------------------------------------
+# Word hechos fuera del sistema: se suben, se identifica a quién pertenecen (por el número de
+# crédito que trae el documento y se comprueba con el nombre) y se llenan sus espacios en blanco
+# con los datos de su renglón del Excel. Se regresan en un ZIP.
+# ---------------------------------------------------------------------------------------------
+_BLANCO = r"(?:[ \t _…]|\.{3,})+"
+
+
+def _reemplazar_en_parrafo(par, a, b, nuevo):
+    """Cambia el texto [a, b) del párrafo (puede abarcar varios runs) conservando el formato del primero."""
+    runs = par.runs
+    if a == b:
+        if not nuevo:
+            return
+        pos = 0
+        for r in runs:
+            if pos <= a <= pos + len(r.text) and r.text:
+                r.text = r.text[:a - pos] + nuevo + r.text[a - pos:]
+                return
+            pos += len(r.text)
+        return
+    pos = 0
+    primero = None
+    for r in runs:
+        t = r.text
+        ini, fin = pos, pos + len(t)
+        pos = fin
+        if fin <= a or ini >= b:
+            continue
+        ca, cb = max(a, ini) - ini, min(b, fin) - ini
+        if primero is None:
+            primero = r
+            r.text = t[:ca] + nuevo + t[cb:]
+        else:
+            r.text = t[:ca] + t[cb:]
+
+
+def _aplicar(par, patron, grupos) -> bool:
+    m = re.search(patron, par.text)
+    if not m:
+        return False
+    for g in sorted(grupos, key=lambda g: -m.start(g)):
+        _reemplazar_en_parrafo(par, m.start(g), m.end(g), grupos[g])
+    return True
+
+
+def _tiene_tab_con_guiones(par) -> bool:
+    from docx.oxml.ns import qn
+    ppr = par._p.pPr
+    tabs = ppr.find(qn("w:tabs")) if ppr is not None else None
+    return tabs is not None and any(t.get(qn("w:leader")) not in (None, "none") and t.get(qn("w:val")) == "right" for t in tabs)
+
+
+def llenar_word(contenido: bytes, ctx: Dict[str, str]) -> (bytes, List[str]):
+    """Llena en un Word los espacios en blanco de escritura, volumen, expediente y fecha. Regresa (docx, lugares_llenados)."""
+    import docx
+    from docx.oxml.ns import qn
+    d = docx.Document(io.BytesIO(contenido))
+    hechos: List[str] = []
+    B = _BLANCO
+    if ctx.get("escritura_num"):
+        for s in d.sections:
+            for p in list(s.header.paragraphs) + list(s.first_page_header.paragraphs) + list(s.even_page_header.paragraphs):
+                if re.search(r"\d\s*ESP\.", p.text):
+                    continue
+                if _aplicar(p, r"^(\s*)ESP\.", {1: ctx["escritura_num"] + " "}):
+                    if "encabezado" not in hechos:
+                        hechos.append("encabezado")
+    for p in d.paragraphs:
+        t = p.text
+        if ctx.get("escritura_letras") and re.search(r"INSTRUMENTO\s+NÚMERO" + B + r"\.", t):
+            if _aplicar(p, r"INSTRUMENTO\s+NÚMERO(" + B + r")\.", {1: " " + ctx["escritura_letras"]}):
+                hechos.append("instrumento")
+                if _tiene_tab_con_guiones(p):
+                    _aplicar(p, re.escape(ctx["escritura_letras"]) + r"\.(\s*-+\s*)$", {1: "\t"})
+        elif re.search(r"VOLUMEN\s+NÚMERO", t) and ("PE" in t):
+            grupos, patron = {}, r"VOLUMEN\s+NÚMERO(" + B + r")?\.(\s*-+|\s*\t\s*)?(PE-?)(" + B + r")?-(\s*)20"
+            m = re.search(patron, t)
+            if not m:
+                continue
+            if ctx.get("volumen_letras") and m.group(1) is not None:
+                grupos[1] = " " + ctx["volumen_letras"]
+            if ctx.get("expediente_num"):
+                grupos[3] = "PE-"
+                grupos[4] = ctx["expediente_num"]
+            if m.group(4) is None and ctx.get("expediente_num"):
+                # «PE--2026» sin espacios: se mete el número entre los guiones
+                grupos.pop(4, None)
+                grupos[3] = "PE-" + ctx["expediente_num"]
+            con_tab = bool(_tiene_tab_con_guiones(p) and m.group(2) and "-" in m.group(2))
+            if con_tab:
+                grupos[2] = "\t"
+            grupos = {g: v for g, v in grupos.items() if m.group(g) is not None}
+            if grupos and _aplicar(p, patron, grupos):
+                if 1 in grupos:
+                    hechos.append("volumen")
+                if 3 in grupos:
+                    hechos.append("PE")
+                if con_tab:
+                    _aplicar(p, r"PE-.*?(\t\s*)$", {1: " "})
+                    tabs = p._p.pPr.find(qn("w:tabs")) if p._p.pPr is not None else None
+                    if tabs is not None:
+                        for tab in list(tabs):
+                            if tab.get(qn("w:leader")) in (None, "none") and tab.get(qn("w:val")) in ("left", "center"):
+                                tabs.remove(tab)
+        elif ctx.get("fecha_dia") and re.search(r"a los" + B + r"días del mes de" + B + r"del año", t):
+            if _aplicar(p, r"a los(" + B + r")días del mes de(" + B + r")del año", {1: f" {ctx['fecha_dia']} ", 2: f" {ctx['fecha_mes']} "}):
+                hechos.append("fecha")
+        elif ctx.get("expediente_num") and re.match(r"^\s*EXP\." + B + r"-\s*20", t):
+            if _aplicar(p, r"^\s*EXP\.(" + B + r")-(\s*)20", {1: " " + ctx["expediente_num"], 2: ""}):
+                hechos.append("EXP.")
+    salida = io.BytesIO()
+    d.save(salida)
+    return salida.getvalue(), hechos
+
+
+def _texto_word(contenido: bytes) -> str:
+    import docx
+    d = docx.Document(io.BytesIO(contenido))
+    partes = [p.text for p in d.paragraphs]
+    for t in d.tables:
+        for fila in t.rows:
+            for celda in fila.cells:
+                partes.append(celda.text)
+    return "\n".join(partes)
+
+
+def _renglon_de_word(texto: str, filas: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """El renglón del Excel al que pertenece un Word: por un número de crédito que aparezca en el texto, y si no, por el nombre."""
+    creditos = {_credito(c) for c in re.findall(r"\b\d{8,11}\b", texto)}
+    por_credito = [f for f in filas if f.get("credito") and f["credito"] in creditos]
+    if por_credito:
+        return {"fila": por_credito[0], "por": "credito", "nombre_ok": set(_palabras(por_credito[0].get("nombre"))) <= set(_plano(texto).split())}
+    palabras = set(_plano(texto).split())
+    por_nombre = [f for f in filas if f.get("nombre") and set(_palabras(f["nombre"])) <= palabras]
+    if len(por_nombre) == 1:
+        return {"fila": por_nombre[0], "por": "nombre", "nombre_ok": True}
+    return None
+
+
+_ZIPS: Dict[str, Dict[str, Any]] = {}
+
+
+@router.post("/{excel_id}/words")
+async def llenar_words(excel_id: str, files: List[UploadFile] = File(...), db: Session = Depends(get_db),
+                       usuario: dict = Depends(require_user)):
+    """Llena los Word que se hicieron fuera del sistema con los datos de su renglón del Excel. Regresa el resumen y un ZIP."""
+    import uuid as _uuid
+    import zipfile
+    if compartir.es_revisor(usuario):
+        raise HTTPException(status_code=403, detail="Los revisores no pueden cargar datos complementarios.")
+    x = _obtener(db, excel_id)
+    filas = list(x.filas or [])
+    con_exp = {f.get("n"): f for f in cotejar(db, usuario, filas)}
+    resultados = []
+    buf = io.BytesIO()
+    usados = set()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for archivo in files[:300]:
+            nombre = os.path.basename((archivo.filename or "documento.docx").replace("\\", "/"))
+            res: Dict[str, Any] = {"archivo": nombre}
+            contenido = await archivo.read()
+            if not nombre.lower().endswith(".docx") or not contenido:
+                res.update(estado="error", detalle="No es un Word (.docx).")
+                resultados.append(res)
+                continue
+            try:
+                texto = _texto_word(contenido)
+            except Exception:
+                res.update(estado="error", detalle="No se pudo abrir el Word.")
+                resultados.append(res)
+                continue
+            r = _renglon_de_word(texto, filas)
+            if not r:
+                res.update(estado="sin_renglon", detalle="No encontré en el Excel su número de crédito ni su nombre.")
+                resultados.append(res)
+                continue
+            f = r["fila"]
+            ctx = services.contexto_complementario(_datos_de_fila(f))
+            ctx = {k: (v if str(v).strip() else "") for k, v in ctx.items()}
+            lleno, hechos = llenar_word(contenido, ctx)
+            res.update(n=f.get("n"), nombre=f.get("nombre"), credito=f.get("credito"), por=r["por"], nombre_ok=r["nombre_ok"], lugares=hechos)
+            if not hechos:
+                res.update(estado="sin_espacios", detalle="No encontré los espacios en blanco (¿ya estaba lleno o tiene otro acomodo?).")
+                resultados.append(res)
+                continue
+            base = nombre[:-5]
+            salida = f"{base}.docx"
+            k = 2
+            while salida in usados:
+                salida = f"{base} ({k}).docx"
+                k += 1
+            usados.add(salida)
+            z.writestr(salida, lleno)
+            en_sistema = con_exp.get(f.get("n"), {}).get("exp")
+            res["estado"] = "llenado"
+            if en_sistema:
+                res["en_sistema"] = True
+                res["detalle"] = "Este crédito sí está en el sistema: llénalo también desde la lista para que su Word del sistema quede completo."
+            elif f.get("estado") != "llenado":
+                for i, ff in enumerate(filas):
+                    if ff.get("n") == f.get("n"):
+                        filas[i] = {**ff, "estado": "llenado", "word": nombre, "llenado_por": usuario["username"],
+                                    "llenado_en": datetime.now(timezone.utc).isoformat()}
+            resultados.append(res)
+    x.filas = filas
+    flag_modified(x, "filas")
+    db.commit()
+    n_llenos = sum(1 for r in resultados if r["estado"] == "llenado")
+    kpis.registrar(usuario["username"], "complementarios_words", None, None, archivo=x.nombre, words=len(resultados), llenados=n_llenos)
+    token = None
+    if n_llenos:
+        token = _uuid.uuid4().hex
+        # Se guarda en memoria un rato para descargarlo (se limpian los viejos)
+        ahora = datetime.now(timezone.utc)
+        for t in [t for t, v in _ZIPS.items() if (ahora - v["en"]).total_seconds() > 3600]:
+            _ZIPS.pop(t, None)
+        _ZIPS[token] = {"datos": buf.getvalue(), "usuario": usuario["username"], "en": ahora}
+    return {"resultados": resultados, "llenados": n_llenos, "zip": token, "excel": _resumen(x), "filas": cotejar(db, usuario, x.filas or [])}
+
+
+@router.get("/zip/{token}")
+def descargar_words(token: str, usuario: dict = Depends(require_user)):
+    from fastapi.responses import Response
+    z = _ZIPS.get(token)
+    if not z or z["usuario"] != usuario["username"]:
+        raise HTTPException(status_code=404, detail="Ese ZIP ya no está disponible; vuelve a subir los Word.")
+    return Response(z["datos"], media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="Word_llenados.zip"'})

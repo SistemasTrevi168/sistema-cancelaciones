@@ -848,8 +848,9 @@ import openpyxl as _ox  # noqa: E402
 c_cm = cliente()
 _hc = {"Authorization": "Bearer " + c_cm.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
 _cr = ["16" + str(uuid.uuid4().int)[:8] for _ in range(4)]
+_L = "".join(chr(65 + int(ch, 16)) for ch in SUF)  # para que los nombres no se repitan entre corridas
 _ids = []
-for _i, (_cred, _nom) in enumerate([(_cr[0], "VÍCTOR ANTONIO AGUILAR ESEIZA"), (_cr[1], "LAURA PÉREZ GÓMEZ"), (_cr[2], "JUAN RAMÍREZ SOLÍS")]):
+for _i, (_cred, _nom) in enumerate([(_cr[0], f"VÍCTOR ANTONIO AGUILAR ESEIZA {_L}"), (_cr[1], f"LAURA PÉREZ GÓMEZ {_L}"), (_cr[2], f"JUAN RAMÍREZ SOLÍS {_L}")]):
     _d = dict(DATOS, numero_credito=_cred, nombre_acreditado=_nom)
     _r = c_cm.post("/api/expedientes/guardar", headers=_hc, json={"expedientes": [{"ref": f"c{_i}", "datos": _d, "plantilla": "EDOMEX_AP_H_SOLTERO"}]})
     _ids.append(_r.json()["resultados"][0].get("expediente_id"))
@@ -857,10 +858,10 @@ c_cm.put(f"/api/expedientes/{_ids[0]}/estado", headers=_hc, json={"estado": "REV
 _wb = _ox.Workbook(); _ws = _wb.active; _ws.title = "254"
 _ws.append(["EXP.", "ESC", "FOLIO ", "VOL.", "FECHA ", "NÚMERO DE CRÉDITO", "NOMBRE DEL ACREDITADO"])
 import datetime as _dt  # noqa: E402
-_ws.append(["8920-2026", 18681, "52/", "186/", _dt.datetime(2026, 11, 3), int(_cr[0]), "AGUILAR ESEIZA VICTOR ANTONIO"])  # coincide
-_ws.append(["8921-2026", 18682, "52/", "187/", _dt.datetime(2026, 11, 3), int(_cr[1]), "GOMEZ PEREZ MARTA"])  # crédito sí, nombre no
-_ws.append(["8922-2026", 18683, "52/", "188/", _dt.datetime(2026, 11, 4), 999000111, "RAMIREZ SOLIS JUAN"])  # solo nombre
-_ws.append(["8923-2026", 18684, "52/", "189/", _dt.datetime(2026, 11, 4), int(_cr[3]), "NUEVO ACREDITADO ZETA"])  # sin expediente
+_ws.append(["8920-2026", 18681, "52/", "186/", _dt.datetime(2026, 11, 3), int(_cr[0]), f"AGUILAR ESEIZA VICTOR ANTONIO {_L}"])  # coincide
+_ws.append(["8921-2026", 18682, "52/", "187/", _dt.datetime(2026, 11, 3), int(_cr[1]), f"GOMEZ PEREZ MARTA {_L}"])  # crédito sí, nombre no
+_ws.append(["8922-2026", 18683, "52/", "188/", _dt.datetime(2026, 11, 4), 999000111, f"RAMIREZ SOLIS JUAN {_L}"])  # solo nombre
+_ws.append(["8923-2026", 18684, "52/", "189/", _dt.datetime(2026, 11, 4), int(_cr[3]), f"NUEVO ACREDITADO ZETA {_L}"])  # sin expediente
 _buf = io.BytesIO(); _wb.save(_buf); _xls = _buf.getvalue()
 _r = c_cm.post("/api/complementarios/analizar", headers=_hc, files={"file": ("LISTADO_PRUEBA.xlsx", _xls)})
 chk("complementarios: lee el Excel", _r.status_code == 200 and _r.json()["excel"]["total"] == 4 and _r.json()["excel"]["hoja"] == "254", _r.text[:300])
@@ -887,12 +888,36 @@ chk("complementarios: el Word trae instrumento, volumen, PE, fecha y EXP.",
     and "PE-8920-2026" in _txt and "a los tres días del mes de noviembre" in _txt and "EXP. 8920-2026" in _txt and "18,681 ESP." in _txt, _txt[:400])
 _r = c_cm.post("/api/complementarios/analizar", headers=_hc, files={"file": ("otra_vez.xlsx", _xls)})
 chk("complementarios: el mismo Excel se reconoce", _r.json().get("ya_usado") is True and _r.json()["excel"]["llenados"] == 2 and _r.json()["excel"]["pendientes"] == 2, _r.text[:300])
-_d = dict(DATOS, numero_credito=_cr[3], nombre_acreditado="ZETA NUEVO ACREDITADO")
+_d = dict(DATOS, numero_credito=_cr[3], nombre_acreditado=f"ZETA NUEVO ACREDITADO {_L}")
 _r = c_cm.post("/api/expedientes/guardar", headers=_hc, json={"expedientes": [{"ref": "z", "datos": _d, "plantilla": "EDOMEX_AP_H_SOLTERO"}]})
 _res = _r.json()["resultados"][0]
 chk("complementarios: al guardar uno pendiente se llena solo", _res.get("complementarios") is True and _res["datos_extraidos"].get("comp_expediente") == "8923-2026", _res.get("datos_extraidos", {}).get("comp_expediente"))
 _lx = c_cm.get(f"/api/complementarios/{_xid}", headers=_hc).json()["excel"]
 chk("complementarios: el renglón pendiente quedó usado", _lx["llenados"] == 3 and _lx["pendientes"] == 1, _lx)
+# Un Word hecho fuera del sistema (sin expediente): se llena con su renglón del Excel
+import services as _sv  # noqa: E402
+_tmpw = os.path.join("uploads", f"word_fuera_{SUF}.docx")
+_sv.generar_word_cancelacion(os.path.join("templates", "EDOMEX_AP_H_SOLTERO.docx"),
+                             dict(DATOS, numero_credito="17" + _cr[3][2:], nombre_acreditado=f"ANA FUERA DEL SISTEMA {_L}"), _tmpw)
+_wb2 = _ox.Workbook(); _ws2 = _wb2.active; _ws2.title = "254"
+_ws2.append(["EXP.", "ESC", "FOLIO ", "VOL.", "FECHA ", "NÚMERO DE CRÉDITO", "NOMBRE DEL ACREDITADO"])
+_ws2.append(["8930-2026", 18690, "52/", "190/", _dt.datetime(2026, 11, 5), int("17" + _cr[3][2:]), f"FUERA DEL SISTEMA ANA {_L}"])
+_b2 = io.BytesIO(); _wb2.save(_b2)
+_x2 = c_cm.post("/api/complementarios/analizar", headers=_hc, files={"file": (f"otro_{SUF}.xlsx", _b2.getvalue())}).json()
+_r = c_cm.post(f"/api/complementarios/{_x2['excel']['id']}/words", headers=_hc,
+               files=[("files", ("Fuera.docx", open(_tmpw, "rb").read())), ("files", ("raro.docx", b"no es word"))])
+_j = _r.json()
+chk("complementarios: Word de fuera se llena", _r.status_code == 200 and _j.get("llenados") == 1 and _j["resultados"][0]["n"] == 2
+    and len(_j["resultados"][0]["lugares"]) == 6, _r.text[:400])
+chk("complementarios: un archivo que no es Word se reporta", _j["resultados"][1]["estado"] == "error")
+chk("complementarios: el renglón queda usado por el Word", _j["excel"]["llenados"] == 1 and _j["excel"]["completo"] is True, _j.get("excel"))
+_z = c_cm.get(f"/api/complementarios/zip/{_j['zip']}", headers=_hc)
+_tz = ""
+if _z.status_code == 200:
+    _zz = zipfile.ZipFile(io.BytesIO(_z.content)); _dz = docx.Document(io.BytesIO(_zz.read("Fuera.docx")))
+    _tz = "\n".join(p.text for p in _dz.paragraphs)
+chk("complementarios: el ZIP trae el Word lleno", "INSTRUMENTO NÚMERO DIECIOCHO MIL SEISCIENTOS NOVENTA." in _tz and "EXP. 8930-2026" in _tz
+    and "a los cinco días del mes de noviembre" in _tz, _tz[:300])
 
 print()
 if FALLAS:

@@ -11,7 +11,7 @@ export const GRUPOS_CAMPOS = [
   },
   {
     titulo: 'Datos complementarios',
-    campos: ['comp_expediente', 'comp_escritura', 'comp_volumen', 'comp_fecha'],
+    campos: ['comp_expediente', 'comp_escritura', 'comp_volumen', 'comp_fecha', 'comp_fecha_termino'],
     todos: true,
     plegado: true,
     nota: 'Llegan después en el Excel (apartado «Datos complementarios»). Mientras estén vacíos, el Word deja esos espacios en blanco.',
@@ -51,6 +51,7 @@ export const ETIQUETAS_CAMPOS = {
   comp_escritura: 'Escritura / instrumento (ESC, ej. 18681)',
   comp_volumen: 'Volumen (VOL., ej. 186)',
   comp_fecha: 'Fecha del instrumento (dd/mm/aaaa)',
+  comp_fecha_termino: 'Fecha de término (dd/mm/aaaa) · «firma ante mí el día…»',
 };
 
 // Campos internos que no se muestran (o que eran copias de otros campos)

@@ -1328,7 +1328,7 @@ def _dia_en_letra(dia: int) -> str:
     return texto
 
 
-CAMPOS_COMPLEMENTARIOS = ("comp_expediente", "comp_escritura", "comp_volumen", "comp_fecha")
+CAMPOS_COMPLEMENTARIOS = ("comp_expediente", "comp_escritura", "comp_volumen", "comp_fecha", "comp_fecha_termino")
 
 
 def normalizar_fecha_iso(valor) -> str:
@@ -1366,6 +1366,10 @@ def normalizar_complementarios(datos) -> dict:
     f = normalizar_fecha_iso(d.get("comp_fecha"))
     if f:
         out["comp_fecha"] = f"{f[8:10]}/{f[5:7]}/{f[0:4]}"  # como se ve en pantalla: 03/11/2026
+    # Fecha de término (la de «firma ante mí el día … del mes de … del año …»): se captura a mano
+    f = normalizar_fecha_iso(d.get("comp_fecha_termino"))
+    if f:
+        out["comp_fecha_termino"] = f"{f[8:10]}/{f[5:7]}/{f[0:4]}"
     return out
 
 
@@ -1391,6 +1395,15 @@ def contexto_complementario(datos) -> dict:
     if m:
         ctx["fecha_dia"] = _dia_en_letra(int(m.group(3)))
         ctx["fecha_mes"] = _MESES_NOMBRE[int(m.group(2)) - 1]
+    # Fecha de término («lo otorga, ratifica y firma ante mí el día … del mes de … del año …»): se captura a mano.
+    # Sin fecha, el día y el mes quedan en blanco y el año es el actual de la plantilla (dos mil veintiséis).
+    ctx.update({"firma_dia": " " * 33, "firma_mes": " " * 29, "firma_anio": "dos mil veintiséis"})
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", normalizar_fecha_iso(d.get("comp_fecha_termino")))
+    if m:
+        dia = int(m.group(3))
+        ctx["firma_dia"] = "primero" if dia == 1 else " ".join(str(numero_a_palabras_generico(dia)).lower().split())
+        ctx["firma_mes"] = _MESES_NOMBRE[int(m.group(2)) - 1]
+        ctx["firma_anio"] = " ".join(str(numero_a_palabras_generico(int(m.group(1)))).lower().split())
     return ctx
 
 

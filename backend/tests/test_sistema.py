@@ -872,7 +872,7 @@ chk("complementarios: solo por nombre", _f.get(4, {}).get("cotejo") == "solo_nom
 chk("complementarios: sin expediente", _f.get(5, {}).get("cotejo") == "no_encontrado", _f.get(5))
 chk("complementarios: datos normalizados", _f[2]["escritura"] == "18681" and _f[2]["volumen"] == "186" and _f[2]["fecha"] == "03/11/2026", _f[2])
 _xid = _r.json()["excel"]["id"]
-_r = c_cm.post(f"/api/complementarios/{_xid}/llenar", headers=_hc, json={"filas": [{"n": 2, "expediente_id": _ids[0]}, {"n": 4, "expediente_id": _ids[2]}]})
+_r = c_cm.post(f"/api/complementarios/{_xid}/llenar", headers=_hc, json={"filas": [{"n": 2, "expediente_id": _ids[0]}, {"n": 4, "expediente_id": _ids[2]}], "fecha_termino": "2027-01-15"})
 chk("complementarios: llena y regenera", _r.status_code == 200 and len(_r.json()["llenados"]) == 2 and not _r.json()["errores"], _r.text[:300])
 _e = c_cm.get(f"/api/expedientes/{_ids[0]}/bitacora", headers=_hc).json()
 chk("complementarios: no cambia el estado", _e["estado"] == "REVISADO", _e.get("estado"))
@@ -886,6 +886,7 @@ if _w.status_code == 200:
 chk("complementarios: el Word trae instrumento, volumen, PE, fecha y EXP.",
     "INSTRUMENTO NÚMERO DIECIOCHO MIL SEISCIENTOS OCHENTA Y UNO." in _txt and "VOLUMEN NÚMERO CIENTO OCHENTA Y SEIS." in _txt
     and "PE-8920-2026" in _txt and "a los tres días del mes de noviembre" in _txt and "EXP. 8920-2026" in _txt and "18,681 ESP." in _txt, _txt[:400])
+chk("complementarios: fecha de término en «firma ante mí»", "ante mí el día quince del mes de enero del año dos mil veintisiete, mismo" in _txt)
 _r = c_cm.post("/api/complementarios/analizar", headers=_hc, files={"file": ("otra_vez.xlsx", _xls)})
 chk("complementarios: el mismo Excel se reconoce", _r.json().get("ya_usado") is True and _r.json()["excel"]["llenados"] == 2 and _r.json()["excel"]["pendientes"] == 2, _r.text[:300])
 _d = dict(DATOS, numero_credito=_cr[3], nombre_acreditado=f"ZETA NUEVO ACREDITADO {_L}")
@@ -905,10 +906,10 @@ _ws2.append(["8930-2026", 18690, "52/", "190/", _dt.datetime(2026, 11, 5), int("
 _b2 = io.BytesIO(); _wb2.save(_b2)
 _x2 = c_cm.post("/api/complementarios/analizar", headers=_hc, files={"file": (f"otro_{SUF}.xlsx", _b2.getvalue())}).json()
 _r = c_cm.post(f"/api/complementarios/{_x2['excel']['id']}/words", headers=_hc,
-               files=[("files", ("Fuera.docx", open(_tmpw, "rb").read())), ("files", ("raro.docx", b"no es word"))])
+               files=[("files", ("Fuera.docx", open(_tmpw, "rb").read())), ("files", ("raro.docx", b"no es word"))], data={"fecha_termino": "01/12/2026"})
 _j = _r.json()
 chk("complementarios: Word de fuera se llena", _r.status_code == 200 and _j.get("llenados") == 1 and _j["resultados"][0]["n"] == 2
-    and len(_j["resultados"][0]["lugares"]) == 6, _r.text[:400])
+    and len(_j["resultados"][0]["lugares"]) == 7, _r.text[:400])
 chk("complementarios: un archivo que no es Word se reporta", _j["resultados"][1]["estado"] == "error")
 chk("complementarios: el renglón queda usado por el Word", _j["excel"]["llenados"] == 1 and _j["excel"]["completo"] is True, _j.get("excel"))
 _z = c_cm.get(f"/api/complementarios/zip/{_j['zip']}", headers=_hc)
@@ -917,7 +918,7 @@ if _z.status_code == 200:
     _zz = zipfile.ZipFile(io.BytesIO(_z.content)); _dz = docx.Document(io.BytesIO(_zz.read("Fuera.docx")))
     _tz = "\n".join(p.text for p in _dz.paragraphs)
 chk("complementarios: el ZIP trae el Word lleno", "INSTRUMENTO NÚMERO DIECIOCHO MIL SEISCIENTOS NOVENTA." in _tz and "EXP. 8930-2026" in _tz
-    and "a los cinco días del mes de noviembre" in _tz, _tz[:300])
+    and "a los cinco días del mes de noviembre" in _tz and "ante mí el día primero del mes de diciembre del año dos mil veintiséis" in _tz, _tz[:300])
 
 print()
 if FALLAS:

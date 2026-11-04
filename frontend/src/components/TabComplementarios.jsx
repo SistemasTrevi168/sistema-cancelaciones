@@ -42,6 +42,9 @@ export default function TabComplementarios() {
   const inputWords = useRef(null);
   const [subiendoWords, setSubiendoWords] = useState(false);
   const [words, setWords] = useState(null); // {resultados, llenados, zip}
+  // Fecha de término (párrafo «firma ante mí el día … del mes de … del año …»): opcional, se aplica a lo que se llene ahora
+  const [fechaTermino, setFechaTermino] = useState('');
+  const terminoTexto = fechaTermino ? new Date(`${fechaTermino}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
 
   const cargarLista = () => api.get('/complementarios').then((r) => setExcels(r.data?.excels || [])).catch(() => setExcels([]));
   useEffect(() => { cargarLista(); }, []);
@@ -109,13 +112,13 @@ export default function TabComplementarios() {
     if (!lista.length) return;
     const cambian = filas.filter((f) => elegidos[f.n] && f.cotejo === 'distinto').length;
     const ok = await confirmar(
-      `Se guardarán los datos del Excel en ${lista.length} expediente(s) y se volverán a generar sus Word.${cambian ? ` ${cambian} ya tenían otros datos complementarios y se cambiarán.` : ''} Su estado (Generado, Revisado o Entregado) no cambia.`,
+      `Se guardarán los datos del Excel en ${lista.length} expediente(s) y se volverán a generar sus Word.${cambian ? ` ${cambian} ya tenían otros datos complementarios y se cambiarán.` : ''} ${terminoTexto ? ` Fecha de término: ${terminoTexto}.` : ''} Su estado (Generado, Revisado o Entregado) no cambia.`,
       { titulo: 'Llenar y regenerar', textoConfirmar: `Llenar ${lista.length}` },
     );
     if (!ok) return;
     setLlenando(true);
     try {
-      const r = await api.post(`/complementarios/${res.excel.id}/llenar`, { filas: lista }, { timeout: 0 });
+      const r = await api.post(`/complementarios/${res.excel.id}/llenar`, { filas: lista, fecha_termino: fechaTermino || '' }, { timeout: 0 });
       const d = r.data || {};
       setRes((x) => ({ ...x, excel: d.excel, filas: d.filas }));
       setElegidos({});
@@ -141,6 +144,7 @@ export default function TabComplementarios() {
     try {
       const fd = new FormData();
       archivos.forEach((f) => fd.append('files', f));
+      if (fechaTermino) fd.append('fecha_termino', fechaTermino);
       const r = await api.post(`/complementarios/${res.excel.id}/words`, fd, { timeout: 0 });
       const d = r.data || {};
       setWords(d);
@@ -167,7 +171,7 @@ export default function TabComplementarios() {
       avisar.error('Ese ZIP ya no está disponible; vuelve a subir los Word.');
     }
   };
-  const LUGARES = { encabezado: 'encabezado', instrumento: 'instrumento', volumen: 'volumen', PE: 'PE', fecha: 'fecha', 'EXP.': 'EXP.' };
+  const LUGARES = { encabezado: 'encabezado', instrumento: 'instrumento', volumen: 'volumen', PE: 'PE', fecha: 'fecha', 'EXP.': 'EXP.', 'fecha de término': 'fecha de término' };
 
   const tarjeta = { backgroundColor: theme.cardBg, borderRadius: '16px', border: `1px solid ${theme.border}`, padding: '22px' };
   const ex = res?.excel;
@@ -257,6 +261,16 @@ export default function TabComplementarios() {
           {res.faltan_columnas?.length > 0 && (
             <div className="aviso-complementarios alerta"><AlertTriangle size={16} /> <span>No encontré la(s) columna(s) <b>{res.faltan_columnas.join(', ')}</b>; esos datos quedarán vacíos.</span></div>
           )}
+
+          <div className="fecha-termino-complementarios" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 12px', border: `1px solid ${theme.border}`, borderRadius: '12px', padding: '10px 14px', margin: '10px 0', backgroundColor: theme.subtleBg }}>
+            <label htmlFor="fecha-termino" style={{ fontWeight: 700, fontSize: '13px', color: theme.textPrimary }}>Fecha de término <span style={{ fontWeight: 400, color: theme.textSecondary }}>(opcional)</span></label>
+            <input id="fecha-termino" type="date" value={fechaTermino} onChange={(e) => setFechaTermino(e.target.value)}
+              style={{ padding: '6px 8px', borderRadius: '8px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, fontSize: '13px' }} />
+            {fechaTermino && <button type="button" className="enlace-pequeno" onClick={() => setFechaTermino('')} style={{ color: theme.accent }}>Quitar</button>}
+            <span style={{ flex: '1 1 260px', fontSize: '12px', color: theme.textSecondary }}>
+              Va en «firma ante mí el día … del mes de … del año …» de los que llenes ahora (del Excel y de los Word que subas). Si la dejas vacía, ese renglón se queda en blanco como siempre. También se puede poner en cada expediente al editarlo.
+            </span>
+          </div>
 
           <div className="panel-words-complementarios" style={{ border: `1px dashed ${theme.border}`, borderRadius: '12px', padding: '12px 14px', margin: '10px 0', backgroundColor: theme.dropzoneBg }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>

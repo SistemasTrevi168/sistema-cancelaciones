@@ -21,7 +21,7 @@ import unicodedata
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -308,7 +308,8 @@ def llenar_expediente(db: Session, expediente, datos: Dict[str, str], usuario: s
 
 @router.post("/{excel_id}/llenar")
 def llenar(excel_id: str, payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db), usuario: dict = Depends(require_user)):
-    """payload: {"filas": [{"n": 2, "expediente_id": "..."}]}"""
+    """payload: {"filas": [{"n": 2, "expediente_id": "..."}], "fecha_termino": "10/11/2026" (opcional, para todos)}"""
+    termino = services.normalizar_complementarios({"comp_fecha_termino": payload.get("fecha_termino")})
     if compartir.es_revisor(usuario):
         raise HTTPException(status_code=403, detail="Los revisores no pueden cargar datos complementarios.")
     from main import obtener_expediente_autorizado
@@ -323,7 +324,7 @@ def llenar(excel_id: str, payload: Dict[str, Any] = Body(...), db: Session = Dep
         f = filas[i]
         try:
             exp = obtener_expediente_autorizado(db, pedido.get("expediente_id"), usuario)
-            llenar_expediente(db, exp, _datos_de_fila(f), usuario["username"], origen=f"Excel {x.nombre} (renglón {f.get('n')})")
+            llenar_expediente(db, exp, {**_datos_de_fila(f), **termino}, usuario["username"], origen=f"Excel {x.nombre} (renglón {f.get('n')})")
             filas[i] = {**f, "estado": "llenado", "expediente_id": str(exp.id), "llenado_por": usuario["username"],
                         "llenado_en": datetime.now(timezone.utc).isoformat()}
             hechos.append({"n": f.get("n"), "expediente_id": str(exp.id)})
@@ -471,6 +472,11 @@ def llenar_word(contenido: bytes, ctx: Dict[str, str]) -> (bytes, List[str]):
         elif ctx.get("fecha_dia") and re.search(r"a los" + B + r"días del mes de" + B + r"del año", t):
             if _aplicar(p, r"a los(" + B + r")días del mes de(" + B + r")del año", {1: f" {ctx['fecha_dia']} ", 2: f" {ctx['fecha_mes']} "}):
                 hechos.append("fecha")
+        elif ctx.get("firma_dia") and re.search(r"ante mí el día" + B + r"del mes de" + B + r"del año\s+dos mil", t):
+            # Fecha de término (se captura a mano): «firma ante mí el día … del mes de … del año …»
+            if _aplicar(p, r"ante mí el día(" + B + r")del mes de(" + B + r")del año\s+(dos mil[a-záéíóúñ ]*?)(?=,)",
+                        {1: f" {ctx['firma_dia']} ", 2: f" {ctx['firma_mes']} ", 3: ctx["firma_anio"]}):
+                hechos.append("fecha de término")
         elif ctx.get("expediente_num") and re.match(r"^\s*EXP\." + B + r"-\s*20", t):
             if _aplicar(p, r"^\s*EXP\.(" + B + r")-(\s*)20", {1: " " + ctx["expediente_num"], 2: ""}):
                 hechos.append("EXP.")
@@ -507,7 +513,7 @@ _ZIPS: Dict[str, Dict[str, Any]] = {}
 
 
 @router.post("/{excel_id}/words")
-async def llenar_words(excel_id: str, files: List[UploadFile] = File(...), db: Session = Depends(get_db),
+async def llenar_words(excel_id: str, files: List[UploadFile] = File(...), fecha_termino: str = Form(""), db: Session = Depends(get_db),
                        usuario: dict = Depends(require_user)):
     """Llena los Word que se hicieron fuera del sistema con los datos de su renglón del Excel. Regresa el resumen y un ZIP."""
     import uuid as _uuid
@@ -541,7 +547,7 @@ async def llenar_words(excel_id: str, files: List[UploadFile] = File(...), db: S
                 resultados.append(res)
                 continue
             f = r["fila"]
-            ctx = services.contexto_complementario(_datos_de_fila(f))
+            ctx = services.contexto_complementario({**_datos_de_fila(f), "comp_fecha_termino": fecha_termino})
             ctx = {k: (v if str(v).strip() else "") for k, v in ctx.items()}
             lleno, hechos = llenar_word(contenido, ctx)
             res.update(n=f.get("n"), nombre=f.get("nombre"), credito=f.get("credito"), por=r["por"], nombre_ok=r["nombre_ok"], lugares=hechos)

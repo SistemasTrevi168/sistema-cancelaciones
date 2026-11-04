@@ -169,3 +169,20 @@ class Comentario(Base):
     username = Column(String, index=True, nullable=False)
     texto = Column(Text, nullable=False)
     creado_en = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class ExcelComplementario(Base):
+    """
+    Excel con los datos complementarios (expediente, escritura, volumen y fecha) que llegan después.
+    Cada renglón queda «pendiente» hasta que se llena en su expediente.
+    """
+    __tablename__ = "excel_complementarios"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nombre = Column(String, nullable=False)
+    huella = Column(String, index=True, nullable=False)  # sha256 del archivo: así se sabe si ya se subió
+    hoja = Column(String, nullable=True)
+    subido_por = Column(String, nullable=True)
+    creado_en = Column(DateTime(timezone=True), server_default=func.now())
+    # [{n, expediente, escritura, volumen, fecha, credito, nombre, estado, expediente_id, llenado_por, llenado_en}]
+    filas = Column(JSON, nullable=False, default=list)

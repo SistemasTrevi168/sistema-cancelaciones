@@ -843,6 +843,57 @@ chk("revisados: entregado sigue contando", _lista()["admin"]["revisados"] == _an
 c_gen.put(f"/api/expedientes/{_exid}/estado", headers=_ha2, json={"estado": "GENERADO"})
 chk("revisados: regresado a generado ya no cuenta", _lista()["admin"]["revisados"] == _antes_adm)
 
+# --- Datos complementarios: Excel que llega después (EXP., ESC, VOL., FECHA) ---
+import openpyxl as _ox  # noqa: E402
+c_cm = cliente()
+_hc = {"Authorization": "Bearer " + c_cm.post("/api/auth/login", json={"username": "admin", "password": os.getenv("ADMIN_PASSWORD", "admin123")}).json()["token"]}
+_cr = ["16" + str(uuid.uuid4().int)[:8] for _ in range(4)]
+_ids = []
+for _i, (_cred, _nom) in enumerate([(_cr[0], "VÍCTOR ANTONIO AGUILAR ESEIZA"), (_cr[1], "LAURA PÉREZ GÓMEZ"), (_cr[2], "JUAN RAMÍREZ SOLÍS")]):
+    _d = dict(DATOS, numero_credito=_cred, nombre_acreditado=_nom)
+    _r = c_cm.post("/api/expedientes/guardar", headers=_hc, json={"expedientes": [{"ref": f"c{_i}", "datos": _d, "plantilla": "EDOMEX_AP_H_SOLTERO"}]})
+    _ids.append(_r.json()["resultados"][0].get("expediente_id"))
+c_cm.put(f"/api/expedientes/{_ids[0]}/estado", headers=_hc, json={"estado": "REVISADO"})
+_wb = _ox.Workbook(); _ws = _wb.active; _ws.title = "254"
+_ws.append(["EXP.", "ESC", "FOLIO ", "VOL.", "FECHA ", "NÚMERO DE CRÉDITO", "NOMBRE DEL ACREDITADO"])
+import datetime as _dt  # noqa: E402
+_ws.append(["8920-2026", 18681, "52/", "186/", _dt.datetime(2026, 11, 3), int(_cr[0]), "AGUILAR ESEIZA VICTOR ANTONIO"])  # coincide
+_ws.append(["8921-2026", 18682, "52/", "187/", _dt.datetime(2026, 11, 3), int(_cr[1]), "GOMEZ PEREZ MARTA"])  # crédito sí, nombre no
+_ws.append(["8922-2026", 18683, "52/", "188/", _dt.datetime(2026, 11, 4), 999000111, "RAMIREZ SOLIS JUAN"])  # solo nombre
+_ws.append(["8923-2026", 18684, "52/", "189/", _dt.datetime(2026, 11, 4), int(_cr[3]), "NUEVO ACREDITADO ZETA"])  # sin expediente
+_buf = io.BytesIO(); _wb.save(_buf); _xls = _buf.getvalue()
+_r = c_cm.post("/api/complementarios/analizar", headers=_hc, files={"file": ("LISTADO_PRUEBA.xlsx", _xls)})
+chk("complementarios: lee el Excel", _r.status_code == 200 and _r.json()["excel"]["total"] == 4 and _r.json()["excel"]["hoja"] == "254", _r.text[:300])
+_f = {x["n"]: x for x in _r.json().get("filas", [])}
+chk("complementarios: crédito y nombre coinciden", _f.get(2, {}).get("cotejo") == "coincide" and _f[2]["exp"]["id"] == _ids[0], _f.get(2))
+chk("complementarios: crédito sí, nombre no -> revisar", _f.get(3, {}).get("cotejo") == "revisar_nombre", _f.get(3))
+chk("complementarios: solo por nombre", _f.get(4, {}).get("cotejo") == "solo_nombre" and _f[4]["exp"]["id"] == _ids[2], _f.get(4))
+chk("complementarios: sin expediente", _f.get(5, {}).get("cotejo") == "no_encontrado", _f.get(5))
+chk("complementarios: datos normalizados", _f[2]["escritura"] == "18681" and _f[2]["volumen"] == "186" and _f[2]["fecha"] == "03/11/2026", _f[2])
+_xid = _r.json()["excel"]["id"]
+_r = c_cm.post(f"/api/complementarios/{_xid}/llenar", headers=_hc, json={"filas": [{"n": 2, "expediente_id": _ids[0]}, {"n": 4, "expediente_id": _ids[2]}]})
+chk("complementarios: llena y regenera", _r.status_code == 200 and len(_r.json()["llenados"]) == 2 and not _r.json()["errores"], _r.text[:300])
+_e = c_cm.get(f"/api/expedientes/{_ids[0]}/bitacora", headers=_hc).json()
+chk("complementarios: no cambia el estado", _e["estado"] == "REVISADO", _e.get("estado"))
+chk("complementarios: queda en el historial", any(ev["tipo"] == "complementarios" for ev in _e["eventos"]))
+_w = c_cm.post("/api/expedientes/descargar-zip", headers=_hc, json=[_ids[0]])
+_txt = ""
+if _w.status_code == 200:
+    _z = zipfile.ZipFile(io.BytesIO(_w.content))
+    _doc = docx.Document(io.BytesIO(_z.read(_z.namelist()[0])))
+    _txt = "\n".join(p.text for p in _doc.paragraphs) + "\n".join(p.text for s_ in _doc.sections for p in s_.header.paragraphs)
+chk("complementarios: el Word trae instrumento, volumen, PE, fecha y EXP.",
+    "INSTRUMENTO NÚMERO DIECIOCHO MIL SEISCIENTOS OCHENTA Y UNO." in _txt and "VOLUMEN NÚMERO CIENTO OCHENTA Y SEIS." in _txt
+    and "PE-8920-2026" in _txt and "a los tres días del mes de noviembre" in _txt and "EXP. 8920-2026" in _txt and "18,681 ESP." in _txt, _txt[:400])
+_r = c_cm.post("/api/complementarios/analizar", headers=_hc, files={"file": ("otra_vez.xlsx", _xls)})
+chk("complementarios: el mismo Excel se reconoce", _r.json().get("ya_usado") is True and _r.json()["excel"]["llenados"] == 2 and _r.json()["excel"]["pendientes"] == 2, _r.text[:300])
+_d = dict(DATOS, numero_credito=_cr[3], nombre_acreditado="ZETA NUEVO ACREDITADO")
+_r = c_cm.post("/api/expedientes/guardar", headers=_hc, json={"expedientes": [{"ref": "z", "datos": _d, "plantilla": "EDOMEX_AP_H_SOLTERO"}]})
+_res = _r.json()["resultados"][0]
+chk("complementarios: al guardar uno pendiente se llena solo", _res.get("complementarios") is True and _res["datos_extraidos"].get("comp_expediente") == "8923-2026", _res.get("datos_extraidos", {}).get("comp_expediente"))
+_lx = c_cm.get(f"/api/complementarios/{_xid}", headers=_hc).json()["excel"]
+chk("complementarios: el renglón pendiente quedó usado", _lx["llenados"] == 3 and _lx["pendientes"] == 1, _lx)
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

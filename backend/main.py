@@ -1,5 +1,6 @@
 import os
 import shutil
+import io
 import zipfile
 import re
 import pathlib
@@ -33,6 +34,7 @@ import reparaciones
 import compartir
 import documentos
 import inmueble as redaccion_inmueble
+import complementarios
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -858,6 +860,8 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
         # Notas internas del expediente (no van en el Word)
         "observaciones": limpiar_observaciones(datos_origen.get("observaciones")),
     }
+    # Datos complementarios (del Excel que llega después): expediente, escritura, volumen y fecha
+    resultado.update(services.normalizar_complementarios(datos_origen))
     resultado.update(puntos_inmueble)
     if not puntos_inmueble:
         # El desglose del inmueble que ya traía (se ve en pantalla como datos opcionales) se conserva
@@ -869,6 +873,15 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
             resultado[clave] = ""
     return resultado
 
+def _tiene_complementarios(origen) -> bool:
+    """¿La plantilla (ruta o bytes del .docx) ya tiene los espacios de los datos complementarios?"""
+    try:
+        with zipfile.ZipFile(origen if isinstance(origen, str) else io.BytesIO(origen)) as z:
+            return "escritura_letras" in z.read("word/document.xml").decode("utf8", "ignore")
+    except Exception:
+        return False
+
+
 @app.on_event("startup")
 def restaurar_plantillas_subidas():
     """Vuelve a escribir en disco las plantillas que el admin subió (Railway borra el disco al redesplegar)."""
@@ -877,7 +890,16 @@ def restaurar_plantillas_subidas():
         os.makedirs(TEMPLATES_DIR, exist_ok=True)
         for p in db.query(models.PlantillaSubida).all():
             nombre = os.path.basename(p.nombre)
-            with open(os.path.join(TEMPLATES_DIR, nombre), "wb") as f:
+            ruta = os.path.join(TEMPLATES_DIR, nombre)
+            # Si la del repositorio ya trae los datos complementarios y la copia subida antes no, se queda la del
+            # repositorio (y se actualiza la copia), para no perder esos campos al redesplegar
+            if os.path.exists(ruta) and _tiene_complementarios(ruta) and not _tiene_complementarios(p.contenido):
+                with open(ruta, "rb") as f:
+                    p.contenido = f.read()
+                db.commit()
+                print(f"--> Plantilla {nombre}: se conserva la del repositorio (trae los datos complementarios)")
+                continue
+            with open(ruta, "wb") as f:
                 f.write(p.contenido)
             print(f"--> Plantilla restaurada: {nombre}")
     except Exception as e:
@@ -944,6 +966,7 @@ app.include_router(extras.router)
 app.include_router(respaldos.router)
 app.include_router(compartir.router)
 app.include_router(documentos.router)
+app.include_router(complementarios.router)
 # Guardar los PDF de los expedientes: solo si están las variables del almacenamiento (Backblaze B2 / S3)
 if documentos.configurado() and "documentos" not in auth.FUNCIONES:
     auth.FUNCIONES.append("documentos")
@@ -1683,16 +1706,30 @@ def guardar_expedientes(
                 datos_extraidos=datos,
                 ruta_pdf_constancia=";".join(item.get("archivos") or []) or "Sin PDF",
             )
+            # Si ya llegó su Excel de datos complementarios, se llena desde ahora
+            pendiente = None
+            try:
+                pendiente = complementarios.pendiente_para(db, num_credito, datos.get("nombre_acreditado"))
+            except Exception as e:
+                print(f"No se pudieron revisar los datos complementarios pendientes: {e}")
+            if pendiente:
+                datos.update(pendiente["datos"])
             db.add(expediente)
             db.flush()
             regenerar_word_expediente(expediente, {"datos": datos, "plantilla": plantilla}, db)
             kpis.registrar(sesion["username"], "guardar", expediente.id, num_credito, plantilla=plantilla,
                            **kpis.metricas_de_guardado(item.get("metricas")))
+            if pendiente:
+                complementarios.marcar_llenado(db, pendiente["excel"], pendiente["n"], expediente.id, sesion["username"])
+                db.commit()
+                kpis.registrar(sesion["username"], "complementarios", expediente.id, num_credito,
+                               origen=f"Excel {pendiente['excel'].nombre} (renglón {pendiente['n']}), al guardar")
             resultados.append({
                 "ref": ref,
                 "expediente_id": str(expediente.id),
                 "datos_extraidos": expediente.datos_extraidos,
                 "plantilla_seleccionada": plantilla,
+                "complementarios": bool(pendiente),
             })
         except Exception as e:
             db.rollback()
@@ -2584,6 +2621,14 @@ def generar_expediente_manual(
         if not num_credito:
             raise HTTPException(status_code=400, detail="El número de crédito es obligatorio")
 
+        payload = dict(payload)
+        pendiente = None
+        try:
+            pendiente = complementarios.pendiente_para(db, num_credito, payload.get("nombre_acreditado"))
+        except Exception as e:
+            print(f"No se pudieron revisar los datos complementarios pendientes: {e}")
+        if pendiente:
+            payload.update(pendiente["datos"])
         datos_limpios = limpiar_datos_para_plantilla(payload, num_credito)
         datos_limpios["plantilla_seleccionada"] = plantilla
 
@@ -2604,6 +2649,11 @@ def generar_expediente_manual(
         db.commit()
         db.refresh(nuevo_expediente)
         kpis.registrar(usuario, "manual", nuevo_expediente.id, num_credito, origen="manual", plantilla=plantilla)
+        if pendiente:
+            complementarios.marcar_llenado(db, pendiente["excel"], pendiente["n"], nuevo_expediente.id, usuario)
+            db.commit()
+            kpis.registrar(usuario, "complementarios", nuevo_expediente.id, num_credito,
+                           origen=f"Excel {pendiente['excel'].nombre} (renglón {pendiente['n']}), al guardar")
 
         return {
             "status": "exito",

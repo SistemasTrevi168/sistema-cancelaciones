@@ -21,6 +21,7 @@ import { conConversiones } from './ui/conversiones';
 import { camposFaltantes, etiquetaCampo, mensajeFaltantes, normalizarPlantilla, revisarIncidencia } from './datosFaltantes';
 import Sidebar from './components/Sidebar';
 import TabExcel from './components/TabExcel';
+import TabComplementarios from './components/TabComplementarios';
 import TabHistorial from './components/TabHistorial';
 import ModalCompartir from './components/ModalCompartir';
 import ModalCompletarPdfs from './components/ModalCompletarPdfs';
@@ -2824,7 +2825,7 @@ const cambiarEstado = async (ids, estado) => {
               {activeTab === 'single' && <TabIndividual />}
               {activeTab === 'batch' && <TabMasivo />}
               {activeTab === 'manual' && <TabManual />}
-              {activeTab === 'excel' && <TabExcel />}
+              {activeTab === 'excel' && (puedeServidor('datos_complementarios') ? <TabComplementarios /> : <TabExcel />)}
               {activeTab === 'history' && <TabHistorial />}
               {activeTab === 'compartidos' && <TabHistorial />}
               {activeTab === 'users' && esAdmin && <TabUsuarios />}

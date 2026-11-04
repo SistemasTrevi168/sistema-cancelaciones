@@ -1301,6 +1301,99 @@ def completar_conyuge_en_documento(documento, conyuge):
     return agregados
 
 
+_MESES_NOMBRE = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def _entero(valor):
+    """'187/' -> 187 ; '18,647' -> 18647 ; 16.132 (Excel lo leyó como decimal) -> 16132 ; '' -> None."""
+    if valor is None:
+        return None
+    if isinstance(valor, float):
+        texto = f"{valor:.3f}" if not valor.is_integer() else str(int(valor))
+    else:
+        texto = str(valor)
+    digitos = re.sub(r"\D", "", texto.split("/")[0] if "/" in texto and texto.split("/")[0].strip() else texto)
+    return int(digitos) if digitos else None
+
+
+def _dia_en_letra(dia: int) -> str:
+    """3 -> 'tres' ; 1 -> 'un' ; 21 -> 'veintiún' ; 31 -> 'treinta y un' (para «a los … días»)."""
+    texto = " ".join(str(numero_a_palabras_generico(dia)).lower().split())
+    if texto == "uno":
+        return "un"
+    if texto == "veintiuno":
+        return "veintiún"
+    if texto.endswith(" y uno"):
+        return texto[:-3] + "un"
+    return texto
+
+
+CAMPOS_COMPLEMENTARIOS = ("comp_expediente", "comp_escritura", "comp_volumen", "comp_fecha")
+
+
+def normalizar_fecha_iso(valor) -> str:
+    """datetime / '2026-11-03' / '03/11/2026' / '3-11-26' -> '2026-11-03'. Vacío si no se entiende."""
+    if valor is None or valor == "":
+        return ""
+    if hasattr(valor, "strftime"):
+        return valor.strftime("%Y-%m-%d")
+    t = str(valor).strip()
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", t)
+    if m:
+        a, mes, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    else:
+        m = re.match(r"^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$", t)
+        if not m:
+            return ""
+        d, mes, a = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        a = a + 2000 if a < 100 else a
+    if not (1 <= mes <= 12 and 1 <= d <= 31):
+        return ""
+    return f"{a:04d}-{mes:02d}-{d:02d}"
+
+
+def normalizar_complementarios(datos) -> dict:
+    """Los 4 datos complementarios como se guardan en el expediente (solo los que traen algo)."""
+    d = datos or {}
+    out = {}
+    exp = re.sub(r"\s+", "", str(d.get("comp_expediente") or "")).strip()
+    if exp and exp.upper() not in ("NONE", "NULL", "NO_ENCONTRADO"):
+        out["comp_expediente"] = exp
+    for clave in ("comp_escritura", "comp_volumen"):
+        n = _entero(d.get(clave))
+        if n:
+            out[clave] = str(n)
+    f = normalizar_fecha_iso(d.get("comp_fecha"))
+    if f:
+        out["comp_fecha"] = f"{f[8:10]}/{f[5:7]}/{f[0:4]}"  # como se ve en pantalla: 03/11/2026
+    return out
+
+
+def contexto_complementario(datos) -> dict:
+    """Variables de los datos complementarios (Excel) para las plantillas. Vacías si todavía no llegan."""
+    d = datos or {}
+    # Mientras no lleguen, se dejan los espacios en blanco de siempre para llenarlos a mano
+    ctx = {"escritura_num": "", "escritura_letras": " " * 20, "volumen_letras": " " * 17, "expediente": "",
+           "expediente_num": " " * 5, "fecha_dia": " " * 11, "fecha_mes": " " * 17}
+    esc = _entero(d.get("comp_escritura"))
+    if esc:
+        ctx["escritura_num"] = f"{esc:,}"
+        ctx["escritura_letras"] = " ".join(str(numero_a_palabras_generico(esc)).upper().split())
+    vol = _entero(d.get("comp_volumen"))
+    if vol:
+        ctx["volumen_letras"] = " ".join(str(numero_a_palabras_generico(vol)).upper().split())
+    exp = str(d.get("comp_expediente") or "").strip()
+    if exp:
+        ctx["expediente"] = exp
+        ctx["expediente_num"] = exp.split("-")[0].strip()
+    fecha = normalizar_fecha_iso(d.get("comp_fecha"))
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", fecha)
+    if m:
+        ctx["fecha_dia"] = _dia_en_letra(int(m.group(3)))
+        ctx["fecha_mes"] = _MESES_NOMBRE[int(m.group(2)) - 1]
+    return ctx
+
+
 def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
     if not os.path.exists(ruta_plantilla):
         ruta_plantilla_alt = os.path.join("templates", "plantilla_manera2.docx")
@@ -1380,6 +1473,9 @@ def generar_word_cancelacion(ruta_plantilla, datos, ruta_salida):
         "numero_credito_2": (credito2 if ('"' in credito2 or '(' in credito2) else credito_a_letras(credito2)) if credito2 else "",
         "monto_credito_2": f"{monto2} M.N. ({letras2})" if monto2 else "",
     })
+
+    # Datos complementarios (los que llegan después en el Excel: escritura, volumen, expediente y fecha)
+    context.update(contexto_complementario(datos))
 
     doc.render(context)
     try:

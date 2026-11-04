@@ -21,7 +21,8 @@ const PRINCIPALES_REVISOR = [
 ];
 const MAS = [
   { id: 'compartidos', nombre: 'Compartidos conmigo', detalle: 'Expedientes que otras personas te compartieron', icono: Inbox, compartidos: true },
-  { id: 'excel', nombre: 'Carga Excel / Lote', detalle: 'Generar varios expedientes desde un Excel', icono: FileSpreadsheet },
+  { id: 'excel', nombre: 'Datos complementarios', detalle: 'Llenar EXP., escritura, volumen y fecha desde el Excel', icono: FileSpreadsheet, funcion: 'datos_complementarios' },
+  { id: 'excel', nombre: 'Carga Excel / Lote', detalle: 'Generar varios expedientes desde un Excel', icono: FileSpreadsheet, sinFuncion: 'datos_complementarios' },
   { id: 'panel', nombre: 'Panel de inicio', detalle: 'Cómo va el trabajo del equipo hoy', icono: LayoutDashboard, admin: true, funcion: 'panel_admin' },
   { id: 'kpis', nombre: 'Reportes por Persona', detalle: 'Rendimiento de cada usuario', icono: BarChart3, admin: true },
   { id: 'registro', nombre: 'Expedientes compartidos', detalle: 'Qué se compartió, con quién y cuándo', icono: Share2, admin: true, funcion: 'registro_compartidos' },
@@ -31,7 +32,7 @@ const TITULOS_PESTANA = {
   single: 'Caso Individual',
   batch: 'Carga Masiva',
   manual: 'Captura Manual',
-  excel: 'Carga Excel / Lote',
+  excel: 'Datos complementarios',
   history: 'Mi Historial',
   compartidos: 'Compartidos conmigo',
   kpis: 'Reportes por Persona',
@@ -78,7 +79,7 @@ export default function NavegacionMovil() {
     else setArrastre(0);
   };
 
-  const masVisibles = esRevisor ? [] : MAS.filter((m) => (!m.admin || esAdmin) && (!m.compartidos || verCompartidos) && (!m.funcion || puedeServidor?.(m.funcion)));
+  const masVisibles = esRevisor ? [] : MAS.filter((m) => (!m.admin || esAdmin) && (!m.compartidos || verCompartidos) && (!m.funcion || puedeServidor?.(m.funcion)) && (!m.sinFuncion || !puedeServidor?.(m.sinFuncion)));
   const principales = esRevisor ? PRINCIPALES_REVISOR : PRINCIPALES;
   const enMas = masVisibles.some((m) => m.id === activeTab);
 

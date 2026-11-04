@@ -9,6 +9,13 @@ export const GRUPOS_CAMPOS = [
     titulo: 'Carta de instrucción',
     campos: ['fecha_expedicion', 'numero_carta', 'fecha_liquidacion', 'numero_credito', 'entidad_financiera'],
   },
+  {
+    titulo: 'Datos complementarios',
+    campos: ['comp_expediente', 'comp_escritura', 'comp_volumen', 'comp_fecha'],
+    todos: true,
+    plegado: true,
+    nota: 'Llegan después en el Excel (apartado «Datos complementarios»). Mientras estén vacíos, el Word deja esos espacios en blanco.',
+  },
 ];
 
 // Coacreditados: datos del "TRABAJADOR DOS" (los del uno son los de siempre)
@@ -40,6 +47,10 @@ export const ETIQUETAS_CAMPOS = {
   fecha_liquidacion_2: 'Fecha de liquidación (dos)',
   credito_a_salario_2: 'VSMM (dos)',
   monto_credito_2: 'Monto del crédito (dos)',
+  comp_expediente: 'Número de expediente (EXP., ej. 8920-2026)',
+  comp_escritura: 'Escritura / instrumento (ESC, ej. 18681)',
+  comp_volumen: 'Volumen (VOL., ej. 186)',
+  comp_fecha: 'Fecha del instrumento (dd/mm/aaaa)',
 };
 
 // Campos internos que no se muestran (o que eran copias de otros campos)
@@ -76,7 +87,7 @@ export function agruparDatos(datos, coac = false) {
   const grupos = lista.map((g) => {
     const campos = g.campos.filter((k) => g.todos || claves.includes(k));
     campos.forEach((k) => usados.add(k));
-    return { titulo: g.titulo, campos };
+    return { titulo: g.titulo, campos, ...(g.nota ? { nota: g.nota } : {}), ...(g.plegado ? { plegado: true } : {}) };
   });
   const puntos = claves
     .filter((k) => !usados.has(k) && esPuntoInmueble(k))

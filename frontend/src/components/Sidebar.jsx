@@ -183,7 +183,7 @@ export default function Sidebar() {
                     transition: 'color 0.25s ease', position: 'relative', zIndex: 1
                   }}
                 >
-                  <FileSpreadsheet size={18} /> Carga Excel / Lote
+                  <FileSpreadsheet size={18} /> {puedeServidor?.('datos_complementarios') ? 'Datos complementarios' : 'Carga Excel / Lote'}
                 </button>
 
                 <button

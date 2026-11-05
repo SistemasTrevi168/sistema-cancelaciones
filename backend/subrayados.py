@@ -57,7 +57,9 @@ def limpiar(marcas: Any) -> List[Dict[str, Any]]:
             continue
         if pagina < 1 or pagina > 5000:
             continue
-        color = m.get("color") if m.get("color") in COLORES else "amarillo"
+        color = str(m.get("color") or "").lower()
+        if color not in COLORES and not re.fullmatch(r"#[0-9a-f]{6}", color):
+            color = "amarillo"
         salida.append({
             "id": str(m.get("id") or "")[:40] or f"m{len(salida)}",
             "pagina": pagina,

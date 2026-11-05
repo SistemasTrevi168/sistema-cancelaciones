@@ -6,7 +6,7 @@ import { useApp } from '../AppContext';
 import { abrirPdf } from '../ui/pdf';
 import { leerTextoDeImagen } from '../ui/ocr';
 import { CAMPOS_DEL_ACTO, etiquetaDe } from '../camposExpediente';
-import { COLORES_SUBRAYADO, colorSubrayado, useSubrayados } from '../ui/subrayados';
+import { COLORES_SUBRAYADO, colorSubrayado, esColorLibre, useSubrayados } from '../ui/subrayados';
 import PaginaPdf from './PaginaPdf';
 import IconoArchivo from './IconoArchivo';
 
@@ -155,8 +155,9 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
   const subrayarSeleccion = () => {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
-    const rango = sel.getRangeAt(0);
-    if (!zonaRef.current?.contains(rango.commonAncestorContainer)) return false;
+    if (!zonaRef.current?.contains(sel.getRangeAt(0).commonAncestorContainer)) return false;
+    // Se completa a palabras enteras (si se quedó media palabra fuera, se incluye)
+    const rango = aPalabrasCompletas(sel.getRangeAt(0));
     const cajas = cajasPaginas();
     const porPagina = {};
     for (const r of rectsDeTexto(rango)) {
@@ -168,7 +169,7 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
       if (!porPagina[hit[0]]) porPagina[hit[0]] = [];
       porPagina[hit[0]].push([(r.left - b.left) / escala, (r.top - b.top) / escala, r.width / escala, r.height / escala]);
     }
-    const texto = sel.toString().replace(/\s+/g, ' ').trim().slice(0, 500);
+    const texto = rango.toString().replace(/\s+/g, ' ').trim().slice(0, 500);
     const nuevas = Object.entries(porPagina).map(([n, rs]) => ({
       id: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
       pagina: Number(n),
@@ -392,14 +393,7 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
         )}
         {subrayar && (
           <div className="barra-subrayar" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
-            <span className="barra-subrayar-colores" role="radiogroup" aria-label="Color del subrayado">
-              {COLORES_SUBRAYADO.map((c) => (
-                <button key={c.id} type="button" role="radio" aria-checked={color === c.id} title={c.nombre} aria-label={c.nombre}
-                  className={`punto-color ${color === c.id ? 'activo' : ''}`} style={{ backgroundColor: c.color }} onClick={() => elegirColor(c.id)}>
-                  {color === c.id && <Check size={12} />}
-                </button>
-              ))}
-            </span>
+            <SelectorColor valor={color} onElegir={elegirColor} />
             <span className="barra-subrayar-ayuda" style={{ color: theme.textSecondary }}>
               Selecciona con el mouse las palabras a subrayar. Clic en un subrayado para cambiarle el color o quitarlo.
             </span>
@@ -560,19 +554,14 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
       {/* CLIC EN UN SUBRAYADO: cambiar color o quitar */}
       {marcaEditando && (
         <div className="menu-campo menu-subrayado" role="dialog" aria-label="Subrayado"
-          style={{ left: Math.max(8, Math.min(editando.x - 120, window.innerWidth - 248)), top: editando.y + 150 > window.innerHeight ? Math.max(8, editando.y - 140) : editando.y + 10, width: '240px', backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.textPrimary }}>
+          style={{ left: Math.max(8, Math.min(editando.x - 140, window.innerWidth - 298)), top: editando.y + 150 > window.innerHeight ? Math.max(8, editando.y - 140) : editando.y + 10, width: '290px', backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.textPrimary }}>
           <div style={{ padding: '10px 12px', borderBottom: `1px solid ${theme.border}` }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: theme.textSecondary, marginBottom: '4px' }}>SUBRAYADO · PÁG. {marcaEditando.pagina}</div>
             <div style={{ fontSize: '12px', maxHeight: '48px', overflow: 'auto' }}>{marcaEditando.texto ? `“${marcaEditando.texto}”` : '—'}</div>
           </div>
           <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '12px', color: theme.textSecondary }}>Color</span>
-            {COLORES_SUBRAYADO.map((c) => (
-              <button key={c.id} type="button" title={c.nombre} aria-label={c.nombre} className={`punto-color ${marcaEditando.color === c.id ? 'activo' : ''}`}
-                style={{ backgroundColor: c.color }} onClick={() => sub.recolorear(marcaEditando.id, c.id)}>
-                {marcaEditando.color === c.id && <Check size={12} />}
-              </button>
-            ))}
+            <SelectorColor valor={marcaEditando.color} onElegir={(c) => sub.recolorear(marcaEditando.id, c)} />
           </div>
           <div style={{ display: 'flex', borderTop: `1px solid ${theme.border}` }}>
             <button type="button" onClick={() => { sub.quitar(marcaEditando.id); setEditando(null); }} style={{ flex: 1, border: 'none', background: 'transparent', color: '#dc2626', padding: '9px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
@@ -619,6 +608,45 @@ function rectsDeTexto(rango) {
   let n = recorrido.nextNode();
   while (n) { revisar(n); n = recorrido.nextNode(); }
   return salida;
+}
+
+// Extiende la selección para no cortar palabras a la mitad
+const LETRA = /[\p{L}\p{N}]/u;
+function aPalabrasCompletas(rango) {
+  const r = rango.cloneRange();
+  if (r.startContainer.nodeType === 3) {
+    const t = r.startContainer.textContent;
+    let i = r.startOffset;
+    while (i > 0 && LETRA.test(t[i - 1])) i -= 1;
+    r.setStart(r.startContainer, i);
+  }
+  if (r.endContainer.nodeType === 3) {
+    const t = r.endContainer.textContent;
+    let i = r.endOffset;
+    while (i < t.length && LETRA.test(t[i])) i += 1;
+    r.setEnd(r.endContainer, i);
+  }
+  return r;
+}
+
+// Colores de siempre + «otro color» (cualquiera, con el selector del navegador)
+function SelectorColor({ valor, onElegir }) {
+  const libre = esColorLibre(valor);
+  return (
+    <span className="barra-subrayar-colores" role="radiogroup" aria-label="Color del subrayado">
+      {COLORES_SUBRAYADO.map((c) => (
+        <button key={c.id} type="button" role="radio" aria-checked={valor === c.id} title={c.nombre} aria-label={c.nombre}
+          className={`punto-color ${valor === c.id ? 'activo' : ''}`} style={{ backgroundColor: c.color }} onClick={() => onElegir(c.id)}>
+          {valor === c.id && <Check size={12} />}
+        </button>
+      ))}
+      <label className={`punto-color otro-color ${libre ? 'activo' : ''}`} title="Elegir otro color" aria-label="Elegir otro color"
+        style={libre ? { background: valor } : undefined}>
+        {libre ? <Check size={12} color="#fff" style={{ filter: 'drop-shadow(0 0 1px #000)' }} /> : <span className="otro-color-mas">+</span>}
+        <input type="color" value={libre ? valor : '#a855f7'} onChange={(e) => onElegir(e.target.value.toLowerCase())} />
+      </label>
+    </span>
+  );
 }
 
 // Junta los pedacitos de un mismo renglón en una sola franja

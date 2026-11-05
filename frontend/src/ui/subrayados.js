@@ -10,7 +10,9 @@ export const COLORES_SUBRAYADO = [
   { id: 'rosa', nombre: 'Rosa', color: '#f9a8d4' },
   { id: 'naranja', nombre: 'Naranja', color: '#fdba74' },
 ];
-export const colorSubrayado = (id) => (COLORES_SUBRAYADO.find((c) => c.id === id) || COLORES_SUBRAYADO[0]).color;
+// Además de los 5 de siempre, se puede elegir cualquier color (se guarda como #rrggbb)
+export const esColorLibre = (c) => /^#[0-9a-f]{6}$/i.test(String(c || ''));
+export const colorSubrayado = (id) => (esColorLibre(id) ? id : (COLORES_SUBRAYADO.find((c) => c.id === id) || COLORES_SUBRAYADO[0]).color);
 
 const huellas = new WeakMap();
 const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');

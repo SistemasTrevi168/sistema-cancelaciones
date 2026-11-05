@@ -14,6 +14,15 @@ export const COLORES_SUBRAYADO = [
 export const esColorLibre = (c) => /^#[0-9a-f]{6}$/i.test(String(c || ''));
 export const colorSubrayado = (id) => (esColorLibre(id) ? id : (COLORES_SUBRAYADO.find((c) => c.id === id) || COLORES_SUBRAYADO[0]).color);
 
+function seEncima(a, b) {
+  if (a.pagina !== b.pagina) return false;
+  return a.rects.some(([ax, ay, aw, ah]) => b.rects.some(([bx, by, bw, bh]) => {
+    const ix = Math.min(ax + aw, bx + bw) - Math.max(ax, bx);
+    const iy = Math.min(ay + ah, by + bh) - Math.max(ay, by);
+    return ix > 0 && iy > 0 && ix * iy > 0.3 * Math.min(aw * ah, bw * bh);
+  }));
+}
+
 const huellas = new WeakMap();
 const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
 
@@ -101,7 +110,8 @@ export function useSubrayados(archivo) {
     });
   }, [huella, enviar]);
 
-  const agregar = useCallback((nuevas) => cambiar((m) => [...m, ...nuevas]), [cambiar]);
+  // Si lo nuevo cae encima de un subrayado que ya estaba, ese se reemplaza (no se enciman ni se oscurece el texto)
+  const agregar = useCallback((nuevas) => cambiar((m) => [...m.filter((x) => !nuevas.some((n) => seEncima(n, x))), ...nuevas]), [cambiar]);
   const quitar = useCallback((id) => cambiar((m) => m.filter((x) => x.id !== id)), [cambiar]);
   const recolorear = useCallback((id, color) => cambiar((m) => m.map((x) => (x.id === id ? { ...x, color } : x))), [cambiar]);
   const limpiar = useCallback(() => cambiar(() => []), [cambiar]);

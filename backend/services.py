@@ -246,10 +246,16 @@ _NOMBRE_MES = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio
                "octubre", "noviembre", "diciembre"]
 
 
+def dia_de_fecha_en_letra(dia):
+    """El día de una fecha con letra: el 1 es «primero» (primero de mayo); los demás, normal (dos, veintiuno…)."""
+    dia = int(dia)
+    return "primero" if dia == 1 else numero_a_palabras_generico(dia).lower()
+
+
 def _fecha_en_letra(dia, mes, anio):
     if not (1 <= dia <= 31 and 1 <= mes <= 12 and 1900 <= anio <= 2100):
         return None
-    return f"{numero_a_palabras_generico(dia).lower()} de {_NOMBRE_MES[mes]} de {numero_a_palabras_generico(anio).lower()}"
+    return f"{dia_de_fecha_en_letra(dia)} de {_NOMBRE_MES[mes]} de {numero_a_palabras_generico(anio).lower()}"
 
 
 def fecha_estructurada_a_texto(texto):
@@ -260,6 +266,7 @@ def fecha_estructurada_a_texto(texto):
     """
     t = re.sub(r"\s+", " ", _sin_acentos_mayus(texto)).strip()
     t = re.sub(r"\b(\d{1,2})\s*(?:O|RO|ER|º|°)\.?(?=\s+DE\b)", r"\1", t)
+    t = re.sub(r"\bPRIMER[O]?(?=\s+DE\b)", "1", t)  # «primero de mayo de 2020» -> 1
     m = re.search(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", t)
     if m:
         return _fecha_en_letra(int(m.group(3)), int(m.group(2)), int(m.group(1)))
@@ -305,7 +312,7 @@ def _convertir_fecha_texto_anterior(texto_fecha):
         return "NO_ENCONTRADO"
     
     texto_upper = re.sub(r'\s+', ' ', str(texto_fecha)).upper().strip()
-    # El día 1 se escribe "uno" (no "primero"): "1o", "1ro.", "1er", "1º" se toman como 1
+    # «1o», «1ro.», «1er», «1º» se toman como 1 (y el día 1 se escribe «primero»)
     texto_upper = re.sub(r'\b(\d{1,2})\s*(?:O|RO|ER|º|°)\.?(?=\s+DE\b)', r'\1', texto_upper)
     
     meses = {
@@ -333,7 +340,7 @@ def _convertir_fecha_texto_anterior(texto_fecha):
             anio_num = "20" + anio_num if int(anio_num) < 50 else "19" + anio_num
         mes_num = romanos.get(romano)
         if mes_num and mes_num in meses_num_map:
-            dia_letra = numero_a_palabras_generico(dia_num).lower()
+            dia_letra = dia_de_fecha_en_letra(dia_num)
             anio_letra = numero_a_palabras_generico(int(anio_num)).lower()
             return f"{dia_letra} de {meses_num_map[mes_num]} de {anio_letra}"
 
@@ -344,7 +351,7 @@ def _convertir_fecha_texto_anterior(texto_fecha):
             y = "20" + y if int(y) < 50 else "19" + y
         mes_key = f"{int(m):02d}"
         if mes_key in meses_num_map and 1 <= int(d) <= 31:
-            dia_letra = numero_a_palabras_generico(int(d)).lower()
+            dia_letra = dia_de_fecha_en_letra(int(d))
             anio_letra = numero_a_palabras_generico(int(y)).lower()
             return f"{dia_letra} de {meses_num_map[mes_key]} de {anio_letra}"
 
@@ -407,7 +414,7 @@ def _convertir_fecha_texto_anterior(texto_fecha):
                 break
 
     if dia_num and mes_encontrado and anio_num:
-        dia_letra = numero_a_palabras_generico(dia_num).lower()
+        dia_letra = dia_de_fecha_en_letra(dia_num)
         anio_letra = numero_a_palabras_generico(int(anio_num)).lower()
         return f"{dia_letra} de {mes_encontrado} de {anio_letra}"
 
@@ -1257,9 +1264,14 @@ def _parrafos(documento):
                 yield from celda.paragraphs
 
 
+_TITULO_CLAUSULAS = re.compile(r"C\s+L\s+[ÁA]\s+U\s+S\s+U\s+L\s+A\s+S|^\W*CL[ÁA]USULAS\W*$", re.I)
+
+
 def completar_conyuge_en_documento(documento, conyuge):
     """
-    Donde la plantilla dice "con el consentimiento de su cónyuge" sin el nombre, se agrega:
+    El nombre del cónyuge va SOLO en los antecedentes. Desde el título «C L Á U S U L A S» en adelante
+    se deja «con el consentimiento de su cónyuge» sin nombre.
+    En los antecedentes, donde la plantilla dice "con el consentimiento de su cónyuge" sin el nombre, se agrega:
       "... de su cónyuge sobre el inmueble"   -> "... de su cónyuge el señor ARTURO ESCALONA MACEDO, sobre el inmueble"
       "... de su cónyuge, sobre el inmueble"  -> "... de su cónyuge, la señora ANA LOPEZ RUIZ, sobre el inmueble"
     Si ya trae el nombre (o "el señor/la señora ..."), no se toca. Regresa cuántas veces se agregó.
@@ -1273,6 +1285,8 @@ def completar_conyuge_en_documento(documento, conyuge):
     for p in _parrafos(documento):
         runs = p.runs
         texto = "".join(r.text for r in runs)
+        if _TITULO_CLAUSULAS.search(texto.strip()):
+            break  # de aquí en adelante (cláusulas, personalidad, generales…) no se pone el nombre
         if not _CONSENTIMIENTO.search(texto):
             continue
         for m in reversed(list(_CONSENTIMIENTO.finditer(texto))):

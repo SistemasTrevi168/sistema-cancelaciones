@@ -228,13 +228,21 @@ ruta_cony = os.path.join(main.GENERADOS_DIR, f"prueba_conyuge_{SUF}.docx")
 if os.path.exists(main.resolver_ruta_plantilla("EDOMEX_AP_M_CASADA")) and "CASADA" in main.resolver_ruta_plantilla("EDOMEX_AP_M_CASADA"):
     services.generar_word_cancelacion(main.resolver_ruta_plantilla("EDOMEX_AP_M_CASADA"), d_cony, ruta_cony)
     t_cony = texto_word(open(ruta_cony, "rb").read())
-    chk("cónyuge en todas las menciones", t_cony.count("ARTURO ESCALONA MACEDO") >= 2 and "cónyuge sobre" not in t_cony, t_cony[:200])
+    _cl = t_cony.find("C L Á U S U L A S")
+    chk("cónyuge: el nombre solo en los antecedentes", t_cony.count("ARTURO ESCALONA MACEDO") == 1 and _cl > 0
+        and "ARTURO ESCALONA MACEDO" in t_cony[:_cl] and "consentimiento de su cónyuge sobre" in t_cony[_cl:], t_cony[:300])
     os.remove(ruta_cony)
 import docx as _docx  # noqa: E402
 doc_c = _docx.Document()
 doc_c.add_paragraph("“EL ACREDITADO”, con el consentimiento de su cónyuge, sobre el inmueble relacionado.")
 services.completar_conyuge_en_documento(doc_c, "ANA RUIZ SOTO")
 chk("cónyuge: se agrega 'la señora' con su nombre", "cónyuge, la señora ANA RUIZ SOTO, sobre" in doc_c.paragraphs[0].text, doc_c.paragraphs[0].text)
+doc_c2 = _docx.Document()
+doc_c2.add_paragraph("con el consentimiento de su cónyuge, sobre el inmueble.")
+doc_c2.add_paragraph("------------ C L Á U S U L A S ------------")
+doc_c2.add_paragraph("PRIMERA.- … por “EL ACREDITADO”, con el consentimiento de su cónyuge, sobre el inmueble relacionado.")
+services.completar_conyuge_en_documento(doc_c2, "ANA RUIZ SOTO")
+chk("cónyuge: en las cláusulas no se pone el nombre", "ANA RUIZ SOTO" in doc_c2.paragraphs[0].text and "ANA RUIZ SOTO" not in doc_c2.paragraphs[2].text, [p.text for p in doc_c2.paragraphs])
 
 # ---- Editar un expediente guardado y actualizarlo al volver a subirlo
 with cliente() as c_ed:
@@ -919,6 +927,17 @@ if _z.status_code == 200:
     _tz = "\n".join(p.text for p in _dz.paragraphs)
 chk("complementarios: el ZIP trae el Word lleno", "INSTRUMENTO NÚMERO DIECIOCHO MIL SEISCIENTOS NOVENTA." in _tz and "EXP. 8930-2026" in _tz
     and "a los cinco días del mes de noviembre" in _tz and "ante mí el día primero del mes de diciembre del año dos mil veintiséis" in _tz, _tz[:300])
+
+# --- Plantillas: las mejoras del repositorio no se pierden con una copia subida antes ---
+_mp = main._marcas_plantilla(os.path.join("templates", "EDOMEX_AP_M_SOLTERA.docx"))
+chk("plantillas: traen complementarios, fecha de término y formato folio", _mp == set(main._MARCAS_PLANTILLA), _mp)
+_dp = _docx.Document(os.path.join("templates", "EDOMEX_AP_M_SOLTERA.docx"))
+chk("plantillas: margen de arriba y encabezado del folio", (_dp.sections[0].top_margin.twips, _dp.sections[0].header_distance.twips) == (2693, 2169))
+chk("plantillas: sin guiones escritos a mano", not any("----" in p.text for p in _dp.paragraphs))
+chk("fecha: el día 1 es «primero»", services.convertir_fecha_texto("01/05/2020") == "primero de mayo de dos mil veinte"
+    and main._fecha_con_letra("1 de mayo de 2020") == "primero de mayo de dos mil veinte"
+    and main._fecha_con_letra("uno de mayo de dos mil veinte") == "primero de mayo de dos mil veinte"
+    and services.convertir_fecha_texto("21/05/2020") == "veintiuno de mayo de dos mil veinte")
 
 # --- Subrayados en los PDF (por huella del archivo) ---
 _hs = "ab" * 32

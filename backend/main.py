@@ -874,13 +874,23 @@ def limpiar_datos_para_plantilla(datos_origen: Dict[str, Any], num_credito_fallb
             resultado[clave] = ""
     return resultado
 
-def _tiene_complementarios(origen) -> bool:
-    """¿La plantilla (ruta o bytes del .docx) ya tiene los espacios de los datos complementarios?"""
+# Mejoras que se han hecho a las plantillas del repositorio (cada una deja una marca en el documento):
+# datos complementarios, fecha de término y el formato para imprimir en folio (guiones con tope en el margen)
+_MARCAS_PLANTILLA = ("escritura_letras", "firma_dia", 'w:pos="9121"')
+
+
+def _marcas_plantilla(origen) -> set:
     try:
         with zipfile.ZipFile(origen if isinstance(origen, str) else io.BytesIO(origen)) as z:
-            return "escritura_letras" in z.read("word/document.xml").decode("utf8", "ignore")
+            xml = z.read("word/document.xml").decode("utf8", "ignore")
+        return {m for m in _MARCAS_PLANTILLA if m in xml}
     except Exception:
-        return False
+        return set()
+
+
+def _tiene_complementarios(origen) -> bool:
+    """¿La plantilla (ruta o bytes del .docx) ya tiene los espacios de los datos complementarios?"""
+    return "escritura_letras" in _marcas_plantilla(origen)
 
 
 @app.on_event("startup")
@@ -892,13 +902,14 @@ def restaurar_plantillas_subidas():
         for p in db.query(models.PlantillaSubida).all():
             nombre = os.path.basename(p.nombre)
             ruta = os.path.join(TEMPLATES_DIR, nombre)
-            # Si la del repositorio ya trae los datos complementarios y la copia subida antes no, se queda la del
-            # repositorio (y se actualiza la copia), para no perder esos campos al redesplegar
-            if os.path.exists(ruta) and _tiene_complementarios(ruta) and not _tiene_complementarios(p.contenido):
+            # Si la del repositorio trae alguna mejora que la copia subida antes no tiene (datos complementarios,
+            # fecha de término, formato para folio), se queda la del repositorio y se actualiza la copia
+            faltan = (_marcas_plantilla(ruta) - _marcas_plantilla(p.contenido)) if os.path.exists(ruta) else set()
+            if faltan:
                 with open(ruta, "rb") as f:
                     p.contenido = f.read()
                 db.commit()
-                print(f"--> Plantilla {nombre}: se conserva la del repositorio (trae los datos complementarios)")
+                print(f"--> Plantilla {nombre}: se conserva la del repositorio (trae mejoras: {', '.join(sorted(faltan))})")
                 continue
             with open(ruta, "wb") as f:
                 f.write(p.contenido)

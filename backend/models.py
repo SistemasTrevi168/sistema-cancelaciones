@@ -186,3 +186,18 @@ class ExcelComplementario(Base):
     creado_en = Column(DateTime(timezone=True), server_default=func.now())
     # [{n, expediente, escritura, volumen, fecha, credito, nombre, estado, expediente_id, llenado_por, llenado_en}]
     filas = Column(JSON, nullable=False, default=list)
+
+
+class Subrayado(Base):
+    """
+    Subrayados que se hacen sobre un PDF (carta o constancia) en el visor. Se guardan por la huella del archivo
+    (sha256 de su contenido): así se ven igual al generar, al revisar la carga masiva y al editar, y para
+    cualquiera que abra ese mismo PDF.
+    """
+    __tablename__ = "subrayados"
+
+    huella = Column(String, primary_key=True)
+    # [{id, pagina, color, rects: [[x, y, ancho, alto], ...], texto}] en puntos del PDF (escala 1)
+    marcas = Column(JSON, nullable=False, default=list)
+    actualizado_por = Column(String, nullable=True)
+    actualizado_en = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

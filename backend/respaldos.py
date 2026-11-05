@@ -57,7 +57,8 @@ def armar_zip(db: Session) -> bytes:
                                ("actividad", models.Actividad), ("plantillas_subidas", models.PlantillaSubida),
                                ("plantilla_versiones", models.PlantillaVersion), ("documentos", models.Documento),
                                ("compartidos", models.Compartido),
-                               ("excel_complementarios", models.ExcelComplementario)]:
+                               ("excel_complementarios", models.ExcelComplementario),
+                               ("subrayados", models.Subrayado)]:
             filas = _tabla(db, modelo)
             resumen["tablas"][nombre] = len(filas)
             z.writestr(f"base/{nombre}.json", json.dumps(filas, ensure_ascii=False, indent=1, default=str))

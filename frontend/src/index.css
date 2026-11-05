@@ -496,6 +496,69 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
 .pagina-pdf .textLayer.selecting .endOfContent {
   top: 0;
 }
+/* Subrayados (debajo del texto seleccionable; el color se mezcla con la tinta como un marcatextos) */
+.capa-subrayados {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.subrayado {
+  position: absolute;
+  mix-blend-mode: multiply;
+  opacity: 0.75;
+  border-radius: 2px;
+  transition: box-shadow .2s ease;
+}
+.subrayado.activo {
+  opacity: 0.95;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.75);
+}
+.panel-docs-paginas.subrayando .textLayer :is(span, br) { cursor: text; }
+.panel-docs-paginas.subrayando .textLayer ::selection { background: var(--color-seleccion, rgba(253, 224, 71, .6)); }
+.barra-subrayar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px solid;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.barra-subrayar-colores { display: inline-flex; gap: 6px; }
+.barra-subrayar-ayuda { font-size: 11px; flex: 1; min-width: 180px; }
+.punto-color {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 2px solid rgba(15, 23, 42, 0.15);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  color: #1f2937;
+  flex-shrink: 0;
+}
+.punto-color.activo { border-color: #1f2937; box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(15, 23, 42, .35); }
+.punto-color.chico { width: 12px; height: 12px; border-width: 1px; cursor: inherit; }
+.lista-subrayados { max-height: 190px; overflow-y: auto; }
+.lista-subrayados-fila { display: flex; align-items: center; }
+.boton-subrayar-flotante {
+  position: fixed;
+  z-index: 2200;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #ca8a04;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #1f2937;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .25);
+  font-family: inherit;
+}
 /* Modo OCR: se dibuja un recuadro sobre la página */
 .capa-ocr {
   position: absolute;
@@ -1497,6 +1560,83 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   min-width: 0;
   min-height: 0;
 }
+/* Pestaña entre el documento y los datos: se arrastra para cambiar el tamaño */
+.espacio-divisor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  outline: none;
+  z-index: 2;
+}
+.espacio-divisor.vertical { cursor: col-resize; }
+.espacio-divisor.vertical::before {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--borde-divisor, #e2e8f0);
+}
+.espacio-divisor.horizontal { cursor: row-resize; height: 14px; }
+.espacio-divisor.horizontal::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--borde-divisor, #e2e8f0);
+}
+.espacio-divisor-agarre {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid;
+  border-radius: 999px;
+  padding: 10px 1px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, .12);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.espacio-divisor.horizontal .espacio-divisor-agarre { padding: 1px 12px; }
+.espacio-divisor:hover .espacio-divisor-agarre,
+.espacio-divisor:focus-visible .espacio-divisor-agarre {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .25);
+}
+.espacio-divisor:hover::before, .espacio-divisor:focus-visible::before { background: #3b82f6; }
+.espacio-ajuste-alto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border-top: 1px solid;
+  min-height: 16px;
+  border-radius: 0 0 14px 14px;
+}
+.espacio-ajuste-alto-agarre {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  cursor: row-resize;
+  touch-action: none;
+  padding: 1px 0;
+  outline: none;
+}
+.espacio-ajuste-alto-agarre:hover, .espacio-ajuste-alto-agarre:focus-visible { color: #3b82f6; background: rgba(59, 130, 246, .08); }
+.espacio-restablecer {
+  position: absolute;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.espacio-restablecer:hover { color: #3b82f6; }
+body.arrastrando-columnas, body.arrastrando-columnas * { cursor: col-resize !important; user-select: none !important; }
+body.arrastrando-filas, body.arrastrando-filas * { cursor: row-resize !important; user-select: none !important; }
+/* Si los datos quedan angostos, los semáforos van uno debajo de otro */
+.espacio-datos { container-type: inline-size; }
+@container (max-width: 520px) {
+  .espacio-datos .panel-estado { grid-template-columns: 1fr; }
+}
 .espacio-docs {
   display: flex;
   padding: 10px;
@@ -2433,6 +2573,7 @@ button[style*="background-color: rgb(220, 38, 38)"]:not(:disabled):hover {
   .espacio-pestanas button.activa { box-shadow: 0 1px 4px rgba(15, 23, 42, .15); }
   .espacio-pestana-falta { background: #f59e0b; color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; }
   .espacio-cuerpo { grid-template-columns: 1fr !important; height: auto !important; min-height: 0 !important; }
+  .espacio-divisor, .espacio-ajuste-alto { display: none !important; }
   .espacio-cuerpo.ver-datos .espacio-docs { display: none; }
   .espacio-cuerpo.ver-docs .espacio-datos { display: none; }
   .espacio-docs { height: calc(100dvh - 210px) !important; min-height: 420px; padding: 8px !important; }

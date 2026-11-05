@@ -920,6 +920,22 @@ if _z.status_code == 200:
 chk("complementarios: el ZIP trae el Word lleno", "INSTRUMENTO NÚMERO DIECIOCHO MIL SEISCIENTOS NOVENTA." in _tz and "EXP. 8930-2026" in _tz
     and "a los cinco días del mes de noviembre" in _tz and "ante mí el día primero del mes de diciembre del año dos mil veintiséis" in _tz, _tz[:300])
 
+# --- Subrayados en los PDF (por huella del archivo) ---
+_hs = "ab" * 32
+_r = c_cm.get(f"/api/subrayados/{_hs}", headers=_hc)
+chk("subrayados: un PDF sin subrayados", _r.status_code == 200 and _r.json()["marcas"] == [], _r.text[:200])
+_r = c_cm.put(f"/api/subrayados/{_hs}", headers=_hc, json={"marcas": [
+    {"id": "a1", "pagina": 2, "color": "verde", "rects": [[10, 20, 100.456, 9]], "texto": "VÍCTOR ANTONIO"},
+    {"id": "a2", "pagina": 1, "color": "morado<script>", "rects": [[1, 2, 3, 4]]},
+    {"id": "a3", "pagina": 1, "rects": []}]})
+_m = c_cm.get(f"/api/subrayados/{_hs}", headers=_hc).json()["marcas"]
+chk("subrayados: se guardan y se limpian", _r.status_code == 200 and len(_m) == 2 and _m[0]["color"] == "verde" and _m[0]["rects"][0][2] == 100.46
+    and _m[1]["color"] == "amarillo", _m)
+chk("subrayados: huella inválida", c_cm.get("/api/subrayados/../../etc", headers=_hc).status_code in (400, 404))
+chk("subrayados: sin sesión no", cliente().get(f"/api/subrayados/{_hs}").status_code == 401)
+c_cm.put(f"/api/subrayados/{_hs}", headers=_hc, json={"marcas": []})
+chk("subrayados: se pueden quitar todos", c_cm.get(f"/api/subrayados/{_hs}", headers=_hc).json()["marcas"] == [])
+
 print()
 if FALLAS:
     print(f"HAY {len(FALLAS)} FALLA(S): {', '.join(FALLAS)}")

@@ -35,6 +35,7 @@ import compartir
 import documentos
 import inmueble as redaccion_inmueble
 import complementarios
+import subrayados
 from auth import require_user, require_admin
 
 # URL directa a PostgreSQL en Railway
@@ -967,6 +968,7 @@ app.include_router(respaldos.router)
 app.include_router(compartir.router)
 app.include_router(documentos.router)
 app.include_router(complementarios.router)
+app.include_router(subrayados.router)
 # Guardar los PDF de los expedientes: solo si están las variables del almacenamiento (Backblaze B2 / S3)
 if documentos.configurado() and "documentos" not in auth.FUNCIONES:
     auth.FUNCIONES.append("documentos")

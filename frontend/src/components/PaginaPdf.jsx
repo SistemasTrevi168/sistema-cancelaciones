@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { pdfjsLib } from '../ui/pdf';
+import { colorSubrayado } from '../ui/subrayados';
 
-// Una página del PDF: imagen + capa de texto seleccionable + (opcional) recuadro para OCR
-export default function PaginaPdf({ pdf, numero, escala, ancho, alto, modoOcr, onAreaOcr, registrar }) {
+// Una página del PDF: imagen + subrayados + capa de texto seleccionable + (opcional) recuadro para OCR
+export default function PaginaPdf({ pdf, numero, escala, ancho, alto, modoOcr, onAreaOcr, registrar, marcas = [], marcaActiva = null }) {
   const contenedorRef = useRef(null);
   const canvasRef = useRef(null);
   const textoRef = useRef(null);
@@ -47,6 +48,12 @@ export default function PaginaPdf({ pdf, numero, escala, ancho, alto, modoOcr, o
       textoRef.current.style.setProperty('--scale-factor', String(viewport.scale));
       capa = new pdfjsLib.TextLayer({ textContentSource: contenido, container: textoRef.current, viewport });
       try { await capa.render(); } catch { /* página sin texto */ }
+      // Igual que en el visor de pdf.js: un bloque al final que ayuda a que la selección no brinque
+      if (!cancelado && textoRef.current) {
+        const fin = document.createElement('div');
+        fin.className = 'endOfContent';
+        textoRef.current.append(fin);
+      }
     })();
     return () => {
       cancelado = true;
@@ -103,6 +110,14 @@ export default function PaginaPdf({ pdf, numero, escala, ancho, alto, modoOcr, o
       style={{ width: `${ancho * escala}px`, height: `${alto * escala}px` }}
     >
       <canvas ref={canvasRef} />
+      {marcas.length > 0 && (
+        <div className="capa-subrayados" aria-hidden="true">
+          {marcas.map((m) => m.rects.map(([x, y, w, h], i) => (
+            <span key={`${m.id}-${i}`} className={`subrayado ${marcaActiva === m.id ? 'activo' : ''}`}
+              style={{ left: x * escala, top: y * escala, width: w * escala, height: h * escala, backgroundColor: colorSubrayado(m.color) }} />
+          )))}
+        </div>
+      )}
       <div ref={textoRef} className="textLayer" />
       {modoOcr && (
         <div className="capa-ocr" onPointerDown={alPresionar} onPointerMove={alMover} onPointerUp={alSoltar}>

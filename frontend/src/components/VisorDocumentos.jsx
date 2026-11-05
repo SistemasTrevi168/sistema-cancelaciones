@@ -1,20 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  CheckCircle, ChevronDown, ChevronUp, Layers, Loader2, Maximize2, Minimize2, ScanText, Search, X, ZoomIn, ZoomOut,
+  Check, CheckCircle, ChevronDown, ChevronUp, Copy, Highlighter, Layers, List, Loader2, Maximize2, Minimize2, ScanText, Search, Trash2, X, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import { abrirPdf } from '../ui/pdf';
 import { leerTextoDeImagen } from '../ui/ocr';
-import { CAMPOS_DEL_ACTO, GRUPOS_CAMPOS, etiquetaDe } from '../camposExpediente';
+import { CAMPOS_DEL_ACTO, etiquetaDe } from '../camposExpediente';
+import { COLORES_SUBRAYADO, colorSubrayado, useSubrayados } from '../ui/subrayados';
 import PaginaPdf from './PaginaPdf';
 import IconoArchivo from './IconoArchivo';
 
 // Visor de los PDF del expediente (va dentro del espacio de trabajo, junto a los datos):
-// permite seleccionar texto (o un área con OCR) y mandarlo a un dato,
-// y elegir de qué acto de la constancia se toman el acreditado, la escritura, el notario y el monto.
+// permite subrayar palabras (con colores; se guardan y se ven siempre que se abra ese PDF),
+// leer el texto de un área (OCR) y elegir de qué acto de la constancia se toman el acreditado,
+// la escritura, el notario y el monto.
 // destino: a qué expediente van los datos ({ origen: 'single' } o { origen: 'batch', index }).
 export default function VisorDocumentos({ archivos: archivosProp, actos: actosProp, destino }) {
-  const { theme, isDarkMode, asignarCampoDesdeDocumento, usarActo } = useApp();
+  const { theme, isDarkMode, usarActo } = useApp();
   // Se abre primero la constancia (el archivo de donde salen los actos)
   const [indiceArchivo, setIndiceArchivo] = useState(() => {
     const lista = actosProp || [];
@@ -29,8 +31,17 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
   const [amplio, setAmplio] = useState(false);
   const [modoOcr, setModoOcr] = useState(false);
   const [ocr, setOcr] = useState(null); // { estado, progreso, texto, x, y }
-  const [menu, setMenu] = useState(null); // { texto, x, y, arriba }
-  // El menú "Usar como" se mide al aparecer para que nunca quede cortado abajo de la pantalla
+  const [menu, setMenu] = useState(null); // texto leído de un área: { texto, x, y, arriba, deOcr }
+  const [copiado, setCopiado] = useState(false);
+  // Subrayar
+  const [subrayar, setSubrayar] = useState(false);
+  const [color, setColor] = useState(() => { try { return localStorage.getItem('subrayado-color') || 'amarillo'; } catch { return 'amarillo'; } });
+  const [editando, setEditando] = useState(null); // subrayado al que se le dio clic: { id, x, y }
+  const [verLista, setVerLista] = useState(false);
+  const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
+  const [botonMovil, setBotonMovil] = useState(null); // en celular: botón «Subrayar» junto a lo seleccionado
+  const [resaltada, setResaltada] = useState(null);
+  // El recuadro del texto leído se mide al aparecer para que nunca quede cortado abajo de la pantalla
   const colocarMenu = useCallback((el) => {
     if (el && menu) el.style.top = `${posicionMenu(menu, el.offsetHeight)}px`;
   }, [menu]);
@@ -46,11 +57,18 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
   const archivo = archivos[indiceArchivo];
   const actos = actosProp || [];
   const actoEnUso = actos.find((a) => a.elegido);
+  const sub = useSubrayados(archivo);
+  const elegirColor = (c) => { setColor(c); try { localStorage.setItem('subrayado-color', c); } catch { /* sin almacenamiento */ } };
 
   // Esc: cierra el menú o sale de pantalla completa (el oyente se registra una sola vez)
   const alEscape = useRef(null);
   useEffect(() => {
-    alEscape.current = () => { if (menu) setMenu(null); else if (amplio) setAmplio(false); };
+    alEscape.current = () => {
+      if (menu) setMenu(null);
+      else if (editando) setEditando(null);
+      else if (subrayar) { setSubrayar(false); setBotonMovil(null); }
+      else if (amplio) setAmplio(false);
+    };
   });
   useEffect(() => {
     const alTeclear = (e) => {
@@ -84,16 +102,18 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
       if (w) setEscalaAuto(Math.max(0.4, Math.min(2, (w - 40) / dims.ancho)));
     };
     calcular();
-    const obs = new ResizeObserver(calcular);
+    // Mientras se arrastra la pestaña del tamaño se espera un momento para no redibujar a cada pixel
+    let t = null;
+    const obs = new ResizeObserver(() => { clearTimeout(t); t = setTimeout(calcular, 120); });
     if (zonaRef.current) obs.observe(zonaRef.current);
-    return () => obs.disconnect();
+    return () => { clearTimeout(t); obs.disconnect(); };
   }, [dims.ancho, amplio, verActos]);
   const escala = escalaManual ?? escalaAuto;
 
   // Al cambiar de archivo se limpia lo del anterior
   const cambiarArchivo = (i) => {
     if (i === indiceArchivo) return;
-    setPdf(null); setError(''); setResultados([]); setMenu(null);
+    setPdf(null); setError(''); setResultados([]); setMenu(null); setEditando(null); setBotonMovil(null); setConfirmarLimpiar(false);
     textos.current = {}; paginas.current = {};
     setIndiceArchivo(i);
   };
@@ -127,23 +147,131 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
     return () => { cancelado = true; clearTimeout(t); };
   }, [busqueda, pdf]);
 
-  // ---- Texto seleccionado con el mouse o el dedo ----
-  const revisarSeleccion = useCallback(() => {
+  // ---- Subrayar lo seleccionado con el mouse o el dedo ----
+  const cajasPaginas = () => Object.entries(paginas.current)
+    .filter(([, el]) => el)
+    .map(([n, el]) => [Number(n), el.getBoundingClientRect()]);
+
+  const subrayarSeleccion = () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+    const rango = sel.getRangeAt(0);
+    if (!zonaRef.current?.contains(rango.commonAncestorContainer)) return false;
+    const cajas = cajasPaginas();
+    const porPagina = {};
+    for (const r of rectsDeTexto(rango)) {
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const hit = cajas.find(([, b]) => cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom);
+      if (!hit) continue;
+      const b = hit[1];
+      if (!porPagina[hit[0]]) porPagina[hit[0]] = [];
+      porPagina[hit[0]].push([(r.left - b.left) / escala, (r.top - b.top) / escala, r.width / escala, r.height / escala]);
+    }
+    const texto = sel.toString().replace(/\s+/g, ' ').trim().slice(0, 500);
+    const nuevas = Object.entries(porPagina).map(([n, rs]) => ({
+      id: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+      pagina: Number(n),
+      color,
+      rects: unirRenglones(rs).map((r) => r.map((v) => Math.round(v * 100) / 100)),
+      texto,
+    }));
+    if (!nuevas.length) return false;
+    sub.agregar(nuevas);
+    sel.removeAllRanges();
+    setBotonMovil(null);
+    return true;
+  };
+
+  // Clic sin seleccionar nada: ¿cayó sobre un subrayado? (para cambiarle el color o quitarlo)
+  const marcaEn = (x, y) => {
+    const hit = cajasPaginas().find(([, b]) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom);
+    if (!hit) return null;
+    const px = (x - hit[1].left) / escala;
+    const py = (y - hit[1].top) / escala;
+    const deLaPagina = sub.marcas.filter((m) => m.pagina === hit[0]);
+    for (let k = deLaPagina.length - 1; k >= 0; k -= 1) {
+      const m = deLaPagina[k];
+      if (m.rects.some(([rx, ry, rw, rh]) => px >= rx - 1 && px <= rx + rw + 1 && py >= ry - 1 && py <= ry + rh + 1)) return m;
+    }
+    return null;
+  };
+
+  // Mientras se arrastra para seleccionar, la capa de texto se marca «selecting» (como en pdf.js):
+  // así la selección no brinca a toda la página ni al resto de la pantalla al pasar por espacios vacíos
+  const alPresionar = (e) => {
+    const capa = e.target.closest?.('.textLayer');
+    if (!capa) return;
+    capa.classList.add('selecting');
+    const fin = () => {
+      capa.classList.remove('selecting');
+      const bloque = capa.querySelector('.endOfContent');
+      if (bloque) { bloque.style.width = ''; bloque.style.height = ''; capa.append(bloque); }
+      window.removeEventListener('pointerup', fin); window.removeEventListener('pointercancel', fin);
+    };
+    window.addEventListener('pointerup', fin);
+    window.addEventListener('pointercancel', fin);
+  };
+
+  const alSoltar = (e) => {
     if (modoOcr) return;
     const sel = window.getSelection();
-    const texto = sel?.toString().replace(/\s+/g, ' ').trim();
-    if (!texto || !zonaRef.current?.contains(sel.anchorNode)) return;
-    const r = sel.getRangeAt(0).getBoundingClientRect();
-    setMenu({ texto, x: r.left + r.width / 2, y: r.bottom, arriba: r.top });
-  }, [modoOcr]);
+    if (sel && !sel.isCollapsed && zonaRef.current?.contains(sel.anchorNode)) {
+      if (subrayar && !window.matchMedia('(pointer: coarse)').matches) subrayarSeleccion();
+      return;
+    }
+    const m = marcaEn(e.clientX, e.clientY);
+    setEditando(m ? { id: m.id, x: e.clientX, y: e.clientY } : null);
+  };
+
+  // Mientras se selecciona, el bloque del final se pone junto a la última letra seleccionada (como pdf.js):
+  // así, al pasar por un espacio vacío, la selección se queda en el mismo renglón
+  useEffect(() => {
+    let anterior = null;
+    const acomodar = () => {
+      const sel = document.getSelection();
+      const zona = zonaRef.current;
+      if (!sel || !sel.rangeCount || !zona) { anterior = null; return; }
+      const rango = sel.getRangeAt(0);
+      const alInicio = !!anterior && (rango.compareBoundaryPoints(Range.END_TO_END, anterior) === 0 || rango.compareBoundaryPoints(Range.START_TO_END, anterior) === 0);
+      for (const capa of zona.querySelectorAll('.textLayer.selecting')) {
+        const bloque = capa.querySelector('.endOfContent');
+        if (!bloque || !rango.intersectsNode(capa)) continue;
+        let ancla = alInicio ? rango.startContainer : rango.endContainer;
+        if (ancla.nodeType === 3) ancla = ancla.parentNode;
+        if (!ancla || ancla === capa || ancla === bloque || !capa.contains(ancla)) continue;
+        bloque.style.width = capa.style.width;
+        bloque.style.height = capa.style.height;
+        ancla.parentElement.insertBefore(bloque, alInicio ? ancla : ancla.nextSibling);
+      }
+      anterior = rango.cloneRange();
+    };
+    document.addEventListener('selectionchange', acomodar);
+    return () => document.removeEventListener('selectionchange', acomodar);
+  }, []);
 
   useEffect(() => {
-    // En celular no hay "mouseup": se espera a que termine de ajustar la selección
+    // En celular no hay "mouseup": cuando termina de ajustar la selección aparece un botón «Subrayar»
     let t = null;
-    const alCambiar = () => { clearTimeout(t); t = setTimeout(() => { if (window.matchMedia('(pointer: coarse)').matches) revisarSeleccion(); }, 600); };
+    const alCambiar = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        if (!subrayar || !window.matchMedia('(pointer: coarse)').matches) return;
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount || !zonaRef.current?.contains(sel.anchorNode)) { setBotonMovil(null); return; }
+        const r = sel.getRangeAt(0).getBoundingClientRect();
+        setBotonMovil({ x: r.left + r.width / 2, y: r.bottom });
+      }, 400);
+    };
     document.addEventListener('selectionchange', alCambiar);
     return () => { clearTimeout(t); document.removeEventListener('selectionchange', alCambiar); };
-  }, [revisarSeleccion]);
+  }, [subrayar]);
+
+  const irASubrayado = (m) => {
+    irAPagina(m.pagina);
+    setResaltada(m.id);
+    setTimeout(() => setResaltada((r) => (r === m.id ? null : r)), 1800);
+  };
 
   // ---- OCR de un área ----
   const alAreaOcr = async (imagen, pos, textoDelPdf) => {
@@ -164,14 +292,20 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
     }
   };
 
-  const asignar = async (campo) => {
-    const texto = menu.texto;
-    setMenu(null);
-    window.getSelection()?.removeAllRanges();
-    await asignarCampoDesdeDocumento(campo, texto, destino);
+  const copiar = async () => {
+    const texto = menu?.texto || '';
+    try {
+      await navigator.clipboard.writeText(texto);
+    } catch {
+      const t = document.createElement('textarea');
+      t.value = texto; document.body.appendChild(t); t.select();
+      try { document.execCommand('copy'); } catch { /* sin portapapeles */ }
+      t.remove();
+    }
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 1500);
   };
-
-  const camposMenu = useMemo(() => GRUPOS_CAMPOS.map((g) => ({ ...g, campos: g.campos.filter((c) => c !== 'monto_letras') })), []);
+  const marcaEditando = editando ? sub.marcas.find((m) => m.id === editando.id) : null;
 
   const boton = { background: 'transparent', border: `1px solid ${theme.border}`, color: theme.textPrimary, borderRadius: '8px', padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '12px', fontWeight: 600 };
 
@@ -214,7 +348,23 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
           </div>
           <button
             type="button"
-            onClick={() => { setModoOcr(!modoOcr); setMenu(null); }}
+            className="boton-subrayar"
+            aria-pressed={subrayar}
+            onClick={() => { setSubrayar(!subrayar); setModoOcr(false); setMenu(null); setEditando(null); setBotonMovil(null); }}
+            style={{ ...boton, padding: '6px 10px', backgroundColor: subrayar ? colorSubrayado(color) : theme.cardBg, borderColor: subrayar ? '#ca8a04' : theme.border, color: subrayar ? '#1f2937' : theme.textPrimary }}
+            title="Subrayar palabras del PDF (se quedan guardadas en este documento)"
+          >
+            <Highlighter size={15} /> {subrayar ? 'Subrayando…' : 'Subrayar'}
+          </button>
+          {sub.marcas.length > 0 && (
+            <button type="button" onClick={() => setVerLista(!verLista)} aria-expanded={verLista}
+              style={{ ...boton, padding: '6px 10px', backgroundColor: verLista ? theme.subtleBg : theme.cardBg }} title="Ver la lista de lo subrayado en este PDF">
+              <List size={15} /> {sub.marcas.length} subrayado{sub.marcas.length === 1 ? '' : 's'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setModoOcr(!modoOcr); setSubrayar(false); setMenu(null); }}
             style={{ ...boton, padding: '6px 10px', backgroundColor: modoOcr ? '#7c3aed' : theme.cardBg, borderColor: modoOcr ? '#7c3aed' : theme.border, color: modoOcr ? '#fff' : theme.textPrimary }}
             title="Dibuja un recuadro sobre el PDF para leer el texto de esa área (útil si el texto no se puede seleccionar)"
           >
@@ -240,9 +390,27 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
             <button type="button" className="enlace-pequeno" onClick={() => setVerActos(true)}>Cambiar <ChevronDown size={12} /></button>
           </div>
         )}
-        {(modoOcr || actos.length === 0) && (
-          <p style={{ margin: 0, fontSize: '11px', color: theme.textSecondary }}>
-            {modoOcr ? 'Arrastra sobre la página para marcar el área que quieres leer.' : 'Selecciona texto en el PDF para mandarlo a un dato del expediente.'}
+        {subrayar && (
+          <div className="barra-subrayar" style={{ borderColor: theme.border, backgroundColor: theme.cardBg }}>
+            <span className="barra-subrayar-colores" role="radiogroup" aria-label="Color del subrayado">
+              {COLORES_SUBRAYADO.map((c) => (
+                <button key={c.id} type="button" role="radio" aria-checked={color === c.id} title={c.nombre} aria-label={c.nombre}
+                  className={`punto-color ${color === c.id ? 'activo' : ''}`} style={{ backgroundColor: c.color }} onClick={() => elegirColor(c.id)}>
+                  {color === c.id && <Check size={12} />}
+                </button>
+              ))}
+            </span>
+            <span className="barra-subrayar-ayuda" style={{ color: theme.textSecondary }}>
+              Selecciona con el mouse las palabras a subrayar. Clic en un subrayado para cambiarle el color o quitarlo.
+            </span>
+          </div>
+        )}
+        {modoOcr && (
+          <p style={{ margin: 0, fontSize: '11px', color: theme.textSecondary }}>Arrastra sobre la página para marcar el área que quieres leer.</p>
+        )}
+        {(sub.estado === 'error' || (!sub.disponible && sub.estado !== 'cargando' && subrayar)) && (
+          <p style={{ margin: 0, fontSize: '11px', color: isDarkMode ? '#fdba74' : '#9a3412' }}>
+            {sub.disponible ? 'Sin conexión con el servidor: los subrayados se guardan en esta computadora y se suben al reconectar.' : 'Este navegador no permite guardar los subrayados de este PDF.'}
           </p>
         )}
       </header>
@@ -255,6 +423,33 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
               <strong style={{ color: theme.accent }}>Pág. {r.pagina}</strong> <span style={{ color: theme.textSecondary }}>{r.fragmento}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* LISTA DE SUBRAYADOS */}
+      {verLista && sub.marcas.length > 0 && (
+        <div className="lista-subrayados" style={{ borderBottom: `1px solid ${theme.border}` }}>
+          {[...sub.marcas].sort((a, b) => a.pagina - b.pagina || (a.rects[0]?.[1] || 0) - (b.rects[0]?.[1] || 0)).map((m) => (
+            <div key={m.id} className="lista-subrayados-fila">
+              <button type="button" onClick={() => irASubrayado(m)} className="resultado-busqueda" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left', border: 'none', background: 'transparent', color: theme.textPrimary, padding: '6px 4px 6px 12px', cursor: 'pointer', fontSize: '12px' }}>
+                <span className="punto-color chico" style={{ backgroundColor: colorSubrayado(m.color) }} />
+                <strong style={{ color: theme.accent, flexShrink: 0 }}>Pág. {m.pagina}</strong>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.texto || '(sin texto)'}</span>
+              </button>
+              <button type="button" title="Quitar este subrayado" onClick={() => sub.quitar(m.id)} style={{ ...boton, border: 'none', padding: '6px 10px', color: theme.textSecondary }}><Trash2 size={14} /></button>
+            </div>
+          ))}
+          <div style={{ padding: '6px 12px', display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center', fontSize: '12px' }}>
+            {confirmarLimpiar ? (
+              <>
+                <span style={{ color: theme.textSecondary }}>¿Quitar todos los subrayados de este PDF?</span>
+                <button type="button" style={{ ...boton, padding: '4px 10px' }} onClick={() => setConfirmarLimpiar(false)}>No</button>
+                <button type="button" style={{ ...boton, padding: '4px 10px', backgroundColor: '#dc2626', borderColor: '#dc2626', color: '#fff' }} onClick={() => { sub.limpiar(); setConfirmarLimpiar(false); setVerLista(false); }}>Sí, quitar todos</button>
+              </>
+            ) : (
+              <button type="button" style={{ ...boton, padding: '4px 10px', color: theme.textSecondary }} onClick={() => setConfirmarLimpiar(true)}><Trash2 size={13} /> Quitar todos</button>
+            )}
+          </div>
         </div>
       )}
 
@@ -311,7 +506,8 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
         )}
 
         {/* PÁGINAS */}
-        <div ref={zonaRef} className="panel-docs-paginas" onMouseUp={revisarSeleccion} style={{ backgroundColor: isDarkMode ? '#0b1220' : '#e2e8f0' }}>
+        <div ref={zonaRef} className={`panel-docs-paginas ${subrayar ? 'subrayando' : ''}`} onPointerDown={alPresionar} onMouseUp={alSoltar}
+          style={{ backgroundColor: isDarkMode ? '#0b1220' : '#e2e8f0', '--color-seleccion': `${colorSubrayado(color)}aa` }}>
           {error && (
             <div role="alert" style={{ margin: '12px', padding: '10px 12px', borderRadius: '8px', backgroundColor: isDarkMode ? '#450a0a' : '#fef2f2', color: isDarkMode ? '#fca5a5' : '#991b1b', fontSize: '13px', display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
               {error} <button type="button" onClick={() => setError('')} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}><X size={14} /></button>
@@ -333,6 +529,8 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
               modoOcr={modoOcr}
               onAreaOcr={alAreaOcr}
               registrar={registrarPagina}
+              marcas={sub.marcas.filter((m) => m.pagina === i + 1)}
+              marcaActiva={resaltada || editando?.id}
             />
           ))}
         </div>
@@ -351,34 +549,95 @@ export default function VisorDocumentos({ archivos: archivosProp, actos: actosPr
         </div>
       )}
 
-      {/* MENÚ "USAR COMO…" */}
-      {menu && (
-        <div ref={colocarMenu} className="menu-campo" role="menu" style={{ left: Math.max(8, Math.min(menu.x - 140, window.innerWidth - 300)), top: posicionMenu(menu, 0), backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.textPrimary }}>
+      {/* CELULAR: botón para subrayar lo seleccionado */}
+      {botonMovil && subrayar && (
+        <button type="button" className="boton-subrayar-flotante" onClick={subrayarSeleccion}
+          style={{ left: Math.max(8, Math.min(botonMovil.x - 60, window.innerWidth - 128)), top: Math.min(botonMovil.y + 10, window.innerHeight - 60), backgroundColor: colorSubrayado(color) }}>
+          <Highlighter size={16} /> Subrayar
+        </button>
+      )}
+
+      {/* CLIC EN UN SUBRAYADO: cambiar color o quitar */}
+      {marcaEditando && (
+        <div className="menu-campo menu-subrayado" role="dialog" aria-label="Subrayado"
+          style={{ left: Math.max(8, Math.min(editando.x - 120, window.innerWidth - 248)), top: editando.y + 150 > window.innerHeight ? Math.max(8, editando.y - 140) : editando.y + 10, width: '240px', backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.textPrimary }}>
           <div style={{ padding: '10px 12px', borderBottom: `1px solid ${theme.border}` }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: theme.textSecondary, marginBottom: '4px' }}>{menu.deOcr ? 'TEXTO LEÍDO (OCR) — puedes corregirlo' : menu.deArea ? 'TEXTO DEL ÁREA — puedes corregirlo' : 'TEXTO SELECCIONADO'}</div>
-            {menu.deOcr || menu.deArea ? (
-              <textarea value={menu.texto} onChange={(e) => setMenu({ ...menu, texto: e.target.value })} rows={3} style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', fontFamily: 'inherit', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, padding: '6px' }} />
-            ) : (
-              <div style={{ fontSize: '12px', maxHeight: '60px', overflow: 'auto' }}>“{menu.texto}”</div>
-            )}
+            <div style={{ fontSize: '11px', fontWeight: 700, color: theme.textSecondary, marginBottom: '4px' }}>SUBRAYADO · PÁG. {marcaEditando.pagina}</div>
+            <div style={{ fontSize: '12px', maxHeight: '48px', overflow: 'auto' }}>{marcaEditando.texto ? `“${marcaEditando.texto}”` : '—'}</div>
           </div>
-          <div style={{ maxHeight: 'min(240px, calc(100vh - 230px))', overflowY: 'auto', padding: '4px' }}>
-            {camposMenu.map((g) => (
-              <div key={g.titulo}>
-                <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px', color: theme.textSecondary, padding: '6px 8px 2px', textTransform: 'uppercase' }}>{g.titulo}</div>
-                {g.campos.map((c) => (
-                  <button key={c} type="button" role="menuitem" className="opcion-exportar" onClick={() => asignar(c)} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', borderRadius: '6px', background: 'transparent', color: theme.textPrimary, padding: '6px 8px', fontSize: '13px', cursor: 'pointer' }}>
-                    Usar como <strong>{etiquetaDe(c)}</strong>
-                  </button>
-                ))}
-              </div>
+          <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', color: theme.textSecondary }}>Color</span>
+            {COLORES_SUBRAYADO.map((c) => (
+              <button key={c.id} type="button" title={c.nombre} aria-label={c.nombre} className={`punto-color ${marcaEditando.color === c.id ? 'activo' : ''}`}
+                style={{ backgroundColor: c.color }} onClick={() => sub.recolorear(marcaEditando.id, c.id)}>
+                {marcaEditando.color === c.id && <Check size={12} />}
+              </button>
             ))}
           </div>
-          <button type="button" onClick={() => setMenu(null)} style={{ width: '100%', border: 'none', borderTop: `1px solid ${theme.border}`, background: 'transparent', color: theme.textSecondary, padding: '8px', cursor: 'pointer', fontSize: '12px' }}>Cancelar</button>
+          <div style={{ display: 'flex', borderTop: `1px solid ${theme.border}` }}>
+            <button type="button" onClick={() => { sub.quitar(marcaEditando.id); setEditando(null); }} style={{ flex: 1, border: 'none', background: 'transparent', color: '#dc2626', padding: '9px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <Trash2 size={14} /> Quitar subrayado
+            </button>
+            <button type="button" onClick={() => setEditando(null)} style={{ flex: 1, border: 'none', borderLeft: `1px solid ${theme.border}`, background: 'transparent', color: theme.textSecondary, padding: '9px', cursor: 'pointer', fontSize: '12px' }}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      {/* TEXTO LEÍDO DE UN ÁREA (OCR): se puede corregir y copiar */}
+      {menu && (
+        <div ref={colocarMenu} className="menu-campo" role="dialog" aria-label="Texto leído" style={{ left: Math.max(8, Math.min(menu.x - 140, window.innerWidth - 300)), top: posicionMenu(menu, 0), backgroundColor: theme.cardBg, border: `1px solid ${theme.border}`, color: theme.textPrimary }}>
+          <div style={{ padding: '10px 12px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: theme.textSecondary, marginBottom: '4px' }}>{menu.deOcr ? 'TEXTO LEÍDO (OCR) — puedes corregirlo' : 'TEXTO DEL ÁREA — puedes corregirlo'}</div>
+            <textarea value={menu.texto} onChange={(e) => setMenu({ ...menu, texto: e.target.value })} rows={4} style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', fontFamily: 'inherit', borderRadius: '6px', border: `1px solid ${theme.border}`, backgroundColor: theme.inputBg, color: theme.textPrimary, padding: '6px' }} />
+          </div>
+          <div style={{ display: 'flex', borderTop: `1px solid ${theme.border}` }}>
+            <button type="button" onClick={copiar} style={{ flex: 1, border: 'none', background: 'transparent', color: theme.accent, padding: '9px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              {copiado ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar texto</>}
+            </button>
+            <button type="button" onClick={() => setMenu(null)} style={{ flex: 1, border: 'none', borderLeft: `1px solid ${theme.border}`, background: 'transparent', color: theme.textSecondary, padding: '9px', cursor: 'pointer', fontSize: '12px' }}>Cerrar</button>
+          </div>
         </div>
       )}
     </section>
   );
+}
+
+// Rectángulos (en pantalla) de solo el texto seleccionado dentro de la capa de texto del PDF
+function rectsDeTexto(rango) {
+  const raiz = rango.commonAncestorContainer.nodeType === 1 ? rango.commonAncestorContainer : rango.commonAncestorContainer.parentNode;
+  const salida = [];
+  const recorrido = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT);
+  const revisar = (n) => {
+    if (!n.textContent || !n.parentElement?.closest('.textLayer') || !rango.intersectsNode(n)) return;
+    const r = document.createRange();
+    r.selectNodeContents(n);
+    if (n === rango.startContainer) r.setStart(n, rango.startOffset);
+    if (n === rango.endContainer) r.setEnd(n, rango.endOffset);
+    for (const c of r.getClientRects()) if (c.width > 0.5 && c.height > 0.5) salida.push(c);
+  };
+  if (raiz.nodeType === 3) revisar(raiz);
+  let n = recorrido.nextNode();
+  while (n) { revisar(n); n = recorrido.nextNode(); }
+  return salida;
+}
+
+// Junta los pedacitos de un mismo renglón en una sola franja
+function unirRenglones(rects) {
+  const orden = [...rects].sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+  const out = [];
+  for (const r of orden) {
+    const u = out[out.length - 1];
+    if (u && Math.abs(u[1] - r[1]) < Math.min(u[3], r[3]) * 0.5 && r[0] <= u[0] + u[2] + Math.max(u[3], r[3]) * 0.8) {
+      const x1 = Math.min(u[0], r[0]);
+      const y1 = Math.min(u[1], r[1]);
+      const x2 = Math.max(u[0] + u[2], r[0] + r[2]);
+      const y2 = Math.max(u[1] + u[3], r[1] + r[3]);
+      out[out.length - 1] = [x1, y1, x2 - x1, y2 - y1];
+    } else {
+      out.push([...r]);
+    }
+  }
+  return out;
 }
 
 // Debajo de lo seleccionado si cabe; si no, arriba; y siempre dentro de la pantalla

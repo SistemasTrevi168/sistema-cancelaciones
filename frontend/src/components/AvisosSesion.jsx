@@ -1,4 +1,4 @@
-import { Clock, LogIn, MonitorSmartphone, RefreshCw, ShieldAlert } from 'lucide-react';
+import { Clock, LogIn, MonitorSmartphone, RefreshCw, Server, ShieldAlert } from 'lucide-react';
 
 const MENSAJES = {
   horario: {
@@ -64,6 +64,22 @@ export function AvisoVersionNueva({ onActualizar, onDespues, theme }) {
       </div>
       <button type="button" className="aviso-version-despues" onClick={onDespues} style={{ color: theme.textSecondary }}>Después</button>
       <button type="button" onClick={onActualizar} style={{ backgroundColor: theme.accent }}>Actualizar</button>
+    </div>
+  );
+}
+
+// Aviso de que se publicó una versión nueva del servidor (no hace falta recargar)
+export function AvisoServidorNuevo({ cambio, onCerrar, theme }) {
+  return (
+    <div className="aviso-version aviso-servidor" role="status" style={{ backgroundColor: theme.cardBg, borderColor: '#10b981', color: theme.textPrimary }}>
+      <Server size={18} color="#10b981" style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <strong>Se actualizó el servidor</strong>
+        <small style={{ color: theme.textSecondary }}>
+          {cambio.mensaje ? <>Cambio: «{cambio.mensaje}». </> : null}Ya aplica, no necesitas recargar.
+        </small>
+      </div>
+      <button type="button" onClick={onCerrar} style={{ backgroundColor: '#10b981' }}>Entendido</button>
     </div>
   );
 }

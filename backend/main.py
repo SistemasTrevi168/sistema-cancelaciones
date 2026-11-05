@@ -1003,6 +1003,23 @@ def home():
     return {"status": "OK", "mensaje": "Servidor backend conectado"}
 
 
+# Versión del servidor (Railway pone el commit y el despliegue en variables de entorno). El sistema la revisa
+# cada pocos minutos y, si cambia, avisa en pantalla que el servidor se actualizó.
+_ARRANQUE = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+
+
+@app.get("/api/version")
+def version_servidor():
+    commit = os.getenv("RAILWAY_GIT_COMMIT_SHA") or ""
+    mensaje = (os.getenv("RAILWAY_GIT_COMMIT_MESSAGE") or "").strip().splitlines()
+    return {
+        "version": commit or os.getenv("RAILWAY_DEPLOYMENT_ID") or _ARRANQUE,
+        "commit": commit[:7],
+        "mensaje": mensaje[0][:160] if mensaje else "",
+        "desde": _ARRANQUE,
+    }
+
+
 @app.get("/api/plantillas")
 def obtener_lista_plantillas(usuario: dict = Depends(require_user)):
     if not os.path.exists(TEMPLATES_DIR):

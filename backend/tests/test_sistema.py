@@ -939,6 +939,9 @@ chk("fecha: el día 1 es «primero»", services.convertir_fecha_texto("01/05/202
     and main._fecha_con_letra("uno de mayo de dos mil veinte") == "primero de mayo de dos mil veinte"
     and services.convertir_fecha_texto("21/05/2020") == "veintiuno de mayo de dos mil veinte")
 
+_v = cliente().get("/api/version")
+chk("versión del servidor (sin sesión)", _v.status_code == 200 and _v.json().get("version"), _v.text[:200])
+
 # --- Subrayados en los PDF (por huella del archivo) ---
 _hs = "ab" * 32
 _r = c_cm.get(f"/api/subrayados/{_hs}", headers=_hc)

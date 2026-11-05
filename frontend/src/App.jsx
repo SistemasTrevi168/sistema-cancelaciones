@@ -34,8 +34,8 @@ import TabRegistroCompartidos from './components/TabRegistroCompartidos';
 import TabPanelAdmin from './components/TabPanelAdmin';
 import TabPerfil from './components/TabPerfil';
 import NavegacionMovil from './components/NavegacionMovil';
-import { AvisoInactividad, AvisoSesionCerrada, AvisoVersionNueva } from './components/AvisosSesion';
-import useVersionNueva from './ui/versionNueva';
+import { AvisoInactividad, AvisoServidorNuevo, AvisoSesionCerrada, AvisoVersionNueva } from './components/AvisosSesion';
+import useVersionNueva, { useServidorNuevo } from './ui/versionNueva';
 import useNotificaciones from './ui/usarNotificaciones';
 import useTiempoReal from './ui/tiempoReal';
 import useVigilanciaSesion from './vigilanciaSesion';
@@ -2538,6 +2538,7 @@ const cambiarEstado = async (ids, estado) => {
   const hayBorradores = pendienteSingle() || batchResults.some((r) => !r.error && !r.expediente_id);
   const hayVersionNueva = useVersionNueva();
   const [versionPospuesta, setVersionPospuesta] = useState(false);
+  const [servidorNuevo, cerrarServidorNuevo] = useServidorNuevo(isAuthenticated);
   const actualizarVersion = async () => {
     if (hayBorradores && !(await confirmar('Tienes expedientes leídos sin guardar; si actualizas ahora se pierden.', { titulo: '¿Actualizar el sistema?', textoConfirmar: 'Actualizar de todas formas', peligro: true }))) return;
     window.location.reload();
@@ -2863,6 +2864,10 @@ const cambiarEstado = async (ids, estado) => {
       )}
       {hayVersionNueva && !versionPospuesta && (
         <AvisoVersionNueva onActualizar={actualizarVersion} onDespues={() => setVersionPospuesta(true)} theme={theme} />
+      )}
+      {/* Si también hay versión nueva de la página, primero esa (al recargar ya queda todo al día) */}
+      {servidorNuevo && !(hayVersionNueva && !versionPospuesta) && (
+        <AvisoServidorNuevo cambio={servidorNuevo} onCerrar={cerrarServidorNuevo} theme={theme} />
       )}
       {!isAuthenticated && avisoSesion && (
         <AvisoSesionCerrada motivo={avisoSesion.motivo} segundos={avisoSesion.segundos} onAceptar={() => setAvisoSesion(null)} theme={theme} isDarkMode={isDarkMode} />
